@@ -237,7 +237,7 @@ wrapIpcHandler(LOCAL_MODEL_IPC.startDownload, async (event, payload = {}) => {
   const profile = resolvedProfile.profile;
   if (activeModelDownloader && (lastModelDownloadState.state === "downloading"
       || lastModelDownloadState.state === "verifying")) {
-    const runningModelId = lastModelDownloadState.modelId || "qwen35-9b-q4km-imatrix";
+    const runningModelId = lastModelDownloadState.modelId || "qwen36-27b-dsv4pro-distill-q5km-imatrix";
     const payload = {
       alreadyRunning: true,
       modelId: runningModelId,

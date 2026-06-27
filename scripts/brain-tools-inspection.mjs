@@ -86,7 +86,7 @@ const PROVIDERS = [
     label: 'Spark 35B-A3B DS-V4-Pro Distill (主)',
     endpoint: process.env.APEX_SPARK_BASE || 'http://127.0.0.1:18098/v1',
     apiKey: 'none',
-    model: process.env.APEX_SPARK_MODEL || 'qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix',
+    model: process.env.APEX_SPARK_MODEL || 'qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix',
     wire: 'openai',
     authStyle: 'none',
     healthPath: '/health',

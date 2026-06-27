@@ -46,20 +46,30 @@ def _model_profile(served_name: str, gguf: Path) -> dict[str, str]:
     text = f"{served_name} {gguf.name}".lower()
     if "35b" in text:
         return {
-            "display_name": "Qwen3.6-35B Q4_K_M imatrix Local",
+            "display_name": "Qwen3.6-35B-A3B Q5_K_M MTP Local",
             "model_family": "Qwen3.6-35B-A3B",
-            "recommendation": "35B Q4_K_M imatrix is the 24GB+ high-capability local upgrade.",
+            "recommendation": "35B-A3B Q5_K_M MTP is the 32GB+ high-capability local upgrade.",
+            "quant": "Q5_K_M",
+        }
+    if "27b" in text:
+        return {
+            "display_name": "Qwen3.6-27B Q5_K_M MTP Local",
+            "model_family": "Qwen3.6-27B-DSV4Pro",
+            "recommendation": "27B Q5_K_M MTP is Lynn's default recommended local model for 24GB+ machines.",
+            "quant": "Q5_K_M",
         }
     if "9b" in text:
         return {
             "display_name": "Qwen3.5-9B MTP Local",
             "model_family": "Qwen3.5-9B",
-            "recommendation": "9B MTP is Lynn's default local model for stable thinking-on local reasoning.",
+            "recommendation": "9B MTP is a low-config downgrade when the default 27B path is too heavy.",
+            "quant": "Q4_K_M",
         }
     return {
         "display_name": "Qwen3.5-4B Local",
         "model_family": "Qwen3.5-4B",
         "recommendation": "4B Q4_K_M is a low-config downgrade; thinking-on may produce empty long reasoning.",
+        "quant": "Q4_K_M",
     }
 
 
@@ -96,7 +106,7 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
         "artifact": {
             "artifact_id": args.artifact_id,
             "model_family": profile["model_family"],
-            "quant": "Q4_K_M",
+            "quant": profile["quant"],
             "variant": args.variant,
             "format": "GGUF",
             "path": str(gguf),

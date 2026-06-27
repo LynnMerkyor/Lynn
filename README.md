@@ -15,8 +15,8 @@
   <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.85.4-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/LynnMerkyor/Lynn/stargazers"><img src="https://img.shields.io/github/stars/LynnMerkyor/Lynn?style=social" alt="Stars"></a>
   <a href="https://gitee.com/merkyor/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
-  <a href="https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill"><img src="https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d" alt="HuggingFace Models"></a>
-  <a href="https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill"><img src="https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff" alt="ModelScope Models"></a>
+  <a href="https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF"><img src="https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d" alt="HuggingFace Models"></a>
+  <a href="https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF"><img src="https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff" alt="ModelScope Models"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
   <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-38-47848f?logo=electron" alt="Electron"></a>
 </p>
@@ -27,7 +27,7 @@
 
 - **源码与应用**: [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [Gitee 发布镜像](https://gitee.com/merkyor/Lynn/releases)
 - **模型与 GGUF 镜像**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
-- **本地编排器模型**: [HuggingFace 35B Distill](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill) · [ModelScope 35B Distill](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill)
+- **端侧推荐模型**: [ModelScope 27B Q5_K_M GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) · [HuggingFace 27B Q5_K_M GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) · 32GB+ 可选 [35B-A3B Q5_K_M GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF)
 - **Agent 回归测试**: [`agent-regression-kit/`](agent-regression-kit/) 已内置在本仓库;Coding100、Agent20、自动化回归集和模型工具建议拆到独立工具仓,设计见 [`docs/ops/agent-eval-tooling-repo.md`](docs/ops/agent-eval-tooling-repo.md)。
 
 ---
@@ -53,7 +53,7 @@ v0.85 的 GUI / CLI 默认对话与任务执行统一走 **StepFun 3.7 Flash**:�
 
 关键:蒸馏与原版**单流 TPS 相同**(R6000 ~224 tok/s),但端到端编排**快一倍**——**蒸的是「思维方式」,红利是更少 token 到结论**。难题仍以 **harness 客观验证** 为准,不把模型自报完成当作验收。
 
-📦 **ModelScope**:[`Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill`](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill) · **HuggingFace**:[`nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill`](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill)(BF16 + Q4_K_M gguf)
+📦 **端侧默认 GGUF**:[`Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF`](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) · [`nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF`](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF)；**高配 35B-A3B Q5_K_M GGUF**:[ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) · [HuggingFace](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF)
 > 与早期 `Lynn-V4-Pro-Distill` 区分:这一版蒸的是 **thinking-on 的思维方式**,目标「学会怎么想」,直接服务 Agent 编排。
 
 ### ② 引擎路线:端侧选最快的 llama.cpp,并回馈上游
@@ -883,7 +883,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 
 </details>
 
-👉 [完整发版历史 · GitHub Releases](https://gitee.com/merkyor/Lynn/releases)
+👉 [完整发版历史 · Gitee Releases / 国内下载镜像](https://gitee.com/merkyor/Lynn/releases)
 
 ---
 
@@ -983,15 +983,16 @@ MCP 服务器仍支持按需接入,但入口收进了 **设置 → MCP**。日�
 
 ## 本地模型,三档硬件分级
 
-Lynn 本地模型按硬件分三档。V0.80 起本地 GGUF **不再随应用启动自动拉起**,避免一打开 Lynn 就占用约 6GB 显存/统一内存;需要本地离线推理时,在设置里显式启用即可:
+Lynn 本地模型按硬件分三档。V0.85.4 起默认推荐升级为 **Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP**;低配机器不会主动弹端侧模型引导,只在设置页保留 9B / 4B 降级入口。V0.80 起本地 GGUF **不再随应用启动自动拉起**,需要本地离线推理时在设置里显式启用即可:
 
 | 档位 | 模型 | 体积 | 推荐硬件 | 上下文 | 能力信号 |
 |------|------|:----:|---------|:------:|----------|
-| **推荐本地** | **Qwen3.5-9B Q4_K_M imatrix MTP** | 5.38 GB | **24GB 显存/统一内存+** | 32K | **Q4_K_M imatrix** · MMLU 100 = 81.00% · GPQA Diamond 81.71% (excl. parse-fail) · 工具调用 14/15 · MTP 加速 |
-| 降级 | Qwen3.5-4B Q4_K_M imatrix (Lynn) | 2.6 GB | 8~16GB 可选 | 32K | **Q4_K_M imatrix** · MMLU thinking-off 73.00% · GPQA thinking-off 16.67% · thinking-on 可能长思考后无正文 |
-| 高端 · 编排器大脑 | **Qwen3.6-35B-A3B 蒸馏编排器** Q4_K_M imatrix | 21 GB | 24GB 显存/统一内存+ | 32K | **蒸 DS-V4-Pro thinking 思维方式** · MMLU 500 = 90.2% · GPQA-Diamond 80.3% · 端到端编排快 2.3× · Spark 77 / R6000 ~224 tok/s |
+| **推荐本地** | **Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP** | 19.5 GB | **24GB 显存/统一内存+** | 32K | **默认 Q5_K_M** · GPQA 81.82% · MMLU 90.0% · Coding100 86/100 · MTP n=3 单流约 10.4→26.8 TPS |
+| 降级 | Qwen3.5-9B Q4_K_M imatrix MTP | 5.38 GB | 16~24GB 可选 | 32K | 低配显式降级 · 工具调用 14/15 · MTP 加速 |
+| 低配降级 | Qwen3.5-4B Q4_K_M imatrix (Lynn) | 2.6 GB | 8~16GB 可选 | 32K | **Q4_K_M imatrix** · MMLU thinking-off 73.00% · GPQA thinking-off 16.67% · thinking-on 可能长思考后无正文 |
+| 高端 · 编排器大脑 | **Qwen3.6-35B-A3B DSV4Pro Distill Q5_K_M imatrix MTP** | 25.3 GB | 32GB 显存/统一内存+ | 32K | **蒸 DS-V4-Pro thinking 思维方式** · GPQA-Diamond 80.3% · 端到端编排快 2.3× · MTP n=3 |
 
-> 9B / 35B 质量数据均为 **Q4_K_M 量化态** + **thinking-on 32K max_tokens** 口径,GB10 Spark llama.cpp 同硬件实测。4B imatrix 作为低配降级:thinking-off 可用,thinking-on 已复现长思考后无正文,不作为默认引导模型。
+> 27B / 35B 当前主推 **Q5_K_M imatrix + MTP**。9B / 4B 只作为低配置降级:9B 适合 16GB 级机器,4B 建议 thinking-off。硬件不满足 27B 推荐阈值时,Lynn 不会在首启或输入框旁主动弹安装引导。
 
 | 通用 | 说明 |
 |---|---|
@@ -1001,15 +1002,16 @@ Lynn 本地模型按硬件分三档。V0.80 起本地 GGUF **不再随应用启�
 
 ### 下载与镜像
 
-**推荐本地 9B** (显式启用):
-- 🇨🇳 **ModelScope**: [Merkyor/Qwen3.5-9B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`,**5.38 GB**)
-- 🤗 **Hugging Face**: [nerkyor/Qwen3.5-9B-GGUF-imatrix](https://huggingface.co/nerkyor/Qwen3.5-9B-GGUF-imatrix) / mirror `hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix`
+**推荐本地 27B** (24GB+ 显式启用):
+- 🇨🇳 **ModelScope**: [Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) (`Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf`,**19.5 GB**)
+- 🤗 **Hugging Face**: [nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) / mirror `hf-mirror.com/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF`
 
-**低配 4B / 高端 35B**(按硬件显式选择):
-- 4B: [Merkyor/Qwen3.5-4B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix) (`Qwen3.5-4B-Q4_K_M-imatrix.gguf`,**2.6 GB**) — 低配降级,建议 thinking-off
-- 35B(编排器大脑): [Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill) (`gguf/Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf`,**21 GB**) — **蒸馏任务编排器**(= 顶部「第一部分」的大脑),Spark 实测 77 / R6000 ~224 tok/s,24G 本地机可加载
+**低配 9B / 4B 与高端 35B**(按硬件显式选择):
+- 9B: [Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.5-9B-GGUF-imatrix) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`,**5.38 GB**) — 低配降级
+- 4B: [Merkyor/Qwen3.5-4B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix) (`Qwen3.5-4B-Q4_K_M-imatrix.gguf`,**2.6 GB**) — 更低配置降级,建议 thinking-off
+- 35B(编排器大脑): [Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) (`Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf`,**25.3 GB**) — 32GB+ 高配推荐
 
-应用内路径:**设置 → 模型 → 本地 Qwen3.5-9B → 授权安装并启用**。下载、校验、启动和模型注册都由 Lynn 后台完成;首次启用会提示本地模型暖机可能较慢,并说明会占用约 6GB 显存/统一内存。你可以随时在输入框旁看到本地模型状态,也可以停止以释放内存。模型页支持应用内切换 4B 降级 / 35B 高端档,或导入你自己下载的任意 llama.cpp 可用 GGUF。
+应用内路径:**设置 → 模型 → 本地 Qwen3.6-27B → 授权安装并启用**。下载、校验、启动和模型注册都由 Lynn 后台完成;首次启用会提示本地模型暖机可能较慢,并说明约需 24GB 显存/统一内存。你可以随时在输入框旁看到本地模型状态,也可以停止以释放内存。硬件不足时不会主动弹 27B 安装引导,模型页仍支持手动选择 9B / 4B 降级、35B 高端档,或导入你自己下载的任意 llama.cpp 可用 GGUF。
 
 ---
 
@@ -1030,7 +1032,7 @@ T5  智谱 GLM / Kimi / MiniMax（供应商备用链路）
 多级降级自动切换：429、配额、供应商错误或能力不匹配 → 自动下一档，对话不中断。**默认模型有工具调用能力**（Plan C 透传，可以直接跑 `write` / `edit` / `read` / `bash`），不只是聊天。链式工具锚定、tool result reinforcement、tool-storm guard 和 pre-search 会在 router 层帮模型稳住多步工具结果。
 
 **隐私三条承诺**：不训练、不落盘、日志最小化。想要绝对隐私？三种逃生路径：
-- Lynn 本地 Qwen3.5-9B Q4_K_M imatrix MTP / 4B imatrix 低配降级 / 35B Q4_K_M imatrix(按硬件显式启用,本地离线使用且不消耗云端额度)
+- Lynn 本地 Qwen3.6-27B Q5_K_M imatrix MTP / 9B、4B 低配降级 / 35B-A3B Q5_K_M 高端档(按硬件显式启用,本地离线使用且不消耗云端额度)
 - 全程 Ollama 本地模型（无任何数据出门）
 - 自备 OpenAI / Anthropic / Moonshot 等 API Key（走你自己的账号）
 - 敏感工作区路径隔离（`.lynn/private/*` 不进记忆）
@@ -1168,13 +1170,14 @@ Lynn 能读文件、跑命令、操作本地环境，所以安全不是附加功
 
 ## 自建 GPU 推理（可选进阶）
 
-如果你有 GPU（或者能租到 vGPU），Lynn 支持把主力模型私有化。Brain 代理已经内置了 vLLM 适配：
+如果你有 GPU（或者能租到 vGPU），Lynn 支持把主力模型私有化。端侧默认走 llama.cpp，服务侧研究线保留 vLLM / NVFP4：
 
-- **推荐配置**：Qwen3.6-35B-A3B AWQ-4bit + vLLM + `--max-model-len 131072`（128K 窗口）
-- **量化路径**：compressed-tensors + Marlin kernel + FP8 KV cache
+- **推荐端侧配置**：Qwen3.6-27B DSV4Pro Distill Q5_K_M GGUF + llama.cpp + MTP n=3（24GB+）
+- **高配端侧配置**：Qwen3.6-35B-A3B DSV4Pro Distill Q5_K_M GGUF + llama.cpp + MTP n=3（32GB+）
+- **服务侧研究线**：35B-A3B BF16 / FP8 / NVFP4 可接 vLLM，用于并发吞吐和长上下文实验，不作为普通用户默认下载
 - **工具调用**：OpenAI-compat 原生支持，Plan C 客户端工具透传无损
 - **智能过滤**：118 个工具按用户意图自动过滤到 ~30 个（避免撑爆 GPU 上下文）
-- **成本**：消费级 GPU ≈ 私有高级模型的日常体验，**实测 KV 容量 192K tokens**（单 64K 并发 ~3 路，平均 15K 场景 ~12 路）
+- **成本**：消费级 GPU ≈ 私有高级模型的日常体验，32GB+ 机器可优先跑 35B-A3B Q5_K_M
 
 搭配你的 OpenAI / Anthropic API Key 做降级兜底，就是**真正私有 + 有备援**的 Agent 基础设施。
 
@@ -1210,9 +1213,9 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [Releases](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.dmg`。V0.85.4 的 Apple Silicon / Intel DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。
+**macOS（Apple Silicon / Intel）**：从 [Gitee Releases / 国内下载镜像](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.dmg`。V0.85.4 的 Apple Silicon / Intel DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。
 
-**Windows**：从 [Releases](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.exe`，直接运行。
+**Windows**：从 [Gitee Releases / 国内下载镜像](https://gitee.com/merkyor/Lynn/releases) 下载最新 `.exe`，直接运行。
 
 > **Windows SmartScreen 提示：** V0.85.4 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
@@ -1221,7 +1224,7 @@ Linux 版本计划中。
 ### 首次运行
 
 - **Quick Start**：输入名字 → 授权 → 进入主界面。默认模型池开箱即用，无需 API Key。
-- **本地模型**：设置 → 模型 → 本地 Qwen3.5-9B。V0.80 起本地 9B 只在你明确点击启用后下载/启动;首次暖机会比云模型慢一些,但不会在打开应用时自动占用约 6GB 显存/统一内存。
+- **本地模型**：设置 → 模型 → 本地 Qwen3.6-27B。24GB+ 推荐 27B Q5_K_M MTP,32GB+ 可选 35B-A3B Q5_K_M,低配可手动选 9B / 4B 降级。硬件不足时不会主动弹端侧模型引导;所有本地 GGUF 都只在你明确点击启用后下载/启动。
 - **Advanced Setup**：输入名字 → 连接自己的供应商 → 选对话/工具模型 → 设权限 → 进入。
 
 所有模型配置后续都可在设置调整。

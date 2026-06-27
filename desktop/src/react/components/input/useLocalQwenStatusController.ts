@@ -8,6 +8,8 @@ import {
   LOCAL_QWEN35_ENDPOINT,
   LOCAL_QWEN35_MODEL_ID,
   LOCAL_QWEN35_PROVIDER_ID,
+  LOCAL_QWEN_DISPLAY_NAME,
+  LOCAL_QWEN_SHORT_NAME,
   LOCAL_QWEN_PROMPT_DELAY_MS,
   LOCAL_QWEN_PROMPT_DISMISS_KEY,
   LOCAL_QWEN_PROMPT_SHOWN_KEY,
@@ -75,16 +77,16 @@ export function useLocalQwenStatusController({
   const coldStartLikely = runtime.coldStartLikely;
   const warmupStage = runtime.warmupStage;
   const warmupTitle = endpointOccupied
-    ? '检测到 Qwen3.5-4B 降级端点正在运行'
+    ? '检测到其他本地降级端点正在运行'
     : running
-    ? (current ? '本地 Qwen3.5-9B 正在运行' : '本地 Qwen3.5-9B 已就绪')
+    ? (current ? `${LOCAL_QWEN_DISPLAY_NAME} 正在运行` : `${LOCAL_QWEN_DISPLAY_NAME} 已就绪`)
     : warmupStage === 'launching'
-      ? '本地 Qwen3.5-9B 正在启动'
+      ? `${LOCAL_QWEN_DISPLAY_NAME} 正在启动`
       : warmupStage === 'loading'
-        ? '本地 Qwen3.5-9B 正在加载'
-        : '本地 Qwen3.5-9B 正在连接';
+        ? `${LOCAL_QWEN_DISPLAY_NAME} 正在加载`
+        : `${LOCAL_QWEN_DISPLAY_NAME} 正在连接`;
   const warmupCopy = endpointOccupied
-    ? '4B 只作为低配降级/兼容模型，不再作为默认引导；停止该端点后可启动默认 9B MTP。'
+    ? '9B/4B 只作为低配降级/兼容模型，不再作为默认引导；停止该端点后可启动默认 27B Q5 MTP。'
     : running
     ? current
       ? (coldStartLikely
@@ -95,8 +97,8 @@ export function useLocalQwenStatusController({
         : '端点已就绪，正在同步到模型列表'
     : warmupStage === 'launching'
       ? '正在拉起 llama.cpp，本地端点马上接管'
-      : warmupStage === 'loading'
-        ? 'llama.cpp 已启动，正在加载 Qwen3.5-9B 权重'
+    : warmupStage === 'loading'
+        ? `llama.cpp 已启动，正在加载 ${LOCAL_QWEN_SHORT_NAME} 权重`
         : '正在确认本地端点状态，稍后会自动刷新。';
   const statusBarClass = [
     statusClassNames.base,
@@ -219,8 +221,8 @@ export function useLocalQwenStatusController({
 
     setDismissed(false);
     setInlineNotice(null);
-    setInlineError('本地 Qwen3.5-9B 未运行。请先点击上方"启动"，或从模型选择器切换到云端模型。');
-    showSidebarToast('本地模型还没启动。请先启动本地 Qwen3.5-9B，或切换到云端模型。', 5000, 'warning', 'local-qwen-not-running');
+    setInlineError(`${LOCAL_QWEN_DISPLAY_NAME} 未运行。请先点击上方"启动"，或从模型选择器切换到云端模型。`);
+    showSidebarToast(`本地模型还没启动。请先启动${LOCAL_QWEN_DISPLAY_NAME}，或切换到云端模型。`, 5000, 'warning', 'local-qwen-not-running');
     requestInputFocus();
     return false;
   }, [current, requestInputFocus, running, setInlineError, setInlineNotice]);
@@ -254,10 +256,10 @@ export function useLocalQwenStatusController({
         body: JSON.stringify({ modelId: LOCAL_QWEN35_MODEL_ID, provider: LOCAL_QWEN35_PROVIDER_ID }),
       });
       await loadModels();
-      showSidebarToast('已切换到本地 Qwen3.5-9B。', 4000, 'success');
+      showSidebarToast(`已切换到${LOCAL_QWEN_DISPLAY_NAME}。`, 4000, 'success');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      showSidebarToast('切换本地 Qwen3.5-9B 失败：' + msg, 5000, 'error');
+      showSidebarToast(`切换${LOCAL_QWEN_DISPLAY_NAME}失败：` + msg, 5000, 'error');
     }
   }, []);
 
@@ -303,7 +305,7 @@ export function useLocalQwenStatusController({
       markLoading();
       scheduleRefreshBurst();
       const managerStart = await window.platform?.llamacppStartDownload?.({
-        modelId: 'qwen35-9b-q4km-imatrix',
+        modelId: LOCAL_QWEN35_MODEL_ID,
         startAfterDownload: true,
       });
       if (managerStart) {
@@ -315,7 +317,7 @@ export function useLocalQwenStatusController({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ modelId: LOCAL_QWEN35_MODEL_ID, provider: LOCAL_QWEN35_PROVIDER_ID }),
         }).catch(() => null);
-        showSidebarToast('本地 Qwen3.5-9B 正在启动，Lynn 会自动切换到本地模型。', 4500, 'info');
+        showSidebarToast(`${LOCAL_QWEN_DISPLAY_NAME} 正在启动，Lynn 会自动切换到本地模型。`, 4500, 'info');
         await loadModels();
         await refresh();
         scheduleRefreshBurst();
@@ -331,13 +333,13 @@ export function useLocalQwenStatusController({
       if (!res.ok || data?.ok === false) {
         throw new Error(data?.error || 'start_failed');
       }
-      showSidebarToast('本地 Qwen3.5-9B 正在启动，Lynn 会自动切换到本地模型。', 4500, 'info');
+      showSidebarToast(`${LOCAL_QWEN_DISPLAY_NAME} 正在启动，Lynn 会自动切换到本地模型。`, 4500, 'info');
       await refresh();
       scheduleRefreshBurst();
     } catch (err) {
       setOptimisticStarting(false);
       const msg = err instanceof Error ? err.message : String(err);
-      showSidebarToast('启动本地 Qwen3.5-9B 失败：' + msg, 5000, 'error');
+      showSidebarToast(`启动${LOCAL_QWEN_DISPLAY_NAME}失败：` + msg, 5000, 'error');
       openSettings();
     }
   }, [markLoading, openSettings, refresh, scheduleRefreshBurst]);

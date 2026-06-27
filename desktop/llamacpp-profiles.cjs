@@ -9,8 +9,14 @@ const path = require("path");
 const { DEFAULT_CONFIG: LLAMACPP_DEFAULT_CONFIG } = require("./llamacpp-manager.cjs");
 const { DEFAULT_SOURCES: MODEL_DOWNLOADER_SOURCES } = require("./model-downloader.cjs");
 
-const DEFAULT_MODEL_ID = "qwen35-9b-q4km-imatrix";
-const DISTILLED_35B_MODEL_ID = "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix";
+const DEFAULT_MODEL_ID = "qwen36-27b-dsv4pro-distill-q5km-imatrix";
+const LOCAL_9B_DOWNGRADE_MODEL_ID = "qwen35-9b-q4km-imatrix";
+const DISTILLED_35B_MODEL_ID = "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix";
+const LOCAL_9B_DOWNGRADE_SOURCES = Object.freeze([
+  { id: "modelscope", label: "ModelScope (国内主源)", url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf" },
+  { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix-MTP/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf" },
+  { id: "huggingface", label: "HuggingFace (global)", url: "https://huggingface.co/nerkyor/Qwen3.5-9B-GGUF-imatrix-MTP/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf" },
+]);
 
 // Canonical key is always the GGUF model id. Historical local-* aliases map
 // back to these entries for older client builds and stored configs.
@@ -30,12 +36,12 @@ const LLAMACPP_BASE_PROFILES = Object.freeze({
       { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.5-4B-GGUF-imatrix/resolve/main/Qwen3.5-4B-Q4_K_M-imatrix.gguf" },
     ],
   },
-  // Product default. 9B MTP is the stable thinking-on local path; the 2026-05-28
-  // release uses the dedicated MTP repos and measured DGX Spark 36.61 → 60.95 single TPS.
-  [DEFAULT_MODEL_ID]: {
-    modelId: DEFAULT_MODEL_ID,
+  // Low-config downgrade. Kept for existing users and machines that cannot fit
+  // the distilled 27B default.
+  [LOCAL_9B_DOWNGRADE_MODEL_ID]: {
+    modelId: LOCAL_9B_DOWNGRADE_MODEL_ID,
     revision: "2026-05-28-mtp",
-    label: "Qwen3.5-9B Q4_K_M imatrix MTP",
+    label: "Qwen3.5-9B Q4_K_M imatrix MTP (low-config downgrade)",
     fileName: "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
     supersedesFileNames: [
       "Qwen3.5-9B-Q4_K_M-imatrix.gguf",
@@ -45,26 +51,51 @@ const LLAMACPP_BASE_PROFILES = Object.freeze({
     expectedSha256: "0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4",
     parallelSegments: 2,
     autoStart: false,
-    sources: MODEL_DOWNLOADER_SOURCES,
+    sources: LOCAL_9B_DOWNGRADE_SOURCES,
   },
-  // 35B high-end orchestrator tier. The product route now uses the DS-V4-Pro
-  // thinking-on distilled Q4_K_M imatrix artifact; old 35B ids remain aliases.
-  [DISTILLED_35B_MODEL_ID]: {
-    modelId: DISTILLED_35B_MODEL_ID,
-    revision: "2026-06-08-dsv4pro-thinking-distill",
-    label: "Qwen3.6-35B-A3B DSV4Pro Thinking Distill Q4_K_M imatrix",
-    fileName: "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf",
+  // Product default. 27B dense has enough quality headroom for DS-V4-Pro
+  // thinking distillation; Q5_K_M is the default balance tier and ships with a
+  // native MTP head for usable single-stream speed.
+  [DEFAULT_MODEL_ID]: {
+    modelId: DEFAULT_MODEL_ID,
+    revision: "2026-06-27-dsv4pro-thinking-distill-q5-mtp",
+    label: "Qwen3.6-27B DSV4Pro Thinking Distill MTP Q5_K_M imatrix",
+    fileName: "Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf",
     supersedesFileNames: [
-      "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
-      "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
+      "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
+      "Qwen3.5-9B-Q4_K_M-imatrix.gguf",
+      "Qwen3.5-9B-Q4_K_M.gguf",
     ],
-    expectedSize: 21_166_758_016,
-    expectedSha256: "fde1e85843127a06ce99a0c6b2799dd16507d8fa5619e4c702fd8214f2135e6d",
+    expectedSize: 19_535_700_320,
+    expectedSha256: "82d00165076fe719359fed97a95cf72bdc1ea7b1fccac8a1ed3abd25594a1f5c",
     parallelSegments: 4,
     autoStart: false,
     sources: [
-      { id: "modelscope", label: "ModelScope (国内主源)", url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill/resolve/master/gguf/Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf" },
-      { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill/resolve/main/gguf/Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf" },
+      { id: "modelscope", label: "ModelScope (国内主源)", url: "https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF/resolve/master/Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf" },
+      { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF/resolve/main/Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf" },
+      { id: "huggingface", label: "HuggingFace (global)", url: "https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF/resolve/main/Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf" },
+    ],
+  },
+  // 35B high-end orchestrator tier. 32GB+ machines can choose the Q5_K_M
+  // distilled MoE profile; old 35B ids remain aliases.
+  [DISTILLED_35B_MODEL_ID]: {
+    modelId: DISTILLED_35B_MODEL_ID,
+    revision: "2026-06-27-dsv4pro-thinking-distill-q5-mtp",
+    label: "Qwen3.6-35B-A3B DSV4Pro Thinking Distill MTP Q5_K_M imatrix",
+    fileName: "Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf",
+    supersedesFileNames: [
+      "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf",
+      "Qwen3.6-35B-A3B-Q4_K_M-imatrix.gguf",
+      "Qwen3.6-35B-A3B-APEX-MTP-I-Balanced.gguf",
+    ],
+    expectedSize: 25_347_529_344,
+    expectedSha256: "7d47617afbf52fdb25e803f2d77cd22c65411741d165def0373f15a3fc5d68f7",
+    parallelSegments: 4,
+    autoStart: false,
+    sources: [
+      { id: "modelscope", label: "ModelScope (国内主源)", url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF/resolve/master/Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf" },
+      { id: "hf-mirror", label: "hf-mirror.com (国内 HF 镜像)", url: "https://hf-mirror.com/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF/resolve/main/Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf" },
+      { id: "huggingface", label: "HuggingFace (global)", url: "https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF/resolve/main/Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf" },
     ],
   },
 });
@@ -72,7 +103,10 @@ const LLAMACPP_BASE_PROFILES = Object.freeze({
 const LLAMACPP_ALIAS_MAP = Object.freeze({
   "local-qwen35-4b-q4km": "qwen35-4b-q4km",
   "local-qwen35-9b-q4km-imatrix": DEFAULT_MODEL_ID,
+  "qwen35-9b-q4km-imatrix": LOCAL_9B_DOWNGRADE_MODEL_ID,
+  "local-qwen36-27b-dsv4pro-distill-q5km-imatrix": DEFAULT_MODEL_ID,
   "local-a3b-distill": DISTILLED_35B_MODEL_ID,
+  "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix": DISTILLED_35B_MODEL_ID,
   "qwen36-35b-a3b-q4km-imatrix": DISTILLED_35B_MODEL_ID,
   "qwen36-35b-a3b-apex-mtp": DISTILLED_35B_MODEL_ID,
 });
@@ -182,28 +216,31 @@ function buildLlamacppArgsForAlias(modelAlias, modelPath = "") {
   let args = [...(LLAMACPP_DEFAULT_CONFIG.serverArgs || [])];
   const fileName = path.basename(String(modelPath || ""));
   const haystack = `${modelAlias} ${fileName}`;
+  const is27bDistill = /qwen36-27b-dsv4pro-distill|27B-DSV4Pro-Distill-MTP|qwen36-27b-dsv4pro-distill-q5km-imatrix/i.test(haystack);
   const is35bDistill = /qwen36-35b-a3b-dsv4pro-distill|local-a3b-distill|dsv4pro|distill|lynn-prod-Q4_K_M-imatrix/i.test(haystack);
   const is35bImatrix = /qwen36-35b-a3b-q4km-imatrix|35B-A3B-Q4_K_M-imatrix/i.test(haystack);
   const is35bApexMtp = /35B-A3B-APEX-MTP|qwen36-35b-a3b-apex-mtp/i.test(haystack);
   const is35b = is35bDistill || is35bImatrix || is35bApexMtp;
   const is9bMtp = /9B.*(?:imatrix.*mtp|mtp)|qwen35-9b-q4km-imatrix/i.test(haystack);
-  const launchAlias = is35bDistill
+  const launchAlias = is27bDistill
+    ? DEFAULT_MODEL_ID
+    : is35bDistill
     ? DISTILLED_35B_MODEL_ID
     : is35bImatrix
     ? "qwen36-35b-a3b-q4km-imatrix"
     : is35bApexMtp
       ? "qwen36-35b-a3b-apex-mtp"
       : is9bMtp
-        ? DEFAULT_MODEL_ID
+        ? LOCAL_9B_DOWNGRADE_MODEL_ID
         : modelAlias;
   replaceArgValue(args, "-a", launchAlias);
-  if (is35bApexMtp || is9bMtp) {
+  if (is27bDistill || is35bDistill || is35bApexMtp || is9bMtp) {
     replaceArgValue(args, "--spec-type", "draft-mtp");
-    replaceArgValue(args, "--spec-draft-n-max", "4");
+    replaceArgValue(args, "--spec-draft-n-max", "3");
   } else {
     args = removeArgsWithValues(args, ["--spec-type", "--spec-draft-n-max"]);
   }
-  if (is35b || is9bMtp) {
+  if (is27bDistill || is35b || is9bMtp) {
     replaceArgValue(args, "--cache-type-k", "q8_0");
     replaceArgValue(args, "--cache-type-v", "q8_0");
   }
@@ -212,6 +249,7 @@ function buildLlamacppArgsForAlias(modelAlias, modelPath = "") {
 
 module.exports = {
   DEFAULT_MODEL_ID,
+  LOCAL_9B_DOWNGRADE_MODEL_ID,
   DISTILLED_35B_MODEL_ID,
   MODEL_DOWNLOADER_SOURCES,
   LLAMACPP_DOWNLOAD_PROFILES,

@@ -12,7 +12,7 @@ import type { LLMApi, ModelId, ProviderId } from "../../core/types.js";
 
 export const DEFAULT_DEEP_RESEARCH_TIMEOUT_MS = 180_000;
 const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
-const LOCAL_QWEN35_MODEL_ID = "qwen35-9b-q4km-imatrix";
+const LOCAL_QWEN35_MODEL_ID = "qwen36-27b-dsv4pro-distill-q5km-imatrix";
 const LOCAL_QWEN35_BASE_URL = "http://127.0.0.1:18099/v1";
 const LOCAL_DEEP_RESEARCH_MAX_TOKENS = 32_768;
 

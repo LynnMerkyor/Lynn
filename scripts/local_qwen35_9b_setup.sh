@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Product-facing one-command setup for Lynn's default Qwen3.5-9B Q4_K_M imatrix MTP llama.cpp route.
+# Product-facing one-command setup for Lynn's default Qwen3.6-27B Q5_K_M MTP llama.cpp route.
 #
 # This script intentionally glues together the release pieces:
 #   - model discovery / optional download
@@ -14,7 +14,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-MODEL_ROOT="${MODEL_ROOT:-$HOME/Models/Lynn/Qwen3.5-9B}"
+MODEL_ROOT="${MODEL_ROOT:-$HOME/Models/Lynn/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF}"
 Q4KM_VARIANT="${Q4KM_VARIANT:-default}"
 Q4KM_FILE_EXPLICIT=0
 if [[ -n "${Q4KM_FILE:-}" ]]; then
@@ -34,24 +34,24 @@ if [[ -n "${LYNN_PROVIDER_CONFIG:-}" ]]; then
 fi
 case "$Q4KM_VARIANT" in
   imatrix)
-    Q4KM_FILE="${Q4KM_FILE:-Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf}"
-    ARTIFACT_ID="${ARTIFACT_ID:-qwen35-9b-q4km-imatrix-gguf}"
+    Q4KM_FILE="${Q4KM_FILE:-Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf}"
+    ARTIFACT_ID="${ARTIFACT_ID:-qwen36-27b-dsv4pro-distill-q5km-imatrix-gguf}"
     ;;
   default)
-    Q4KM_FILE="${Q4KM_FILE:-Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf}"
-    ARTIFACT_ID="${ARTIFACT_ID:-qwen35-9b-q4km-imatrix-gguf}"
+    Q4KM_FILE="${Q4KM_FILE:-Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf}"
+    ARTIFACT_ID="${ARTIFACT_ID:-qwen36-27b-dsv4pro-distill-q5km-imatrix-gguf}"
     ;;
   *)
     echo "[qwen35-setup] Q4KM_VARIANT must be imatrix or default" >&2
     exit 2
     ;;
 esac
-Q4KM_DIR="$MODEL_ROOT/q4_k_m"
+Q4KM_DIR="$MODEL_ROOT/q5_k_m"
 Q4KM_PATH="${GGUF:-$Q4KM_DIR/$Q4KM_FILE}"
 SOURCE="${SOURCE:-auto}"
 PORT="${PORT:-18099}"
 HOST="${HOST:-127.0.0.1}"
-SERVED_NAME="${SERVED_NAME:-qwen35-9b-q4km-imatrix}"
+SERVED_NAME="${SERVED_NAME:-qwen36-27b-dsv4pro-distill-q5km-imatrix}"
 CTX_SIZE="${CTX_SIZE:-32768}"
 # llama.cpp divides --ctx across parallel slots. Keep the product default at
 # one slot so "32K" really means 32K available context for the local user.
@@ -65,9 +65,9 @@ FORCE=0
 REGISTER_PROVIDER=1
 INSTALL_RUNTIME=0
 
-DL_BASE_URL="${DL_BASE_URL:-https://dl.merkyorlynn.com/models/qwen35-9b}"
-HF_REPO_Q4KM="${HF_REPO_Q4KM:-nerkyor/Qwen3.5-9B-GGUF-imatrix-MTP}"
-MS_REPO_Q4KM="${MS_REPO_Q4KM:-Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP}"
+DL_BASE_URL="${DL_BASE_URL:-https://dl.merkyorlynn.com/models/qwen36-27b-dsv4pro-distill-q5km}"
+HF_REPO_Q4KM="${HF_REPO_Q4KM:-nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF}"
+MS_REPO_Q4KM="${MS_REPO_Q4KM:-Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF}"
 LYNN_PROVIDER_DIR="${LYNN_PROVIDER_DIR:-$HOME/.lynn-engine/providers}"
 LYNN_PROVIDER_CONFIG="${LYNN_PROVIDER_CONFIG:-$LYNN_PROVIDER_DIR/$ARTIFACT_ID.json}"
 
@@ -75,7 +75,7 @@ ENV_FILE_EXPLICIT=0
 if [[ -n "${ENV_FILE:-}" ]]; then
   ENV_FILE_EXPLICIT=1
 else
-  ENV_FILE="$MODEL_ROOT/lynn-qwen35-9b.env"
+  ENV_FILE="$MODEL_ROOT/lynn-qwen36-27b.env"
 fi
 
 usage() {
@@ -87,17 +87,17 @@ Recommended first-run:
   bash scripts/local_qwen35_9b_setup.sh --download --smoke
 
 Start the endpoint after setup:
-  source ~/Models/Lynn/Qwen3.5-9B/lynn-qwen35-9b.env
+  source ~/Models/Lynn/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF/lynn-qwen36-27b.env
   bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh
 
 Options:
-  --download            Download Q4_K_M GGUF if missing.
+  --download            Download Q5_K_M GGUF if missing.
   --source auto|dl|hf|ms Download source. auto tries ms, then hf, then dl.
   --variant imatrix|default
-                        Q4_K_M artifact variant (default: imatrix).
+                        Q5_K_M artifact variant (default: imatrix).
   --smoke               Run transient llama.cpp smoke after setup.
   --serve               Exec the persistent llama.cpp endpoint after setup.
-  --model-root PATH     Model root (default: ~/Models/Lynn/Qwen3.5-9B).
+  --model-root PATH     Model root (default: ~/Models/Lynn/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF).
   --gguf PATH           Explicit GGUF path.
   --llama-server PATH   Explicit llama-server binary.
   --port PORT           Server port (default: 18099).
@@ -114,8 +114,8 @@ Options:
 
 Environment overrides:
   DL_BASE_URL           Lynn CDN base URL.
-  HF_REPO_Q4KM          Hugging Face repo id (default: nerkyor/Qwen3.5-9B-GGUF-imatrix-MTP).
-  MS_REPO_Q4KM          ModelScope repo id (default: Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP).
+  HF_REPO_Q4KM          Hugging Face repo id (default: nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF).
+  MS_REPO_Q4KM          ModelScope repo id (default: Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF).
   Q4KM_FILE             GGUF file name.
   Q4KM_VARIANT          imatrix or default.
   LYNN_PROVIDER_DIR     Provider config directory.
@@ -133,29 +133,29 @@ while [[ $# -gt 0 ]]; do
       case "$Q4KM_VARIANT" in
         imatrix)
           if [[ "$Q4KM_FILE_EXPLICIT" != "1" ]]; then
-            Q4KM_FILE="Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf"
+            Q4KM_FILE="Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf"
           fi
           if [[ "$ARTIFACT_ID_EXPLICIT" != "1" ]]; then
-            ARTIFACT_ID="qwen35-9b-q4km-imatrix-gguf"
+            ARTIFACT_ID="qwen36-27b-dsv4pro-distill-q5km-imatrix-gguf"
           fi
           if [[ "$SERVED_NAME_EXPLICIT" != "1" ]]; then
-            SERVED_NAME="qwen35-9b-q4km-imatrix"
+            SERVED_NAME="qwen36-27b-dsv4pro-distill-q5km-imatrix"
           fi
           ;;
         default)
           if [[ "$Q4KM_FILE_EXPLICIT" != "1" ]]; then
-            Q4KM_FILE="Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf"
+            Q4KM_FILE="Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf"
           fi
           if [[ "$ARTIFACT_ID_EXPLICIT" != "1" ]]; then
-            ARTIFACT_ID="qwen35-9b-q4km-imatrix-gguf"
+            ARTIFACT_ID="qwen36-27b-dsv4pro-distill-q5km-imatrix-gguf"
           fi
           if [[ "$SERVED_NAME_EXPLICIT" != "1" ]]; then
-            SERVED_NAME="qwen35-9b-q4km-imatrix"
+            SERVED_NAME="qwen36-27b-dsv4pro-distill-q5km-imatrix"
           fi
           ;;
         *) echo "[qwen35-setup] --variant must be imatrix or default" >&2; exit 2 ;;
       esac
-      Q4KM_DIR="$MODEL_ROOT/q4_k_m"
+      Q4KM_DIR="$MODEL_ROOT/q5_k_m"
       Q4KM_PATH="${GGUF:-$Q4KM_DIR/$Q4KM_FILE}"
       if [[ "$LYNN_PROVIDER_CONFIG_EXPLICIT" != "1" ]]; then
         LYNN_PROVIDER_CONFIG="$LYNN_PROVIDER_DIR/$ARTIFACT_ID.json"
@@ -166,10 +166,10 @@ while [[ $# -gt 0 ]]; do
     --serve) SERVE=1; shift ;;
     --model-root)
       MODEL_ROOT="${2:-}"
-      Q4KM_DIR="$MODEL_ROOT/q4_k_m"
+      Q4KM_DIR="$MODEL_ROOT/q5_k_m"
       Q4KM_PATH="${GGUF:-$Q4KM_DIR/$Q4KM_FILE}"
       if [[ "$ENV_FILE_EXPLICIT" != "1" ]]; then
-        ENV_FILE="$MODEL_ROOT/lynn-qwen35-9b.env"
+        ENV_FILE="$MODEL_ROOT/lynn-qwen36-27b.env"
       fi
       if [[ "$LYNN_PROVIDER_CONFIG_EXPLICIT" != "1" ]]; then
         LYNN_PROVIDER_CONFIG="$LYNN_PROVIDER_DIR/$ARTIFACT_ID.json"
@@ -236,7 +236,7 @@ is_default_mtp_gguf_path() {
   lower="${base,,}"
   expected="${Q4KM_FILE,,}"
   [[ "$lower" == "$expected" ]] && return 0
-  [[ "$lower" == *qwen3.5*9b*q4*k*m*mtp*.gguf ]] && return 0
+  [[ "$lower" == *qwen3.6*27b*dsv4pro*q5*k*m*mtp*.gguf ]] && return 0
   return 1
 }
 
@@ -262,6 +262,8 @@ find_existing_gguf() {
       printf '%s\n' "$candidate"
       return 0
     done < <(find "$root" -maxdepth 5 -type f \( \
+      -iname '*Qwen3.6*27B*DSV4Pro*Q5*K*M*.gguf' -o \
+      -iname '*qwen3.6*27b*dsv4pro*q5*k*m*.gguf' -o \
       -iname '*Qwen3.5*9B*Q4*K*M*.gguf' -o \
       -iname '*qwen3.5*9b*q4*k*m*.gguf' -o \
       -iname '*Qwen3.5*9B*Q4_K_M*.gguf' -o \
@@ -335,7 +337,7 @@ have_command() {
 }
 
 download_dl() {
-  local url="$DL_BASE_URL/q4_k_m/$Q4KM_FILE"
+  local url="$DL_BASE_URL/q5_k_m/$Q4KM_FILE"
   echo "[qwen35-setup] downloading via Lynn CDN: $url"
   curl -L --fail --continue-at - --create-dirs --output "$Q4KM_PATH" "$url"
 }
@@ -384,7 +386,7 @@ write_env_file() {
   local gguf="$2"
   mkdir -p "$(dirname "$ENV_FILE")"
   cat > "$ENV_FILE" <<EOF
-# Lynn Qwen3.5-9B Q4_K_M imatrix MTP local backend
+# Lynn Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP local backend
 # Generated by scripts/local_qwen35_9b_setup.sh
 export ARTIFACT_ID="$ARTIFACT_ID"
 export Q4KM_VARIANT="$Q4KM_VARIANT"
@@ -431,7 +433,7 @@ fi
 
 if [[ -z "$resolved_gguf" ]]; then
   if [[ -n "$resolved_legacy_gguf" ]]; then
-    echo "[qwen35-setup] legacy 9B GGUF found but default requires MTP; will download/upgrade to $Q4KM_FILE"
+    echo "[qwen35-setup] legacy 9B GGUF found but default is now 27B Q5 MTP; will download/upgrade to $Q4KM_FILE"
   fi
   if [[ "$DOWNLOAD" == "1" ]]; then
     if ! download_model; then
@@ -440,7 +442,7 @@ if [[ -z "$resolved_gguf" ]]; then
 
 Manual fallback:
   mkdir -p "$Q4KM_DIR"
-  # Put Qwen3.5-9B Q4_K_M imatrix MTP GGUF at:
+  # Put Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP GGUF at:
   #   $Q4KM_PATH
 EOF
       exit 4
@@ -448,7 +450,7 @@ EOF
     resolved_gguf="$(find_existing_gguf || true)"
   else
     cat >&2 <<EOF
-[qwen35-setup] ERROR: Q4_K_M GGUF not found.
+[qwen35-setup] ERROR: Q5_K_M GGUF not found.
 
 Run:
   bash scripts/local_qwen35_9b_setup.sh --download --smoke

@@ -130,8 +130,9 @@ export function LocalModelDownloadStep({
   // #21: keep warnings and blockers visually separate
   const softWarnings: string[] = status?.plan?.hardware?.warnings || [];
   const hardBlockers: string[] = status?.plan?.hardware?.blockers || [];
+  const canEnableDefault = status?.plan?.hardware?.can_enable === true;
   const hardwareBlocked = status?.plan?.hardware?.can_enable === false;
-  const canStart = !busy && !ready && !hardwareBlocked;
+  const canStart = !busy && !ready && canEnableDefault;
   const progressPercent = typeof progress?.percent === 'number'
     ? Math.max(0, Math.min(100, progress.percent))
     : ready ? 100 : busy ? 45 : 0;
@@ -236,8 +237,9 @@ export function LocalModelDownloadStep({
     if (jobFailed) return t('onboarding.localModel.spawnFailed', { reason: status?.job?.progress?.message || 'setup_failed' });
     if (busy) return progress?.message || progress?.phase || t('onboarding.localModel.spawning');
     if (modelPrepared) return t('onboarding.localModel.modelPreparedHint');
+    if (!canEnableDefault) return t('onboarding.localModel.hardwareNotRecommended');
     return t('onboarding.localModel.subtitle');
-  }, [busy, error, jobFailed, modelPrepared, progress?.message, progress?.phase, ready, status?.job?.progress?.message, t]);
+  }, [busy, canEnableDefault, error, jobFailed, modelPrepared, progress?.message, progress?.phase, ready, status?.job?.progress?.message, t]);
 
   return (
     <StepContainer>

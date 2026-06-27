@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Qwen3.5-9B MTP Mac Q4_K_M Release QA Smoke
+# Qwen3.6-27B MTP Q5_K_M Release QA Smoke
 #
-# One-command local QA for the Mac Q4_K_M stable track.
+# One-command local QA for the current Mac Q5_K_M stable track.
 # Assumes the user has ALREADY started llama-server via:
 #   bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh
 #
@@ -18,7 +18,7 @@ set -euo pipefail
 #   7. Short multi-turn (2 rounds)
 #   8. 32K-ish long context (opt-in: SKIP_LONG=0)
 #
-# Output: JSON report to reports/qwen35_9b_mtp/local_qwen35_9b_mtp_release_qa_smoke_<stamp>.json
+# Output: JSON report to reports/qwen36_27b_mtp/local_qwen36_27b_mtp_release_qa_smoke_<stamp>.json
 #
 # Usage:
 #   bash scripts/local_qwen35_9b_release_qa_smoke.sh
@@ -30,17 +30,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:18099/v1}"
-MODEL="${MODEL:-qwen35-9b-q4km-imatrix}"
+MODEL="${MODEL:-qwen36-27b-dsv4pro-distill-q5km-imatrix}"
 TIMEOUT="${TIMEOUT:-120}"
 SKIP_LONG="${SKIP_LONG:-1}"
 STAMP="${STAMP:-$(date +%Y%m%d_%H%M%S)}"
-OUT_DIR="${OUT_DIR:-$REPO_ROOT/reports/qwen35_9b_mtp}"
-OUT_JSON="${OUT_DIR}/local_qwen35_9b_mtp_release_qa_smoke_${STAMP}.json"
+OUT_DIR="${OUT_DIR:-$REPO_ROOT/reports/qwen36_27b_mtp}"
+OUT_JSON="${OUT_DIR}/local_qwen36_27b_mtp_release_qa_smoke_${STAMP}.json"
 
 mkdir -p "$OUT_DIR"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  Qwen3.5-9B MTP Mac Q4_K_M Release QA Smoke               ║"
+echo "║  Qwen3.6-27B MTP Q5_K_M Release QA Smoke                 ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "  Endpoint:  $BASE_URL"
@@ -61,7 +61,7 @@ if [[ "$HTTP_CODE" != "200" ]]; then
   echo "  Please start the server first:" >&2
   echo "    bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh" >&2
   echo "" >&2
-  echo "  See: docs/QWEN35_9B_MAC_Q4KM_QA_RUNBOOK_20260519.md for the historical 9B flow." >&2
+  echo "  Low-config 9B/4B downgrade flows remain available from Settings." >&2
   exit 1
 fi
 echo "  [OK] Server healthy"
@@ -209,7 +209,7 @@ print("━━━ Test 4: Thinking-on answer budget ━━━")
 try:
     r = post("chat/completions", {
         "model": model,
-        "messages": [{"role": "user", "content": "默认本地9B MTP门禁测试：请只回复 OK。"}],
+        "messages": [{"role": "user", "content": "默认本地27B MTP门禁测试：请只回复 OK。"}],
         "max_tokens": 8192,
         "temperature": 0,
         "chat_template_kwargs": {"enable_thinking": True},
@@ -357,7 +357,7 @@ total = passed + failed
 all_ok = failed == 0
 
 report = {
-    "schema": "lynn-qwen35-9b-mtp-mac-q4km-release-qa-smoke-v1",
+    "schema": "lynn-qwen36-27b-mtp-q5km-release-qa-smoke-v1",
     "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
     "stamp": stamp,
     "base_url": base_url,

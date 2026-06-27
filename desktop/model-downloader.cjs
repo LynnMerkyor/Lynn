@@ -1,7 +1,8 @@
 /**
- * model-downloader.cjs · Lynn V0.79 onboarding 2026-05-21 / 2026-05-28 9B MTP release
+ * model-downloader.cjs · Lynn V0.86 local GGUF default, 2026-06-27
  *
- * 跨平台大文件下载守护 — Qwen3.5-9B Q4_K_M imatrix MTP 5.78 GB / 5.38 GiB GGUF。
+ * 跨平台大文件下载守护 — Qwen3.6-27B DSV4Pro Distill MTP Q5_K_M imatrix
+ * 19.5 GB GGUF。9B / 4B remain explicit low-config downgrade profiles.
  *
  * 设计要点：
  *   1. HTTP/HTTPS Range 续传(用 .part 临时文件 + 已下载 byte offset);
@@ -17,14 +18,14 @@
  *   6. 不引入第三方下载库(axios/got/aria2),用 native http/https 满足 build size。
  *
  * 默认目标(可被 opts.target 覆盖):
- *   ~/.lynn/models/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf
+ *   ~/.lynn/models/Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf
  *
  * 默认源(可被 opts.sources 覆盖,顺序 = 国内优先):
- *   - https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf  (国内主源)
- *   - https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix-MTP/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf          (国内 HF 镜像备)
+ *   - https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF/resolve/master/Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf
+ *   - https://hf-mirror.com/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF/resolve/main/Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf
  *
- * sha256: 0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4
- * size:   5_780_090_944 bytes (期望,允许 ±0.5% 偏差,实际以 sha256 为准)
+ * sha256: 82d00165076fe719359fed97a95cf72bdc1ea7b1fccac8a1ed3abd25594a1f5c
+ * size:   19_535_700_320 bytes (期望,允许 ±0.5% 偏差,实际以 sha256 为准)
  */
 
 const fs = require("fs");
@@ -40,20 +41,20 @@ const { EventEmitter } = require("events");
 // 默认配置
 // ─────────────────────────────────────────────────────────────
 
-const DEFAULT_FILE_NAME = "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf";
-const DEFAULT_EXPECTED_SIZE = 5_780_090_944;
-const DEFAULT_EXPECTED_SHA256 = "0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4";
+const DEFAULT_FILE_NAME = "Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf";
+const DEFAULT_EXPECTED_SIZE = 19_535_700_320;
+const DEFAULT_EXPECTED_SHA256 = "82d00165076fe719359fed97a95cf72bdc1ea7b1fccac8a1ed3abd25594a1f5c";
 
 const DEFAULT_SOURCES = Object.freeze([
   {
     id: "modelscope",
     label: "ModelScope (国内主源)",
-    url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP/resolve/master/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
+    url: "https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF/resolve/master/Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf",
   },
   {
     id: "hf-mirror",
     label: "hf-mirror.com (国内 HF 镜像)",
-    url: "https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix-MTP/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
+    url: "https://hf-mirror.com/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF/resolve/main/Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf",
   },
 ]);
 

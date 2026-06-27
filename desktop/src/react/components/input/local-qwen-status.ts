@@ -1,5 +1,7 @@
 export const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-export const LOCAL_QWEN35_MODEL_ID = 'qwen35-9b-q4km-imatrix';
+export const LOCAL_QWEN35_MODEL_ID = 'qwen36-27b-dsv4pro-distill-q5km-imatrix';
+export const LOCAL_QWEN_DISPLAY_NAME = '本地 Qwen3.6-27B';
+export const LOCAL_QWEN_SHORT_NAME = 'Qwen3.6-27B';
 export const LOCAL_QWEN35_ENDPOINT = 'http://127.0.0.1:18099/v1';
 export const LOCAL_QWEN_PROMPT_DISMISS_KEY = 'lynn-local-model-prompt-dismissed-date';
 export const LOCAL_QWEN_PROMPT_SHOWN_KEY = 'lynn-local-model-prompt-shown-date';
@@ -117,7 +119,7 @@ export function deriveLocalQwenRuntimeState(
     || status?.plan?.plan?.hardware?.recommended_runtime?.label
     || '本机 32K';
   const canEnable = (status?.plan?.hardware?.can_enable
-    ?? status?.plan?.plan?.hardware?.can_enable) !== false;
+    ?? status?.plan?.plan?.hardware?.can_enable) === true;
   const hasModel = !!(status?.plan?.observed?.gguf || status?.plan?.plan?.observed?.gguf);
   const hasRuntime = !endpointOccupied
     && !!(status?.plan?.observed?.llama_server || status?.plan?.plan?.observed?.llama_server);

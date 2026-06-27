@@ -648,7 +648,7 @@
       "userNameHint": "어시스턴트가 부르는 이름",
       "userProfile": "사용자 프로필",
       "userProfileHint": "어시스턴트가 당신을 이해하는 데 도움이 돼요: 관심사, 습관, 취향 등. 시스템 프롬프트에 주입돼요",
-      "defaultProviderHint": "로컬 Qwen3.5-9B와 클라우드를 한 번에 전환.",
+      "defaultProviderHint": "로컬 Qwen3.6-27B와 클라우드를 한 번에 전환. 저사양 환경은 Settings에서 9B/4B를 선택할 수 있습니다.",
       "openProviders": "Providers 열기 →"
     },
     "crop": {
@@ -1165,8 +1165,8 @@
     },
     "localModel": {
       "title": "Download Lynn's default local model",
-      "subtitle": "Qwen3.5-9B Q4_K_M imatrix MTP · 5.78 GB / 5.38 GiB · 32K context · 24GB+ RAM recommended.\nRuns fully offline — no API key, no data ever leaves your machine.",
-      "specsLine": "5.78 GB / 5.38 GiB · Q4_K_M imatrix MTP · 32K context · fully offline",
+      "subtitle": "Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP · 19.5 GB · 32K context · 24GB+ VRAM/unified memory recommended.\nRuns fully offline — no API key, no data ever leaves your machine. Low-config machines can choose 9B/4B downgrades in Settings.",
+      "specsLine": "19.5 GB · Q5_K_M imatrix MTP · 32K context · fully offline",
       "needsBinary": "llama.cpp inference engine not found at ~/.lynn/llamacpp/bin/llama-server",
       "needsBinaryHint": "Install llama.cpp following the docs and retry.",
       "alreadyHave": "Local model is ready",
@@ -1189,11 +1189,12 @@
       "errorGeneric": "Download error: {reason}",
       "next": "Continue",
       "back": "Back",
-      "modelPreparedHint": "모델과 llama.cpp 준비 완료. 시작을 누르면 Local Qwen3.5-9B로 전환됩니다.",
+      "modelPreparedHint": "모델과 llama.cpp 준비 완료. 시작을 누르면 Local Qwen3.6-27B로 전환됩니다.",
+      "hardwareNotRecommended": "This machine is not recommended for the default 27B path, so Lynn will not start the local-model guide automatically. Keep using Brain, or choose a 9B/4B downgrade in Settings.",
       "statusReady": "시작 가능",
       "statusWaiting": "준비 중",
-      "runtimeLocal9B": "Local Qwen3.5-9B",
-      "runtimeLocalDefault": "Local Qwen3.5-9B"
+      "runtimeLocal9B": "Local Qwen3.6-27B",
+      "runtimeLocalDefault": "Local Qwen3.6-27B"
     },
     "skipSetup": "설정 건너뛰기"
   },

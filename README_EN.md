@@ -11,8 +11,8 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://gitee.com/merkyor/Lynn/releases)
-[![HuggingFace Models](https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d)](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill)
-[![ModelScope Models](https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff)](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill)
+[![HuggingFace Models](https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d)](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF)
+[![ModelScope Models](https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff)](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF)
 
 ---
 
@@ -20,7 +20,7 @@
 
 - **Source and app**: [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [Gitee release mirror](https://gitee.com/merkyor/Lynn/releases)
 - **Models and GGUF mirrors**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
-- **Local orchestrator model**: [HuggingFace 35B Distill](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill) · [ModelScope 35B Distill](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill)
+- **Recommended edge model**: [ModelScope 27B Q5_K_M GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) · [HuggingFace 27B Q5_K_M GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) · 32GB+ machines can use [35B-A3B Q5_K_M GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF)
 - **Agent regression**: [`agent-regression-kit/`](agent-regression-kit/) is bundled here today. Coding100, Agent20, automated regression cases, and model tooling should move into a standalone tooling repo; see [`docs/ops/agent-eval-tooling-repo.md`](docs/ops/agent-eval-tooling-repo.md).
 
 ---
@@ -42,7 +42,7 @@ Same harness, thinking-on, vs the base A3B:
 
 Distilled and base have **identical single-stream TPS** (~224 tok/s on R6000) — the orchestration speedup comes from **fewer tokens to a decision** (we distilled the *thinking style*, not raw speed). Hard tasks (e.g. concurrency) are still backstopped by **harness objective verification + a DS-V4 Flash escape hatch**.
 
-📦 **ModelScope**: [`Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill`](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill) · **HuggingFace**: [`nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill`](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill) (BF16 + Q4_K_M gguf)
+📦 **Default edge GGUF**: [`Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF`](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) · [`nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF`](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF); **high-end 35B-A3B Q5_K_M GGUF**: [ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) · [HuggingFace](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF)
 
 ### ② Engine route: we chose the fastest edge framework — llama.cpp — and give back
 
@@ -705,7 +705,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 
 </details>
 
-👉 [Full release history · GitHub Releases](https://gitee.com/merkyor/Lynn/releases)
+👉 [Full release history · Gitee release mirror](https://gitee.com/merkyor/Lynn/releases)
 
 ---
 
@@ -770,15 +770,16 @@ Memory and skill distillation work together: the more you use Lynn, the more acc
 
 ## Local models — three-tier hardware ladder
 
-Starting with Lynn v0.79.1, local models are grouped by hardware. **The default tier stays on 9B MTP; 4B is a low-config downgrade only**:
+Starting with Lynn v0.85.4, the recommended default local model is **Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP**. Low-config machines do not get a proactive local-model install prompt; 9B / 4B remain explicit downgrade choices in Settings. Local GGUF still starts only after the user enables it:
 
 | Tier | Model | Size | Recommended hardware | Context | Capability signal |
 |------|-------|:----:|---------------------|:-------:|-------------------|
-| **Default** | **Qwen3.5-9B Q4_K_M imatrix MTP** | 5.38 GB | **24GB VRAM/unified memory+** | 32K | **Q4_K_M imatrix** · default gate target · MTP acceleration · stable thinking-on path |
-| Downgrade | Qwen3.5-4B Q4_K_M imatrix (Lynn) | 2.6 GB | 8~16GB optional | 32K | **Q4_K_M imatrix** · MMLU thinking-off 73.00% · GPQA thinking-off 16.67% · thinking-on may think for a long time and return no visible answer |
-| High-end · orchestrator brain | **Qwen3.6-35B-A3B distilled orchestrator** Q4_K_M imatrix | 21 GB | 24GB VRAM/unified memory+ | 32K | **DS-V4-Pro thinking-style distilled** · MMLU 500 = 90.2% · GPQA-Diamond 80.3% · 2.3× faster end-to-end orchestration · Spark 77 / R6000 ~224 tok/s |
+| **Recommended** | **Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP** | 19.5 GB | **24GB VRAM/unified memory+** | 32K | **Default Q5_K_M** · GPQA 81.82% · MMLU 90.0% · Coding100 86/100 · MTP n=3 single-stream ~10.4→26.8 TPS |
+| Downgrade | Qwen3.5-9B Q4_K_M imatrix MTP | 5.38 GB | 16~24GB optional | 32K | Low-config explicit downgrade · tool-call gate 14/15 · MTP acceleration |
+| Low-config downgrade | Qwen3.5-4B Q4_K_M imatrix (Lynn) | 2.6 GB | 8~16GB optional | 32K | **Q4_K_M imatrix** · MMLU thinking-off 73.00% · GPQA thinking-off 16.67% · thinking-on may think for a long time and return no visible answer |
+| High-end · orchestrator brain | **Qwen3.6-35B-A3B DSV4Pro Distill Q5_K_M imatrix MTP** | 25.3 GB | 32GB VRAM/unified memory+ | 32K | **DS-V4-Pro thinking-style distilled** · GPQA-Diamond 80.3% · 2.3× faster end-to-end orchestration · MTP n=3 |
 
-> 9B / 35B quality numbers are measured with **Q4_K_M quantization** + **thinking-on 32K max_tokens**, GB10 Spark llama.cpp on the same hardware. 4B imatrix is available only as a downgrade: thinking-off is usable; thinking-on has reproduced long empty reasoning and is not safe as the onboarding default.
+> 27B / 35B are the current **Q5_K_M imatrix + MTP** recommendation. 9B / 4B are downgrade lanes only: 9B is for roughly 16GB machines, while 4B should stay thinking-off. If hardware does not satisfy the 27B recommendation threshold, Lynn stays quiet instead of showing a default local-model install guide.
 
 | Universal | Details |
 |---|---|
@@ -788,15 +789,16 @@ Starting with Lynn v0.79.1, local models are grouped by hardware. **The default 
 
 ### Downloads and mirrors
 
-**Default 9B** (recommended for new users):
-- 🇨🇳 **ModelScope**: [Merkyor/Qwen3.5-9B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`, **5.38 GB**)
-- 🤗 **Hugging Face**: [nerkyor/Qwen3.5-9B-GGUF-imatrix](https://huggingface.co/nerkyor/Qwen3.5-9B-GGUF-imatrix) / mirror `hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix`
+**Recommended 27B** (24GB+ explicit opt-in):
+- 🇨🇳 **ModelScope**: [Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) (`Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf`, **19.5 GB**)
+- 🤗 **Hugging Face**: [nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) / mirror `hf-mirror.com/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF`
 
-**Low-config 4B / High-end 35B** (explicit hardware choices):
-- 4B: [Merkyor/Qwen3.5-4B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix) (`Qwen3.5-4B-Q4_K_M-imatrix.gguf`, **2.6 GB**) — downgrade only; thinking-off recommended
-- 35B (orchestrator brain): [Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill) (`gguf/Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf`, **21 GB**) — **distilled task orchestrator** (the brain from Part 1), Spark 77 / R6000 ~224 tok/s, fits 24G local machines
+**Low-config 9B / 4B and high-end 35B** (explicit hardware choices):
+- 9B: [Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.5-9B-GGUF-imatrix) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`, **5.38 GB**) — low-config downgrade
+- 4B: [Merkyor/Qwen3.5-4B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix) (`Qwen3.5-4B-Q4_K_M-imatrix.gguf`, **2.6 GB**) — lower-config downgrade; thinking-off recommended
+- 35B (orchestrator brain): [Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) (`Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf`, **25.3 GB**) — recommended for 32GB+ machines
 
-In the app: **Settings → Models → Local Qwen3.5-9B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background. The chat input shows local model status, and you can stop the runtime anytime to release memory. The Models page also supports explicit 4B downgrade / 35B high-end choices, or importing any llama.cpp-compatible GGUF you already have.
+In the app: **Settings → Models → Local Qwen3.6-27B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background. The chat input shows local model status, and you can stop the runtime anytime to release memory. On low-config hardware Lynn does not proactively show the 27B install guide; the Models page still supports manual 9B / 4B downgrade choices, 35B high-end selection, or importing any llama.cpp-compatible GGUF you already have.
 
 ## Install and Go
 
@@ -922,9 +924,9 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from [Releases](https://gitee.com/merkyor/Lynn/releases). The V0.85.4 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [Gitee release mirror](https://gitee.com/merkyor/Lynn/releases). The V0.85.4 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
-**Windows:** download the latest `.exe` installer from [Releases](https://gitee.com/merkyor/Lynn/releases) and run it directly.
+**Windows:** download the latest `.exe` installer from the [Gitee release mirror](https://gitee.com/merkyor/Lynn/releases) and run it directly.
 
 > **Windows SmartScreen notice:** The v0.85.4 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
@@ -935,7 +937,7 @@ Linux builds are planned.
 Two paths on first launch:
 
 - **Quick Start**: Enter your name → set permissions → jump right in. A built-in default model works out of the box — no API key required.
-- **Local model**: Settings → Models → Local Qwen3.5-9B imatrix MTP (5.38 GB / 24GB VRAM or unified memory recommended) / 4B imatrix downgrade / 35B Q4_K_M imatrix (24GB high-end, 21 GB). V0.80 makes local GGUF explicit opt-in: Lynn starts llama.cpp only after the user enables it, so app launch does not automatically claim about 6GB of VRAM or unified memory.
+- **Local model**: Settings → Models → Local Qwen3.6-27B. 24GB+ machines get the 27B Q5_K_M MTP recommendation; 32GB+ can choose 35B-A3B Q5_K_M; low-config machines can manually choose 9B / 4B downgrades. Lynn stays quiet when hardware is below the 27B recommendation threshold, and every local GGUF starts only after the user explicitly enables it.
 - **Advanced Setup**: Enter your name → connect your own provider (API key + base URL) → choose a **chat model** and a **utility model** → pick a theme → set permissions → enter.
 
 Lynn uses the OpenAI-compatible protocol, so any provider that supports it will work (OpenAI, DeepSeek, Qwen, local models via Ollama, SiliconFlow, etc.). Some providers (e.g. MiniMax) also support OAuth login. All model settings can be adjusted later in Settings.

@@ -6,7 +6,7 @@ import { stripRouteMetadataLeaks } from "./turn-retry-policy.js";
 import { extractText } from "./content-utils.js";
 
 const DEFAULT_LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
-const DEFAULT_LOCAL_QWEN35_MODEL_ID = "qwen35-9b-q4km-imatrix";
+const DEFAULT_LOCAL_QWEN35_MODEL_ID = "qwen36-27b-dsv4pro-distill-q5km-imatrix";
 
 type JsonRecord = Record<string, unknown>;
 type ExtractTextContent = Parameters<typeof extractText>[0];

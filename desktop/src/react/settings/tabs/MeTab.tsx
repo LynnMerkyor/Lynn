@@ -98,7 +98,7 @@ export function MeTab() {
         }}
       >
         <span style={{ opacity: 0.85 }}>
-          {t('settings.me.defaultProviderHint') || 'Switch between local 9B and cloud providers in one click.'}
+          {t('settings.me.defaultProviderHint') || 'Switch between local 27B and cloud providers in one click.'}
         </span>
         <button
           type="button"

@@ -5,7 +5,7 @@ import type { ProviderSnapshot } from '../../../../../../shared/provider-state.j
 function snapshot(overrides: Partial<ProviderSnapshot> = {}): ProviderSnapshot {
   return {
     id: 'local-qwen35-9b-q4km-imatrix',
-    displayName: '本地 Qwen3.5-9B',
+    displayName: '本地 Qwen3.6-27B',
     selectedModel: null,
     state: 'ready',
     auth: { required: false, status: 'not_required' },

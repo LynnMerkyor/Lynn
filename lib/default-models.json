@@ -34,6 +34,7 @@
   ],
 
   "local-qwen35-9b-q4km-imatrix": [
+    "qwen36-27b-dsv4pro-distill-q5km-imatrix",
     "qwen35-9b-q4km-imatrix"
   ],
 

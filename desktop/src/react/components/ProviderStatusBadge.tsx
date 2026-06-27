@@ -1,10 +1,10 @@
 /**
  * ProviderStatusBadge.tsx — Compact model-route chip for the welcome screen.
  *
- * Local Qwen3.5-9B state is sourced from the server-side /api/local-qwen35-9b/*
+ * Local Qwen3.6-27B state is sourced from the server-side /api/local-qwen35-9b/*
  * route (legacy endpoint name kept for backward compat) so this chip,
  * Settings, onboarding, and chat routing share the same provider id and
- * setup lifecycle. 2026-05-25: default model is 9B MTP; 4B is downgrade-only.
+ * setup lifecycle. 2026-06-27: default model is 27B Q5 MTP; 9B/4B are downgrade-only.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -15,7 +15,7 @@ import { loadModels } from '../utils/ui-helpers';
 import { BRAIN_PROVIDER_ID, BRAIN_DEFAULT_MODEL_ID } from '../../../../shared/brain-provider.js';
 
 const LOCAL_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_MODEL_ID = 'qwen35-9b-q4km-imatrix';
+const LOCAL_MODEL_ID = 'qwen36-27b-dsv4pro-distill-q5km-imatrix';
 
 type LocalStatus = {
   ok?: boolean;
@@ -38,6 +38,9 @@ type LocalStatus = {
     model_ids?: string[];
   };
   plan?: {
+    hardware?: {
+      can_enable?: boolean;
+    };
     observed?: {
       endpoint_running?: boolean;
       endpoint_loading?: boolean;
@@ -63,7 +66,7 @@ function localProviderState(status: LocalStatus | null): string {
 function providerDisplayLabel(provider: string | null, isZh: boolean): string {
   if (!provider) return isZh ? '未配置' : 'No model';
   if (provider === BRAIN_PROVIDER_ID) return isZh ? '默认模型' : 'Default model';
-  if (provider === LOCAL_PROVIDER_ID) return isZh ? '本地 Qwen3.5-9B' : 'Local Qwen3.5-9B';
+  if (provider === LOCAL_PROVIDER_ID) return isZh ? '本地 Qwen3.6-27B' : 'Local Qwen3.6-27B';
   return provider;
 }
 
@@ -150,6 +153,8 @@ export function ProviderStatusBadge() {
   const localOccupied = isLocalEndpointOccupied(localStatus);
   const localBusy = isLocalBusy(localStatus) || preparing;
   const localAssets = hasLocalAssets(localStatus);
+  const localCanSetup = localStatus?.plan?.hardware?.can_enable === true;
+  const localCannotSetup = localStatus?.plan?.hardware?.can_enable === false;
 
   const { statusText, tone } = useMemo<{ statusText: string; tone: 'ready' | 'busy' | 'standby' | 'error' | 'cloud' }>(() => {
     if (!isLocalActive) {
@@ -164,9 +169,10 @@ export function ProviderStatusBadge() {
         tone: 'busy',
       };
     }
+    if (localCannotSetup && !localReady && !localAssets) return { statusText: isZh ? '配置不足' : 'Hardware low', tone: 'standby' };
     if (!localAssets) return { statusText: isZh ? '待准备' : 'Needs setup', tone: 'standby' };
     return { statusText: isZh ? '可启动' : 'Ready to start', tone: 'standby' };
-  }, [activeProvider, isLocalActive, isZh, localAssets, localBusy, localOccupied, localReady, localStatus?.job?.progress?.percent]);
+  }, [activeProvider, isLocalActive, isZh, localAssets, localBusy, localCannotSetup, localOccupied, localReady, localStatus?.job?.progress?.percent]);
 
   const switchToProvider = useCallback(async (targetProvider: typeof BRAIN_PROVIDER_ID | typeof LOCAL_PROVIDER_ID) => {
     if (switching) return;
@@ -193,6 +199,9 @@ export function ProviderStatusBadge() {
     setMenuOpen(false);
     try {
       const latest = await refreshLocal();
+      if (!isLocalReady(latest) && latest?.plan?.hardware?.can_enable !== true) {
+        return;
+      }
       if (!isLocalReady(latest)) {
         const res = await hanaFetch('/api/local-qwen35-9b/setup', {
           method: 'POST',
@@ -254,22 +263,28 @@ export function ProviderStatusBadge() {
             aria-checked={activeProvider === LOCAL_PROVIDER_ID}
             className={`provider-status-menu-item${activeProvider === LOCAL_PROVIDER_ID ? ' is-active' : ''}`}
             onClick={() => void (localReady ? switchToProvider(LOCAL_PROVIDER_ID) : prepareAndSwitchLocal())}
-            disabled={switching || preparing}
+            disabled={switching || preparing || (!localReady && localCannotSetup)}
           >
             <span className="provider-status-menu-dot tone-local" aria-hidden />
             <span>
               {localReady
-                ? (isZh ? '本地 Qwen3.5-9B' : 'Local Qwen3.5-9B')
+                ? (isZh ? '本地 Qwen3.6-27B' : 'Local Qwen3.6-27B')
                 : localBusy
-                  ? (isZh ? '本地 Qwen3.5-9B 准备中' : 'Local Qwen3.5-9B preparing')
-                  : (isZh ? '准备并切换本地 Qwen3.5-9B' : 'Prepare and switch to Local Qwen3.5-9B')}
+                  ? (isZh ? '本地 Qwen3.6-27B 准备中' : 'Local Qwen3.6-27B preparing')
+                  : localCannotSetup
+                    ? (isZh ? '本机不建议启用默认 27B' : '27B not recommended here')
+                    : (isZh ? '准备并切换本地 Qwen3.6-27B' : 'Prepare and switch to Local Qwen3.6-27B')}
             </span>
           </button>
           {!localReady && (
             <div className="provider-status-menu-note">
-              {isZh
-                ? 'Lynn 会在授权后自动准备 llama.cpp、模型文件和本地端点。'
-                : 'Lynn will prepare llama.cpp, the model file, and the local endpoint after authorization.'}
+              {!localCannotSetup
+                ? (isZh
+                  ? 'Lynn 会在授权后自动准备 llama.cpp、模型文件和本地端点。'
+                  : 'Lynn will prepare llama.cpp, the model file, and the local endpoint after authorization.')
+                : (isZh
+                  ? '默认 27B 需要约 24GB+ 内存；低配机器可在设置页手动选择 9B/4B 降级。'
+                  : 'The default 27B path needs about 24GB+ memory; choose 9B/4B downgrade in Settings.')}
             </div>
           )}
         </div>

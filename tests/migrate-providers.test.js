@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 import YAML from "js-yaml";
 import { afterEach, describe, expect, it } from "vitest";
-import { migrateLocalQwenDefaultTo9B, migrateToProvidersYaml, repairRetiredModelReferences } from "../core/migrate-providers.js";
+import { migrateLocalQwenDefaultTo27B, migrateToProvidersYaml, repairRetiredModelReferences } from "../core/migrate-providers.js";
 
 function makeTempRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lynn-migrate-providers-"));
@@ -123,8 +123,8 @@ describe("migrateToProvidersYaml", () => {
   });
 });
 
-describe("migrateLocalQwenDefaultTo9B", () => {
-  it("migrates local Qwen 4B defaults to the 9B provider and marks prefs", () => {
+describe("migrateLocalQwenDefaultTo27B", () => {
+  it("migrates local Qwen 4B defaults to the 27B provider and marks prefs", () => {
     const root = makeTempRoot();
     tempRoots.push(root);
     const lynnHome = path.join(root, ".lynn");
@@ -157,7 +157,7 @@ describe("migrateLocalQwenDefaultTo9B", () => {
     });
     writeJson(path.join(lynnHome, "user", "preferences.json"), {});
 
-    migrateLocalQwenDefaultTo9B(lynnHome, agentsDir);
+    migrateLocalQwenDefaultTo27B(lynnHome, agentsDir);
 
     const added = readYaml(path.join(lynnHome, "added-models.yaml"));
     expect(added.providers["local-qwen35-9b-q4km-imatrix"]).toMatchObject({
@@ -165,20 +165,20 @@ describe("migrateLocalQwenDefaultTo9B", () => {
       api: "openai-completions",
       auth_type: "none",
     });
-    expect(added.providers["local-qwen35-9b-q4km-imatrix"].models[0].id).toBe("qwen35-9b-q4km-imatrix");
+    expect(added.providers["local-qwen35-9b-q4km-imatrix"].models[0].id).toBe("qwen36-27b-dsv4pro-distill-q5km-imatrix");
 
     const config = readYaml(path.join(agentsDir, "lynn", "config.yaml"));
     expect(config.api.provider).toBe("local-qwen35-9b-q4km-imatrix");
-    expect(config.models.chat).toBe("qwen35-9b-q4km-imatrix");
+    expect(config.models.chat).toBe("qwen36-27b-dsv4pro-distill-q5km-imatrix");
     expect(config.models.utility).toMatchObject({
-      id: "qwen35-9b-q4km-imatrix",
+      id: "qwen36-27b-dsv4pro-distill-q5km-imatrix",
       provider: "local-qwen35-9b-q4km-imatrix",
     });
     expect(config.models.utility_large).toEqual({
       id: "deepseek-chat",
       provider: "deepseek",
     });
-    expect(readJson(path.join(lynnHome, "user", "preferences.json")).local_qwen_default_9b_mtp_default_v2).toBe(true);
+    expect(readJson(path.join(lynnHome, "user", "preferences.json")).local_qwen_default_27b_q5_mtp_default_v1).toBe(true);
   });
 });
 

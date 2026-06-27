@@ -16,7 +16,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { migrateConfigScope } from "../shared/migrate-config-scope.js";
-import { migrateLocalQwenDefaultTo9B, migrateToProvidersYaml, repairRetiredModelReferences } from "./migrate-providers.js";
+import { migrateLocalQwenDefaultTo27B, migrateToProvidersYaml, repairRetiredModelReferences } from "./migrate-providers.js";
 import { findModel } from "../shared/model-ref.js";
 import {
   registerClientIdentityWithBrainApi,
@@ -588,7 +588,7 @@ export class LynnEngine {
 
     // 0b. Provider 迁移（旧数据 → added-models.yaml，只跑一次）
     migrateToProvidersYaml(this.lynnHome, this.agentsDir, log);
-    migrateLocalQwenDefaultTo9B(this.lynnHome, this.agentsDir, log);
+    migrateLocalQwenDefaultTo27B(this.lynnHome, this.agentsDir, log);
     repairRetiredModelReferences(this.lynnHome, this.agentsDir, log);
 
     // 0c. 默认 Brain provider：新老用户都保证存在一条免 Key 的免费模型链路

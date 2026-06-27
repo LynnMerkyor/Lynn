@@ -62,6 +62,8 @@ const LOCAL_QWEN35_MODEL_IDS = new Set([
   "qwen35-4b-q4km",
   "qwen3-4b-thinking-2507-q4km-imatrix",
   "qwen35-9b-q4km-imatrix",
+  "qwen36-27b-dsv4pro-distill-q5km-imatrix",
+  "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix",
 ]);
 
 interface BridgeModel extends Model<Api> {

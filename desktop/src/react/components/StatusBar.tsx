@@ -10,7 +10,7 @@ import styles from './StatusBar.module.css';
 declare function t(key: string, vars?: Record<string, string | number>): string;
 
 const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN_MODEL_ID = 'qwen35-9b-q4km-imatrix';
+const LOCAL_QWEN_MODEL_ID = 'qwen36-27b-dsv4pro-distill-q5km-imatrix';
 
 type LocalQwenStatus = {
   runtime?: {
@@ -55,13 +55,13 @@ function formatLocalQwenTag(status: LocalQwenStatus | null): string {
     const predictedTokens = Number(status?.runtime?.metrics?.predicted_tokens_total || 0);
     const totalTokens = Math.round(promptTokens + predictedTokens);
     const tps = formatTps(status?.runtime?.metrics?.predicted_tps);
-    const parts = ['本地 Qwen3.5-9B 正在运行'];
+    const parts = ['本地 Qwen3.6-27B 正在运行'];
     if (tps) parts.push(`当前 ${tps}`);
     if (totalTokens > 0) parts.push(`服务累计处理 ${totalTokens.toLocaleString()} tokens`);
     return parts.join(' · ');
   }
-  if (endpointLoading) return '本地 Qwen3.5-9B 正在加载';
-  return '本地 Qwen3.5-9B 已选择 · 模型未启动';
+  if (endpointLoading) return '本地 Qwen3.6-27B 正在加载';
+  return '本地 Qwen3.6-27B 已选择 · 模型未启动';
 }
 
 function formatModelTag(

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Client-facing bootstrap for Lynn's Qwen3.5-9B Q4_K_M imatrix MTP local llama.cpp provider.
+"""Client-facing bootstrap for Lynn's Qwen3.6-27B Q5_K_M MTP local llama.cpp provider.
 
 This is meant for the Lynn desktop/client UI, not for end users to run by hand:
 
@@ -32,17 +32,19 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SETUP_SCRIPT = ROOT / "scripts" / "local_qwen35_9b_setup.sh"
 SERVER_SCRIPT = ROOT / "scripts" / "local_qwen35_9b_q4km_llamacpp_server.sh"
-# 2026-05-25: 默认本地模型回到 Qwen3.5-9B Q4_K_M imatrix MTP;4B 仅作低配降级。
+# 2026-06-27: 默认本地模型升级到 Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP。
+# 9B / 4B 仅作低配降级。
 DEFAULT_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix"
-DEFAULT_MODEL_ID = "qwen35-9b-q4km-imatrix"
-DEFAULT_ARTIFACT_ID = "qwen35-9b-q4km-imatrix-gguf"
-DEFAULT_MODEL_FAMILY = "Qwen3.5-9B"
-DEFAULT_MODEL_FILE_NAME = "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf"
+DEFAULT_MODEL_ID = "qwen36-27b-dsv4pro-distill-q5km-imatrix"
+DEFAULT_ARTIFACT_ID = "qwen36-27b-dsv4pro-distill-q5km-imatrix-gguf"
+DEFAULT_MODEL_FAMILY = "Qwen3.6-27B-DSV4Pro"
+DEFAULT_MODEL_FILE_NAME = "Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf"
 LEGACY_MODEL_FILE_NAMES = {
+    "qwen3.5-9b-q4_k_m-imatrix-mtp.gguf",
     "qwen3.5-9b-q4_k_m-imatrix.gguf",
     "qwen3.5-9b-q4_k_m.gguf",
 }
-DEFAULT_MODEL_ROOT = Path.home() / "Models" / "Lynn" / "Qwen3.5-9B"
+DEFAULT_MODEL_ROOT = Path.home() / "Models" / "Lynn" / "Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF"
 DEFAULT_PROVIDER = Path.home() / ".lynn-engine" / "providers" / f"{DEFAULT_MODEL_ID}-gguf.json"
 DEFAULT_PID_FILE = Path.home() / ".lynn-engine" / "run" / f"{DEFAULT_MODEL_ID}.pid"
 DEFAULT_LOG_FILE = Path.home() / ".lynn-engine" / "logs" / f"{DEFAULT_MODEL_ID}.client.log"
@@ -144,6 +146,7 @@ def _iter_gguf_candidates(model_root: Path) -> list[Path]:
     # who completed the in-app install gets a "no model found" false negative.
     roots = [
         Path.home() / ".lynn" / "models",
+        model_root / "q5_k_m",
         model_root / "q4_k_m",
         model_root,
         Path.home() / "Models",
@@ -170,9 +173,10 @@ def _is_default_mtp_gguf(path: Path) -> bool:
         return True
     return (
         name.endswith(".gguf")
-        and "qwen3.5" in name
-        and "9b" in name
-        and "q4" in name
+        and "qwen3.6" in name
+        and "27b" in name
+        and "dsv4pro" in name
+        and "q5" in name
         and "k" in name
         and "m" in name
         and "mtp" in name
@@ -195,7 +199,7 @@ def _is_legacy_9b_gguf(path: Path) -> bool:
 
 
 def _find_gguf(model_root: Path, variant: str) -> Path | None:
-    """Search for the current DEFAULT MODEL (Qwen3.5-9B Q4_K_M imatrix MTP)."""
+    """Search for the current DEFAULT MODEL (Qwen3.6-27B Q5_K_M imatrix MTP)."""
     candidates = [path for path in _iter_gguf_candidates(model_root) if _is_default_mtp_gguf(path)]
     return candidates[0] if candidates else None
 
@@ -311,7 +315,48 @@ def _hardware_profile() -> dict[str, Any]:
     apple_silicon = system == "Darwin" and machine in {"arm64", "aarch64"}
     warnings: list[str] = []
     blockers: list[str] = []
-    upgrade_options: list[dict[str, Any]] = []
+    mem_for_options = total_gib or 0
+    best_gpu = max(nvidia, key=lambda g: g.get("memory_gib") or 0, default=None)
+    best_vram = float(best_gpu.get("memory_gib") or 0) if best_gpu else 0
+    capacity_gib = max(mem_for_options, best_vram)
+    upgrade_options: list[dict[str, Any]] = [
+        {
+            "id": "qwen35-9b-q4km-imatrix",
+            "label": "Qwen3.5-9B Q4_K_M imatrix MTP (低配降级)",
+            "profile": "16~24GB 显存/统一内存可选 · 比 27B 更轻",
+            "metrics": ["5.78GB / 5.38GiB", "32K 上下文", "MTP 加速", "低配降级"],
+            "reason": "给跑不动 27B Q5 的设备保留;质量不再作为 Lynn 本地首推。",
+            "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP",
+            "download_label": "下载到本机",
+            "file_name": "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
+            "min_memory_gib": 16,
+            "can_run": capacity_gib >= 16,
+        },
+        {
+            "id": "qwen35-4b-q4km",
+            "label": "Qwen3.5-4B Q4_K_M imatrix (低配降级)",
+            "profile": "8~16GB 显存/统一内存可选 · thinking-off 建议",
+            "metrics": ["2.6 GB", "低配降级", "thinking-on 可能长思考后无正文"],
+            "reason": "只建议低配机器降级使用;请保持 thinking-off 或让 Lynn 自动关闭轻任务 thinking。",
+            "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix",
+            "download_label": "下载到本机",
+            "file_name": "Qwen3.5-4B-Q4_K_M-imatrix.gguf",
+            "min_memory_gib": 8,
+            "can_run": capacity_gib >= 8,
+        },
+        {
+            "id": "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix",
+            "label": "Qwen3.6-35B-A3B DSV4Pro Thinking Distill MTP Q5_K_M imatrix",
+            "profile": "32GB 显存/统一内存+ 可选 · 更高配本地编排器",
+            "metrics": ["25.3 GB Q5_K_M imatrix", "MTP 原生头", "GPQA-Diamond 80.3%", "端到端编排 26.6s"],
+            "reason": "32GB+ 机器可选 35B-A3B Q5_K_M;默认仍首推 27B Q5。",
+            "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF",
+            "download_label": "下载到本机",
+            "file_name": "Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf",
+            "min_memory_gib": 32,
+            "can_run": capacity_gib >= 32,
+        },
+    ]
     recommendation = "not_recommended"
     profile = {
         "name": "cloud_fallback",
@@ -321,118 +366,29 @@ def _hardware_profile() -> dict[str, Any]:
         "gpu_layers": 0,
     }
 
-    best_gpu = max(nvidia, key=lambda g: g.get("memory_gib") or 0, default=None)
     if apple_silicon:
         mem = total_gib or 0
         if mem >= 24:
             recommendation = "recommended"
-            profile = {"name": "mac_unified_32k", "label": "Qwen3.5-9B 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
-            upgrade_options.append({
-                "id": "qwen35-9b-q4km-imatrix",
-                "label": "Qwen3.5-9B Q4_K_M imatrix MTP",
-                "profile": "24GB 统一内存+ 推荐 · 质量优先",
-                "metrics": [
-                    "thinking-on 32K",
-                    "MTP 加速",
-                    "DGX Spark 单流 36.61→60.95 TPS",
-                    "n_max=4 约 +66%",
-                    "工具调用 14/15",
-                ],
-                "reason": "默认质量档；新版 MTP 仓库 + thinking-on，稳定性优先。",
-                "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP",
-                "download_label": "下载到本机",
-                "file_name": "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
-                "min_memory_gib": 24,
-            })
-            if mem >= 24:
-                upgrade_options.append({
-                    "id": "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix",
-                    "label": "Qwen3.6-35B-A3B DSV4Pro Thinking Distill Q4_K_M imatrix",
-                    "profile": "24GB 统一内存+ 可选 · Lynn 编排器大脑",
-                    "metrics": [
-                        "21 GB Q4_K_M imatrix",
-                        "MMLU-500 90.8%",
-                        "GPQA-Diamond raw 67.2% / parsed 86.4%",
-                        "Spark 77 tok/s",
-                        "R6000 ~224 tok/s",
-                    ],
-                    "reason": "高端编排器档；蒸馏 DS-V4-Pro thinking-on 的拆分、分派与验收思维方式。默认不启用 MTP，质量稳定性优先。",
-                    "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill",
-                    "download_label": "下载到本机",
-                    "file_name": "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf",
-                    "min_memory_gib": 24,
-                })
-        elif mem >= 16:
-            recommendation = "recommended_with_limits"
-            profile = {"name": "mac_unified_32k", "label": "Qwen3.5-9B 32K 稳定档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
-        elif mem >= 12:
-            recommendation = "recommended_with_limits"
-            profile = {"name": "mac_unified_16k", "label": "Qwen3.5-9B 16K 入门档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
-            warnings.append("12GB 统一内存建议先用 16K；32K thinking 可作为高级选项。")
-        elif mem >= 8:
-            recommendation = "experimental"
-            profile = {"name": "mac_unified_8k", "label": "Qwen3.5-9B 8K 试用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
-            warnings.append("统一内存偏小，只建议试用短上下文；长 thinking 体验可能不稳。")
+            profile = {"name": "mac_unified_32k", "label": "Qwen3.6-27B Q5_K_M MTP 默认推荐档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
         else:
-            blockers.append("统一内存低于 16GB，不建议默认本地跑 Qwen3.5-9B；请保持默认云端模型或手动选择 4B 降级档。")
-    elif best_gpu and (best_gpu.get("memory_gib") or 0) >= 6:
+            blockers.append("统一内存低于 24GB，不建议默认本地跑 Qwen3.6-27B；请保持云端模型或在设置页手动选择 9B/4B 降级档。")
+    elif best_gpu and (best_gpu.get("memory_gib") or 0) >= 1:
         vram = best_gpu.get("memory_gib") or 0
         cc = best_gpu.get("compute_capability") or 0
         if cc and cc < 7.5:
-            recommendation = "experimental"
-            profile = {"name": "nvidia_8k_legacy", "label": "NVIDIA Qwen3.5-9B 老卡试用档", "ctx_size": 8192, "parallel": 1, "gpu_layers": 999}
-            warnings.append("NVIDIA compute capability 低于 7.5，可能明显慢；不建议作为默认体验。")
+            blockers.append("NVIDIA compute capability 低于 7.5，不建议默认启用 27B。")
         elif vram >= 24:
             recommendation = "recommended"
-            profile = {"name": "nvidia_32k", "label": "NVIDIA Qwen3.5-9B 32K 舒适档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
-            upgrade_options.append({
-                "id": "qwen35-9b-q4km-imatrix",
-                "label": "Qwen3.5-9B Q4_K_M imatrix MTP",
-                "profile": "24GB 显存+ 推荐 · 质量优先",
-                "metrics": [
-                    "thinking-on 32K",
-                    "MTP 加速",
-                    "DGX Spark 单流 36.61→60.95 TPS",
-                    "n_max=4 约 +66%",
-                    "工具调用 14/15",
-                ],
-                "reason": "默认质量档；新版 MTP 仓库 + thinking-on，稳定性优先。",
-                "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP",
-                "download_label": "下载到本机",
-                "file_name": "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
-                "min_vram_gib": 24,
-            })
-            if vram >= 24:
-                upgrade_options.append({
-                    "id": "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix",
-                    "label": "Qwen3.6-35B-A3B DSV4Pro Thinking Distill Q4_K_M imatrix",
-                    "profile": "24GB 显存+ 可选 · Lynn 编排器大脑",
-                    "metrics": [
-                        "21 GB Q4_K_M imatrix",
-                        "MMLU-500 90.8%",
-                        "GPQA-Diamond raw 67.2% / parsed 86.4%",
-                        "Spark 77 tok/s",
-                        "R6000 ~224 tok/s",
-                    ],
-                    "reason": "高端编排器档；蒸馏 DS-V4-Pro thinking-on 的拆分、分派与验收思维方式。默认不启用 MTP，质量稳定性优先。",
-                    "modelscope_url": "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill",
-                    "download_label": "下载到本机",
-                    "file_name": "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf",
-                    "min_vram_gib": 24,
-                })
-        elif vram >= 16:
-            recommendation = "recommended_with_limits"
-            profile = {"name": "nvidia_32k", "label": "NVIDIA Qwen3.5-9B 32K 稳定档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
+            profile = {"name": "nvidia_32k", "label": "NVIDIA Qwen3.6-27B Q5_K_M MTP 默认推荐档", "ctx_size": 32768, "parallel": 1, "gpu_layers": 999}
         else:
-            recommendation = "recommended_with_limits"
-            profile = {"name": "nvidia_16k", "label": "NVIDIA Qwen3.5-9B 16K 入门档", "ctx_size": 16384, "parallel": 1, "gpu_layers": 999}
-            warnings.append("8-12GB 显存不建议默认 9B；可试 16K/单并发或手动选择 4B 降级档。")
+            blockers.append("显存低于 24GB，不建议默认本地跑 Qwen3.6-27B；请保持云端模型或在设置页手动选择 9B/4B 降级档。")
     elif system == "Linux" and not best_gpu:
         blockers.append("未检测到 NVIDIA GPU；CPU 路径可以跑但体验较慢，默认不推荐。")
     elif system == "Windows":
         blockers.append("Windows 首发仍在补齐；当前建议使用云端兜底或手动 llama.cpp。")
     else:
-        blockers.append("当前硬件未达到本地 Qwen3.5-9B 默认启用条件 (16GB+ 可试,24GB+ 推荐)。")
+        blockers.append("当前硬件未达到默认本地 Qwen3.6-27B 启用条件 (24GB+ 推荐)。")
 
     return {
         "platform": system,
@@ -444,7 +400,7 @@ def _hardware_profile() -> dict[str, Any]:
         "recommended_runtime": profile,
         "warnings": warnings,
         "blockers": blockers,
-        "can_enable": recommendation in {"recommended", "recommended_with_limits", "experimental"},
+        "can_enable": recommendation == "recommended",
         "upgrade_options": upgrade_options,
     }
 
@@ -475,9 +431,9 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     if gguf is None:
         actions.append({
             "id": "download_model",
-            "label": "Upgrade Qwen3.5-9B to Q4_K_M imatrix MTP GGUF" if needs_model_upgrade else "Download Qwen3.5-9B Q4_K_M imatrix MTP GGUF",
+            "label": "Upgrade default local model to Qwen3.6-27B Q5_K_M MTP GGUF" if needs_model_upgrade else "Download Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP GGUF",
             "requires_user_authorization": True,
-            "approx_download_gib": 5.38,
+            "approx_download_gib": 18.2,
             "artifact_id": DEFAULT_ARTIFACT_ID,
             "expected_file_name": DEFAULT_MODEL_FILE_NAME,
             "replaces": str(legacy_gguf) if legacy_gguf else None,
@@ -645,7 +601,7 @@ def execute(args: argparse.Namespace) -> int:
 
     model_root = Path(args.model_root).expanduser()
     provider_path = Path(args.provider_config).expanduser()
-    env_file = model_root / "lynn-qwen35-9b.env"
+    env_file = model_root / "lynn-qwen36-27b.env"
     setup_cmd = [
         "bash",
         str(SETUP_SCRIPT),
@@ -677,6 +633,11 @@ def execute(args: argparse.Namespace) -> int:
         setup_cmd.append("--install-runtime")
 
     env = os.environ.copy()
+    env["Q4KM_FILE"] = DEFAULT_MODEL_FILE_NAME
+    env["ARTIFACT_ID"] = DEFAULT_ARTIFACT_ID
+    env["SERVED_NAME"] = DEFAULT_MODEL_ID
+    env["HF_REPO_Q4KM"] = "nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF"
+    env["MS_REPO_Q4KM"] = "Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF"
     env["LYNN_PROVIDER_CONFIG"] = str(provider_path)
     env["LYNN_QWEN35_HOST"] = args.host
     env["LYNN_QWEN35_PORT"] = str(args.port)

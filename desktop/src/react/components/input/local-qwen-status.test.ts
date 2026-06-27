@@ -7,7 +7,7 @@ import {
 } from './local-qwen-status';
 
 describe('local Qwen status derivation', () => {
-  it('recognizes the default 9B endpoint and formats live TPS', () => {
+  it('recognizes the default 27B endpoint and formats live TPS', () => {
     const status: LocalQwen35RuntimeStatus = {
       ok: true,
       runtime: {

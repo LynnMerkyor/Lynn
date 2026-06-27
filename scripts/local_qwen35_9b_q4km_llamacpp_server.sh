@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Local Mac/Linux launcher for Lynn's default Qwen3.5-9B Q4_K_M imatrix MTP GGUF route.
+# Local Mac/Linux launcher for Lynn's default Qwen3.6-27B Q5_K_M MTP GGUF route.
 #
 # This is the product-facing counterpart to Lynn Engine's NVIDIA/NVFP4 route:
 # it starts a llama.cpp OpenAI-compatible endpoint that agent CLIs can use with
@@ -23,7 +23,7 @@ set -euo pipefail
 
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-18099}"
-SERVED_NAME="${SERVED_NAME:-qwen35-9b-q4km-imatrix}"
+SERVED_NAME="${SERVED_NAME:-qwen36-27b-dsv4pro-distill-q5km-imatrix}"
 CTX_SIZE="${CTX_SIZE:-32768}"
 THREADS="${THREADS:-}"
 # llama.cpp splits --ctx-size across parallel slots. Lynn's local-first UX is a
@@ -33,11 +33,11 @@ N_GPU_LAYERS="${N_GPU_LAYERS:-999}"
 LLAMA_SERVER="${LLAMA_SERVER:-}"
 LLAMA_EXTRA_ARGS="${LLAMA_EXTRA_ARGS:-}"
 LLAMA_REASONING_ARGS="${LLAMA_REASONING_ARGS:---jinja --reasoning auto --reasoning-budget -1}"
-LLAMA_MTP_ARGS="${LLAMA_MTP_ARGS:---spec-type draft-mtp --spec-draft-n-max 4}"
+LLAMA_MTP_ARGS="${LLAMA_MTP_ARGS:---spec-type draft-mtp --spec-draft-n-max 3}"
 GGUF="${GGUF:-}"
-MODEL_ROOT="${MODEL_ROOT:-$HOME/Models/Lynn/Qwen3.5-9B}"
+MODEL_ROOT="${MODEL_ROOT:-$HOME/Models/Lynn/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF}"
 LOG_DIR="${LOG_DIR:-$HOME/.lynn-engine/logs}"
-LOG_FILE="${LOG_FILE:-$LOG_DIR/qwen35_9b_llamacpp_${PORT}.log}"
+LOG_FILE="${LOG_FILE:-$LOG_DIR/qwen36_27b_llamacpp_${PORT}.log}"
 DRY_RUN="${DRY_RUN:-0}"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -47,12 +47,12 @@ show_help() {
   cat <<'HELP'
 Usage: local_qwen35_9b_q4km_llamacpp_server.sh [OPTIONS]
 
-Start a local llama.cpp OpenAI-compatible endpoint for Qwen3.5-9B Q4_K_M imatrix MTP.
+Start a local llama.cpp OpenAI-compatible endpoint for Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP.
 
 Options:
   --port PORT           Server port (default: 18099)
   --host ADDR           Bind address (default: 127.0.0.1)
-  --model-name NAME     Served model name (default: qwen35-9b-q4km-imatrix)
+  --model-name NAME     Served model name (default: qwen36-27b-dsv4pro-distill-q5km-imatrix)
   --ctx SIZE            Context window (default: 32768)
   --threads N           CPU threads (default: auto-detect)
   --parallel N          Max concurrent slots (default: 1; preserves full --ctx per user)
@@ -65,11 +65,11 @@ Options:
 
 Environment:
   GGUF                  Model path (same as --gguf)
-  MODEL_ROOT            Root directory for model search (default: ~/Models/Lynn/Qwen3.5-9B)
+  MODEL_ROOT            Root directory for model search (default: ~/Models/Lynn/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF)
   LLAMA_SERVER          Binary path (same as --llama-server)
   LLAMA_EXTRA_ARGS      Additional llama-server arguments
   LLAMA_REASONING_ARGS  Reasoning flags (default: --jinja --reasoning auto --reasoning-budget -1)
-  LLAMA_MTP_ARGS        Speculative decoding flags (default: --spec-type draft-mtp --spec-draft-n-max 4)
+  LLAMA_MTP_ARGS        Speculative decoding flags (default: --spec-type draft-mtp --spec-draft-n-max 3)
   DRY_RUN=1             Same as --dry-run
   LOG_DIR               Log directory (default: ~/.lynn-engine/logs)
 
@@ -78,7 +78,7 @@ Examples:
   bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh
 
   # Explicit model path:
-  GGUF=~/Models/Lynn/Qwen3.5-9B/q4_k_m/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh
+  GGUF=~/Models/Lynn/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF/q5_k_m/Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh
 
   # Different port + dry run check:
   bash scripts/local_qwen35_9b_q4km_llamacpp_server.sh --port 8080 --dry-run
@@ -223,10 +223,8 @@ find_gguf() {
         return 0
       fi
     done < <(find "$root" -maxdepth 5 -type f \( \
-      -iname '*Qwen3.5*9B*Q4*K*M*.gguf' -o \
-      -iname '*qwen3.5*9b*q4*k*m*.gguf' -o \
-      -iname '*Qwen3.5*9B*Q4_K_M*.gguf' -o \
-      -iname '*qwen3.5*9b*q4_k_m*.gguf' \
+      -iname '*Qwen3.6*27B*DSV4Pro*Q5*K*M*.gguf' -o \
+      -iname '*qwen3.6*27b*dsv4pro*q5*k*m*.gguf' \
     \) 2>/dev/null | sort)
   done
   return 1
@@ -235,10 +233,10 @@ find_gguf() {
 gguf_path="$(find_gguf || true)"
 if [[ -z "$gguf_path" ]]; then
   if [[ "$DRY_RUN" == "1" ]]; then
-    gguf_path="${GGUF:-/absolute/path/to/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf}"
+    gguf_path="${GGUF:-/absolute/path/to/Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf}"
   else
   cat >&2 <<EOF
-[qwen35-q4km-local] ERROR: Qwen3.5-9B Q4_K_M imatrix MTP GGUF not found.
+[qwen35-q4km-local] ERROR: Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP GGUF not found.
 
 Searched:
   $MODEL_ROOT
@@ -252,10 +250,10 @@ Download options:
 
   # HuggingFace mirror:
   aria2c -x 16 -s 16 -c -d ~/Models \\
-    'https://hf-mirror.com/nerkyor/Qwen3.5-9B-GGUF-imatrix-MTP/resolve/main/Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf'
+    'https://hf-mirror.com/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF/resolve/main/Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf'
 
   # ModelScope (China):
-  modelscope download Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf --local_dir ~/Models/Lynn/Qwen3.5-9B/q4_k_m
+  modelscope download Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf --local_dir ~/Models/Lynn/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF/q5_k_m
 
 Then rerun, or set GGUF=/path/to/model.gguf
 EOF
@@ -281,7 +279,7 @@ SERVER_VER="$("$server_bin" --version 2>/dev/null | head -1 || echo 'unknown')"
 
 cat <<EOF
 ┌──────────────────────────────────────────────────────────────────┐
-│  Lynn Engine — Qwen3.5-9B Q4_K_M imatrix MTP Local Endpoint    │
+│  Lynn Engine — Qwen3.6-27B Q5_K_M MTP Local Endpoint          │
 └──────────────────────────────────────────────────────────────────┘
   Platform:      $PLATFORM ($GPU_HINT)
   Server:        $server_bin

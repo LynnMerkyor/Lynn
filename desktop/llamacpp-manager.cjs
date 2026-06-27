@@ -6,9 +6,9 @@
  * 背景:
  *   5/20 战略 pivot 后 Lynn 客户端默认本地推理底层 = llama.cpp。
  *   Mac Q4_K_M GGUF / Linux CUDA Q4_K_M / Win x64 CUDA Q4_K_M 全平台 ship。
- *   2026-05-28 更新: 默认 ship 模型使用新版 Qwen3.5-9B Q4_K_M imatrix MTP
- *     (5.78GB / 5.38GiB,DGX Spark 单流 36.61 → 60.95 TPS,24GB 显存/统一内存推荐)。
- *   4B Q4_K_M imatrix 保留为低配降级档,但 thinking-on 可能空正文长思考。
+ *   2026-06-27 更新: 默认 ship 模型切到 Qwen3.6-27B DSV4Pro Thinking
+ *     Distill GGUF Q5_K_M imatrix + native MTP (19.5GB, 24GB+ 推荐)。
+ *   9B / 4B 保留为低配降级档。
  *
  * 本模块策略:
  *   1. start():
@@ -44,11 +44,11 @@ const net = require("net");
 // ─────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = Object.freeze({
-  // 默认 ship 模型 — Qwen3.5-9B Q4_K_M imatrix MTP,避免 4B thinking-on 空正文长思考。
-  // 降级路径: 8~16G 设备可手动选 4B,但产品层会提示 thinking-on 风险。
-  modelId: "qwen35-9b-q4km-imatrix",
-  modelFileName: "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
-  modelExpectedSize: 5_780_090_944, // 5.78 GB / 5.38 GiB
+  // 默认 ship 模型 — Qwen3.6-27B DSV4Pro Thinking Distill Q5_K_M imatrix MTP。
+  // 降级路径: 9B / 4B 仍可手动选,但不再作为首推。
+  modelId: "qwen36-27b-dsv4pro-distill-q5km-imatrix",
+  modelFileName: "Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf",
+  modelExpectedSize: 19_535_700_320,
   // Product default: one comfortable 32K local slot. llama.cpp splits context
   // across parallel slots, so keep -np/--parallel at 1 for the local-first UX.
   serverArgs: [
@@ -56,13 +56,14 @@ const DEFAULT_CONFIG = Object.freeze({
     "--threads", "4",
     "--parallel", "1",
     "--n-gpu-layers", "999",
-    "-a", "qwen35-9b-q4km-imatrix",
+    "-a", "qwen36-27b-dsv4pro-distill-q5km-imatrix",
     "--jinja",
     "--spec-type", "draft-mtp",
-    "--spec-draft-n-max", "4",
+    "--spec-draft-n-max", "3",
     "--cache-type-k", "q8_0",
     "--cache-type-v", "q8_0",
-    // Keep thinking available for 9B; 4B downgrade is guarded elsewhere.
+    // Keep thinking available for distilled 27B; request policy should use
+    // temperature 0.6 / top_p 0.95 for thinking tasks.
     "--reasoning", "auto",
     "--reasoning-budget", "-1",
     "--metrics",
@@ -152,6 +153,13 @@ function legacyModelPathCandidates(homeDir, modelId, fileName, lynnHome = defaul
       path.join(homeDir, "Models", "Lynn", "Qwen3.5-9B", "q4_k_m", fileName),
     );
   }
+  if (modelId === "qwen36-27b-dsv4pro-distill-q5km-imatrix") {
+    candidates.push(
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF", "Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF", "q5_k_m", fileName),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-27B", "q5_k_m", fileName),
+    );
+  }
   if (modelId === "qwen36-35b-a3b-q4km-imatrix") {
     // Legacy Q4_K_M id: keep old file discovery so existing users do not need
     // to move files. New downloads map this id to the distilled Q4_K_M profile.
@@ -160,9 +168,12 @@ function legacyModelPathCandidates(homeDir, modelId, fileName, lynnHome = defaul
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", fileName),
     );
   }
-  if (modelId === "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix") {
-    // 2026-06-08 canonical high-end local file: DS-V4-Pro thinking-on distill.
+  if (modelId === "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix" || modelId === "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix") {
+    // Canonical high-end local file: DS-V4-Pro thinking-on distill. Keep the
+    // older Q4 discovery paths so existing users do not need to move files.
     candidates.push(
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF", "Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF", "q5_k_m", fileName),
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B", "q4_k_m", "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf"),
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill", "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf"),
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill", "gguf", "Qwen3.6-35B-A3B-lynn-prod-Q4_K_M-imatrix.gguf"),

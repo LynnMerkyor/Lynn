@@ -71,7 +71,7 @@ describe("local Qwen3.5 direct policy", () => {
     expect(messages[2].content).toBe("杭州滨江有什么好吃的吗\n/no_think");
   });
 
-  it("keeps the local 9B runtime opt-in and small-context by default", () => {
+  it("keeps the local runtime opt-in and small-context by default", () => {
     expect(LOCAL_QWEN35_RUNTIME_POLICY.warmPoolDefault).toBe(false);
     expect(LOCAL_QWEN35_RUNTIME_POLICY.idleUnload).toBe(true);
     expect(LOCAL_QWEN35_RUNTIME_POLICY.kvCacheReuse).toBe(true);

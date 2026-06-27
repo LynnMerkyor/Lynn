@@ -36,11 +36,10 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, sealed, mode
   const [translateError, setTranslateError] = useState<string | null>(null);
   const startRef = useRef(Date.now());
   // #12: prefer explicit prop; fallback to regex (kept for callers not yet passing the flag)
-  // 2026-05-25: 默认回到 9B,正则保留 4B/35B 兼容以覆盖自选 GGUF 和降级档。
-  // 同时保留 9B / 35B 的 backward-compat。
+  // 2026-06-27: 默认本地模型切到 27B;正则保留 4B/9B/35B 兼容以覆盖自选 GGUF 和降级档。
   const isLocalModelThinking = isLocalProvider === true
-    || (isLocalProvider !== false && /local-qwen|qwen35-4b|qwen35-9b|qwen36-35b|Qwen3(?:\.5)?-(?:4B|9B|35B)|本地\s*(?:4B|9B|35B|Qwen)/i.test(modelLabel || ""));
-  const isLocalProgressThinking = isLocalModelThinking || /本地\s*(?:4B|9B|35B|Qwen)|本地模型|llama\.cpp|等待工具/.test(content || "");
+    || (isLocalProvider !== false && /local-qwen|qwen35-4b|qwen35-9b|qwen36-27b|qwen36-35b|Qwen3(?:\.5|\.6)?-(?:4B|9B|27B|35B)|本地\s*(?:4B|9B|27B|35B|Qwen)/i.test(modelLabel || ""));
+  const isLocalProgressThinking = isLocalModelThinking || /本地\s*(?:4B|9B|27B|35B|Qwen)|本地模型|llama\.cpp|等待工具/.test(content || "");
   const isLocalColdStartThinking = /首次启动|第一问|暖机|等待首字/.test(content || "");
   // Local cold-start notes are user-facing progress, but raw provider thinking
   // can be long or English. Keep it collapsed unless the user explicitly opens it.

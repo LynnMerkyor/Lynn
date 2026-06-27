@@ -714,7 +714,7 @@
       "userNameHint": "Ta 怎麼稱呼你",
       "userProfile": "使用者檔案",
       "userProfileHint": "讓助手了解你：興趣、習慣、偏好等，會注入到系統提示詞中",
-      "defaultProviderHint": "一鍵在本機 Qwen3.5-9B 和雲端模型之間切換。",
+      "defaultProviderHint": "一鍵在本機 Qwen3.6-27B 和雲端模型之間切換；低配可在設定頁選 9B/4B 降級。",
       "openProviders": "開啟 Providers →"
     },
     "crop": {
@@ -1236,8 +1236,8 @@
     },
     "localModel": {
       "title": "下载 Lynn 默认本地模型",
-      "subtitle": "Lynn 預設模型 Qwen3.5-9B Q4_K_M imatrix MTP · 5.78GB / 5.38GiB · 32K 上下文 · 24GB+ 顯存推薦。\n完全離線，不需要任何 API Key，不上傳任何對話。",
-      "specsLine": "5.78GB / 5.38GiB · Q4_K_M imatrix MTP · 32K 上下文 · 完全離線",
+      "subtitle": "Lynn 預設模型 Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP · 19.5GB · 32K 上下文 · 24GB+ 顯存/統一記憶體推薦。\n完全離線，不需要任何 API Key，不上傳任何對話。低配機器可在設定頁手動選擇 9B/4B 降級。",
+      "specsLine": "19.5GB · Q5_K_M imatrix MTP · 32K 上下文 · 完全離線",
       "needsBinary": "缺少 llama.cpp 推理引擎，请先安装：~/.lynn/llamacpp/bin/llama-server",
       "needsBinaryHint": "请按文档安装 llama.cpp 后重试。",
       "alreadyHave": "本地模型已就绪",
@@ -1260,11 +1260,12 @@
       "errorGeneric": "下载出错：{reason}",
       "next": "下一步",
       "back": "上一步",
-      "modelPreparedHint": "模型和 llama.cpp 已就緒,點擊啟動即可切換到本機 Qwen3.5-9B。",
+      "modelPreparedHint": "模型和 llama.cpp 已就緒,點擊啟動即可切換到本機 Qwen3.6-27B。",
+      "hardwareNotRecommended": "目前配置不建議啟用預設 27B，本輪不會自動引導安裝；可繼續使用 Brain 預設模型，或在設定頁手動選擇 9B/4B 降級。",
       "statusReady": "可啟動",
       "statusWaiting": "待準備",
-      "runtimeLocal9B": "本機 Qwen3.5-9B",
-      "runtimeLocalDefault": "本機 Qwen3.5-9B"
+      "runtimeLocal9B": "本機 Qwen3.6-27B",
+      "runtimeLocalDefault": "本機 Qwen3.6-27B"
     },
     "skipSetup": "跳過引導"
   },
