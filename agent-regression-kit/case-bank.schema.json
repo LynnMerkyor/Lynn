@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-regression-kit.local/case-bank.schema.json",
+  "title": "Agent Regression Kit Case Bank",
+  "type": "object",
+  "required": ["name", "version", "cases"],
+  "properties": {
+    "name": { "type": "string" },
+    "version": { "type": ["string", "number"] },
+    "description": { "type": "string" },
+    "cases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "required": ["id", "operation", "assertions"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "level": { "enum": ["smoke", "release", "nightly"] },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "operation": { "type": "string" },
+        "input": { "type": "object" },
+        "fixture": {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["path", "content"],
+                "properties": {
+                  "path": { "type": "string" },
+                  "content": { "type": "string" },
+                  "encoding": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "assertions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/assertion" }
+        }
+      }
+    },
+    "assertion": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "message": { "type": "string" },
+        "equals": {},
+        "notEquals": {},
+        "contains": {},
+        "notContains": {},
+        "matches": { "type": "string" },
+        "notMatches": { "type": "string" },
+        "truthy": { "type": "boolean" },
+        "falsy": { "type": "boolean" },
+        "greaterThan": { "type": "number" },
+        "greaterThanOrEqual": { "type": "number" },
+        "lessThan": { "type": "number" },
+        "lessThanOrEqual": { "type": "number" },
+        "flags": { "type": "string" }
+      }
+    }
+  }
+}

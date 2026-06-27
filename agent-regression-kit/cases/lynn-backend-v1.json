@@ -1,0 +1,471 @@
+{
+  "$schema": "../case-bank.schema.json",
+  "name": "lynn-backend-v1",
+  "version": 1,
+  "description": "Deterministic backend/CLI agent regression cases for Lynn. The core format is adapter-neutral; Lynn-specific behavior lives in adapters/lynn.mjs.",
+  "cases": [
+    {
+      "id": "route.local-novel-read",
+      "title": "Local novel/file reading routes to utility, not chat or vision",
+      "level": "smoke",
+      "tags": ["route", "local-workspace", "bug"],
+      "operation": "route_intent",
+      "input": {
+        "prompt": "读一下当前目录里的小说第一章，告诉我暗号是什么",
+        "options": { "skipLLM": true }
+      },
+      "assertions": [
+        { "path": "intent", "equals": "utility" }
+      ]
+    },
+    {
+      "id": "route.coding-bugfix",
+      "title": "Code repair requests stay on the coding lane",
+      "level": "smoke",
+      "tags": ["route", "coding"],
+      "operation": "route_intent",
+      "input": {
+        "prompt": "帮我修复 router.ts 里的 TypeScript 编译错误，并跑测试",
+        "options": { "skipLLM": true }
+      },
+      "assertions": [
+        { "path": "intent", "equals": "coding" }
+      ]
+    },
+    {
+      "id": "route.vision-attachment",
+      "title": "Image attachment requests route to vision",
+      "level": "release",
+      "tags": ["route", "vision"],
+      "operation": "route_intent",
+      "input": {
+        "prompt": "看一下这张截图，指出界面哪里重叠",
+        "options": { "attachmentsCount": 1, "skipLLM": true }
+      },
+      "assertions": [
+        { "path": "intent", "equals": "vision" }
+      ]
+    },
+    {
+      "id": "workspace.local-secret-context",
+      "title": "Local workspace evidence includes the requested document secret and does not enter direct local model bridge",
+      "level": "smoke",
+      "tags": ["local-workspace", "evidence", "bug"],
+      "operation": "local_workspace_context",
+      "fixture": {
+        "files": [
+          {
+            "path": "novel/第一章-钢铁长城.md",
+            "content": "# 第一章\n\n门后有一句暗号：桐门已亮。\n\n巡夜人把它写在纸页边缘。"
+          }
+        ]
+      },
+      "input": {
+        "prompt": "读一下 {{fixtureRoot}} 里的小说第一章，告诉我暗号是什么",
+        "cwd": "{{fixtureRoot}}",
+        "routeIntent": "utility",
+        "options": { "maxEntries": 20, "maxDocs": 4, "maxDocChars": 800 }
+      },
+      "assertions": [
+        { "path": "attach", "equals": true },
+        { "path": "directBridge", "equals": false },
+        { "path": "contextText", "contains": "第一章-钢铁长城.md" },
+        { "path": "contextText", "contains": "桐门已亮" }
+      ]
+    },
+    {
+      "id": "sanitizer.pseudo-tool-xml",
+      "title": "Pseudo tool XML is stripped while visible answer text survives",
+      "level": "smoke",
+      "tags": ["output", "tool-leak", "bug"],
+      "operation": "pseudo_tool_sanitizer",
+      "input": {
+        "text": "<tool_call>\n<function=bash>\n<parameter=command>find /Users/lynn/Desktop -name '*.md'</parameter>\n</function>\n</tool_call>\n暗号是桐门已亮。"
+      },
+      "assertions": [
+        { "path": "contains", "equals": true },
+        { "path": "markerCount", "greaterThan": 0 },
+        { "path": "stripped", "contains": "暗号是桐门已亮" },
+        { "path": "stripped", "notContains": "<tool_call" },
+        { "path": "stripped", "notContains": "find /Users" },
+        { "path": "strippedContains", "equals": false }
+      ]
+    },
+    {
+      "id": "stream.split-tool-call",
+      "title": "Streaming sanitizer withholds split tool tags across chunks without leaking them",
+      "level": "smoke",
+      "tags": ["event-stream", "tool-leak", "bug"],
+      "operation": "stream_sanitizer",
+      "input": {
+        "chunks": [
+          "正文开始。\n<tool_",
+          "call>{\"name\":\"bash\"}</tool_call>\n完成。"
+        ]
+      },
+      "assertions": [
+        { "path": "events[0].text", "equals": "正文开始。\n" },
+        { "path": "suppressed", "equals": true },
+        { "path": "text", "contains": "完成。" },
+        { "path": "text", "notContains": "<tool_" },
+        { "path": "flush.text", "equals": "" }
+      ]
+    },
+    {
+      "id": "stream.ordinary-markup",
+      "title": "Streaming sanitizer does not eat legitimate markup or comparisons",
+      "level": "release",
+      "tags": ["event-stream", "output"],
+      "operation": "stream_sanitizer",
+      "input": {
+        "chunks": [
+          "说明：<details>",
+          "<summary>标题</summary>正文</details>，数量 < 5。"
+        ]
+      },
+      "assertions": [
+        { "path": "suppressed", "equals": false },
+        { "path": "text", "contains": "<details>" },
+        { "path": "text", "contains": "数量 < 5" },
+        { "path": "flush.text", "equals": "" }
+      ]
+    },
+    {
+      "id": "office.data-analysis-direct",
+      "title": "Deterministic office/data task answers directly instead of leaking tools",
+      "level": "release",
+      "tags": ["direct-answer", "local-office"],
+      "operation": "local_office_answer",
+      "input": {
+        "prompt": "【DATA-01】华东 Q1 120 Q2 150；华南 Q1 90 Q2 81；华北 Q1 60 Q2 78（万元）。算环比增长率，给 3 条管理建议。"
+      },
+      "assertions": [
+        { "path": "hasAnswer", "equals": true },
+        { "path": "answer", "contains": "25%" },
+        { "path": "answer", "contains": "-10%" },
+        { "path": "answer", "contains": "30%" },
+        { "path": "answer", "notContains": "step_execute" },
+        { "path": "answer", "notContains": "find /Users" }
+      ]
+    },
+    {
+      "id": "office.regression-matrix-direct",
+      "title": "Regression test matrix planning is answered as product work, not a fake filesystem action",
+      "level": "release",
+      "tags": ["direct-answer", "regression"],
+      "operation": "local_office_answer",
+      "input": {
+        "prompt": "给 CLI 和 GUI 共用内核写一个回归测试矩阵，覆盖请求、工具调用、结果输出反馈。"
+      },
+      "assertions": [
+        { "path": "hasAnswer", "equals": true },
+        { "path": "answer", "contains": "CLI / GUI 共用内核回归测试矩阵" },
+        { "path": "answer", "notContains": "find /Users" },
+        { "path": "answer", "notContains": "<tool_call" }
+      ]
+    },
+    {
+      "id": "realtime.kind-weather-alert",
+      "title": "Weather alert requests are recognized as weather evidence tasks",
+      "level": "release",
+      "tags": ["route", "realtime", "weather"],
+      "operation": "realtime_kind",
+      "input": {
+        "prompt": "深圳今天有没有暴雨预警？要最新天气预警。"
+      },
+      "assertions": [
+        { "path": "kind", "equals": "weather" }
+      ]
+    },
+    {
+      "id": "realtime.kind-gold-market",
+      "title": "Gold price requests are recognized as market evidence tasks",
+      "level": "release",
+      "tags": ["route", "realtime", "market"],
+      "operation": "realtime_kind",
+      "input": {
+        "prompt": "今天国际金价和现货黄金最新价格是多少？"
+      },
+      "assertions": [
+        { "path": "kind", "equals": "market" }
+      ]
+    },
+    {
+      "id": "tool-behavior.weather-prefetch",
+      "title": "Realtime weather is prefetch-first so the model does not wait on remote tool chains",
+      "level": "release",
+      "tags": ["tool-routing", "prefetch", "weather"],
+      "operation": "tool_use_behavior",
+      "input": {
+        "prompt": "查一下深圳今天是否下雨，给我一句行动建议。"
+      },
+      "assertions": [
+        { "path": "behavior", "equals": "prefetch_then_run_or_stop" },
+        { "path": "reason", "equals": "report_context_prefetch" },
+        { "path": "reportKind", "equals": "weather" },
+        { "path": "toolName", "equals": "weather" }
+      ]
+    },
+    {
+      "id": "tool-behavior.stock-prefetch",
+      "title": "Simple stock quote requests are prefetch-first",
+      "level": "release",
+      "tags": ["tool-routing", "prefetch", "stock"],
+      "operation": "tool_use_behavior",
+      "input": {
+        "prompt": "NVDA 今天最新股价多少？"
+      },
+      "assertions": [
+        { "path": "behavior", "equals": "prefetch_then_run_or_stop" },
+        { "path": "reportKind", "equals": "market" },
+        { "path": "toolName", "equals": "stock_market" }
+      ]
+    },
+    {
+      "id": "tool-storm.repeated-search",
+      "title": "Repeated identical evidence searches are stopped",
+      "level": "smoke",
+      "tags": ["tool-storm", "evidence", "bug"],
+      "operation": "tool_storm_guard",
+      "input": {
+        "prompt": "今晚蓝鲸杯有几场比赛",
+        "calls": [
+          { "name": "web_search", "args": { "query": "今晚蓝鲸杯有几场比赛" } },
+          { "name": "web-search", "args": { "query": "今晚 蓝鲸杯 有几场比赛" } },
+          { "name": "web_search", "args": { "query": " 今晚 蓝鲸杯 有几场比赛 " } }
+        ],
+        "summaryText": "已执行 3 个操作，拿到 2 条来源。",
+        "tools": ["web-search", "bash"]
+      },
+      "assertions": [
+        { "path": "finalDecision.exceeded", "equals": true },
+        { "path": "finalDecision.reason", "equals": "repeated_evidence_tool_signature" },
+        { "path": "fallbackText", "contains": "工具链已自动停止" },
+        { "path": "fallbackText", "contains": "已执行 3 个操作" },
+        { "path": "evidenceTools[0].evidence", "equals": true },
+        { "path": "evidenceTools[1].evidence", "equals": false }
+      ]
+    },
+    {
+      "id": "tool-storm.total-budget",
+      "title": "Simple realtime turns have a finite evidence budget",
+      "level": "release",
+      "tags": ["tool-storm", "evidence"],
+      "operation": "tool_storm_guard",
+      "input": {
+        "prompt": "今晚有什么比赛",
+        "calls": [
+          { "name": "web_search", "args": { "query": "query 0" } },
+          { "name": "web_fetch", "args": { "url": "https://example.com/1" } },
+          { "name": "web_search", "args": { "query": "query 2" } },
+          { "name": "web_fetch", "args": { "url": "https://example.com/3" } },
+          { "name": "web_search", "args": { "query": "query 4" } },
+          { "name": "web_fetch", "args": { "url": "https://example.com/5" } },
+          { "name": "web_search", "args": { "query": "query 6" } },
+          { "name": "web_fetch", "args": { "url": "https://example.com/7" } },
+          { "name": "weather", "args": { "location": "深圳" } }
+        ]
+      },
+      "assertions": [
+        { "path": "finalDecision.exceeded", "equals": true },
+        { "path": "finalDecision.reason", "equals": "evidence_tool_total_budget_exceeded" },
+        { "path": "finalDecision.evidenceTotal", "equals": 9 }
+      ]
+    },
+    {
+      "id": "brain-managed.filter-custom-tools",
+      "title": "Brain-managed realtime tools are not passed back as custom duplicate tools",
+      "level": "release",
+      "tags": ["brain", "tools"],
+      "operation": "brain_managed_tools",
+      "input": {
+        "tools": [
+          { "name": "web_search" },
+          { "name": "web-search" },
+          { "name": "todo" },
+          { "name": "stock_market" },
+          { "name": "create_report" }
+        ]
+      },
+      "assertions": [
+        { "path": "managedNames", "contains": "web_search" },
+        { "path": "managedNames", "contains": "web-search" },
+        { "path": "managedNames", "contains": "stock_market" },
+        { "path": "keptNames", "equals": ["todo", "create_report"] },
+        { "path": "flags.todo", "equals": false },
+        { "path": "flags.web-search", "equals": true }
+      ]
+    },
+    {
+      "id": "trace.native-tool-roundtrip",
+      "title": "Native session trace captures provider tool call, real local tool execution, and final synthesis",
+      "level": "release",
+      "tags": ["trace", "event-stream", "tools", "runtime"],
+      "operation": "native_session_trace",
+      "input": {
+        "prompt": "查一下深圳今天是否下雨，给我一句行动建议。",
+        "model": {
+          "id": "scripted-tool-model",
+          "provider": "scripted-provider"
+        },
+        "tools": [
+          {
+            "name": "web_search",
+            "description": "fixture search tool",
+            "resultText": "深圳今天阵雨，降雨概率 80%，傍晚雨势较明显。"
+          }
+        ],
+        "providerScript": [
+          {
+            "toolCalls": [
+              {
+                "id": "call_weather_search",
+                "name": "web_search",
+                "args": { "query": "深圳 今天 下雨" }
+              }
+            ]
+          },
+          {
+            "content": "深圳今天有阵雨，建议带伞并避开傍晚高峰。"
+          }
+        ]
+      },
+      "assertions": [
+        { "path": "provider.requestCount", "equals": 2 },
+        { "path": "eventTypes", "contains": "tool_execution_start" },
+        { "path": "eventTypes", "contains": "tool_execution_end" },
+        { "path": "assistantEventTypes", "contains": "toolcall_start" },
+        { "path": "assistantEventTypes", "contains": "toolcall_end" },
+        { "path": "toolStarts[0].toolName", "equals": "web_search" },
+        { "path": "toolEnds[0].resultText", "contains": "降雨概率 80%" },
+        { "path": "provider.requests[1].lastToolText", "contains": "降雨概率 80%" },
+        { "path": "finalText", "contains": "建议带伞" },
+        { "path": "finalText", "notContains": "<tool_call" }
+      ]
+    },
+    {
+      "id": "trace.reasoning-only-empty-answer",
+      "title": "Reasoning-only model output is converted into a visible empty-answer fallback",
+      "level": "release",
+      "tags": ["trace", "empty-answer", "reasoning", "runtime"],
+      "operation": "native_session_trace",
+      "input": {
+        "prompt": "只回答一句：今天状态如何？",
+        "model": {
+          "id": "scripted-reasoning-only",
+          "provider": "scripted-provider"
+        },
+        "providerScript": [
+          {
+            "reasoning": "我已经在内部思考，但故意不输出可见 content。"
+          }
+        ]
+      },
+      "assertions": [
+        { "path": "provider.requestCount", "equals": 1 },
+        { "path": "assistantEventTypes", "contains": "thinking_delta" },
+        { "path": "finalText", "contains": "模型这次没有返回可见内容" },
+        { "path": "finalText", "notEquals": "" }
+      ]
+    },
+    {
+      "id": "trace.sequential-prompts-no-stale-answer",
+      "title": "Sequential prompts use the latest user turn and do not answer the previous question",
+      "level": "smoke",
+      "tags": ["trace", "retry", "pollution", "bug"],
+      "operation": "native_session_trace",
+      "input": {
+        "prompts": [
+          "上一次问题：解释什么是回归测试。",
+          "新问题：今天深圳天气如何？"
+        ],
+        "model": {
+          "id": "scripted-sequential",
+          "provider": "scripted-provider"
+        },
+        "providerScript": [
+          {
+            "content": "回归测试是用来确认新改动没有破坏旧功能的测试。"
+          },
+          {
+            "content": "深圳今天有阵雨，外出建议带伞。"
+          }
+        ]
+      },
+      "assertions": [
+        { "path": "provider.requestCount", "equals": 2 },
+        { "path": "provider.requests[0].lastUserText", "equals": "上一次问题：解释什么是回归测试。" },
+        { "path": "provider.requests[1].lastUserText", "equals": "新问题：今天深圳天气如何？" },
+        { "path": "finalTexts[0]", "contains": "回归测试" },
+        { "path": "finalTexts[1]", "contains": "深圳今天" },
+        { "path": "finalTexts[1]", "notContains": "回归测试" }
+      ]
+    },
+    {
+      "id": "cli.byok-fake-provider-json",
+      "title": "CLI prompt mode can run through the scripted OpenAI provider and emit JSON events",
+      "level": "smoke",
+      "tags": ["cli", "trace", "provider", "runtime"],
+      "operation": "cli_provider_trace",
+      "input": {
+        "prompt": "用一句话回答：Lynn CLI fake provider 是否连通？",
+        "model": {
+          "id": "scripted-cli-model",
+          "provider": "openai-compatible",
+          "apiKey": "sk-agent-regression"
+        },
+        "providerScript": [
+          {
+            "content": "CLI fake provider 已连通。"
+          }
+        ]
+      },
+      "assertions": [
+        { "path": "code", "equals": 0 },
+        { "path": "provider.requestCount", "equals": 1 },
+        { "path": "provider.lastUserTexts[0]", "contains": "Lynn CLI fake provider 是否连通" },
+        { "path": "eventTypes", "contains": "provider" },
+        { "path": "eventTypes", "contains": "assistant.delta" },
+        { "path": "eventTypes", "contains": "run.finished" },
+        { "path": "assistantText", "contains": "fake provider 已连通" },
+        { "path": "finished.ok", "equals": true }
+      ]
+    },
+    {
+      "id": "local-qwen35.empty-reasoning-retry",
+      "title": "Empty visible output with reasoning triggers no-thinking retry",
+      "level": "release",
+      "tags": ["empty-answer", "retry", "local-model"],
+      "operation": "local_qwen35_retry",
+      "input": {
+        "enableThinking": true,
+        "assistantText": "",
+        "reasoningText": "我已经完成推理，但没有生成最终答案。"
+      },
+      "assertions": [
+        { "path": "retry", "equals": true }
+      ]
+    },
+    {
+      "id": "local-qwen35.history-current-prompt",
+      "title": "Current prompt appears once at the end of local direct history to avoid stale retry pollution",
+      "level": "smoke",
+      "tags": ["retry", "history", "pollution", "bug"],
+      "operation": "local_qwen35_history",
+      "input": {
+        "currentPrompt": "新问题：今天深圳天气如何？",
+        "messages": [
+          { "role": "user", "content": "上一次问题：解释什么是回归测试。" },
+          { "role": "assistant", "content": "回归测试是防止旧功能被新修改破坏。" },
+          { "role": "user", "content": "新问题：今天深圳天气如何？" }
+        ]
+      },
+      "assertions": [
+        { "path": "lastUser", "equals": "新问题：今天深圳天气如何？" },
+        { "path": "currentPromptCount", "equals": 1 },
+        { "path": "userMessages[0]", "equals": "上一次问题：解释什么是回归测试。" },
+        { "path": "userMessages[1]", "equals": "新问题：今天深圳天气如何？" }
+      ]
+    }
+  ]
+}
