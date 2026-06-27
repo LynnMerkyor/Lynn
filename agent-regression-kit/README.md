@@ -1,13 +1,39 @@
 # Agent Regression Kit
 
-Agent Regression Kit is a small, adapter-driven regression runner for AI agents. The core runner is intentionally independent from Lynn: it loads a case bank, materializes fixtures, calls an adapter operation, evaluates deterministic assertions, and emits a JSON report.
+Agent Regression Kit is an adapter-driven harness for AI agent runtime contracts. It is designed to be used against local projects, GitHub/Gitee clones, and packaged apps by injecting a model API and generating a project-specific adapter/case bank.
 
 The important distinction: this is not primarily a model-quality eval. It is an Agent runtime contract runner. A case may assert the visible answer, but it should prefer durable behavior: route choice, request body shape, event trace, tool call order, tool arguments, evidence handoff, retries, empty-answer fallback, and stale-context pollution.
 
+Model ability is a separate layer. The harness first proves the runtime boundaries with deterministic providers; live model checks then add capability evidence using structural assertions rather than exact prose.
+
+## Standalone Flow
+
+```bash
+# Inspect any local/GitHub/Gitee checkout.
+ark inspect --project /path/to/agent-app
+
+# Generate a starter harness in that project.
+ark init --project /path/to/agent-app \
+  --model-base-url '${ARK_MODEL_BASE_URL}' \
+  --model '${ARK_MODEL_ID}' \
+  --api-key-env ARK_MODEL_API_KEY
+
+# Run the generated smoke contracts.
+ark run \
+  --adapter /path/to/agent-app/agent-regression/adapter.mjs \
+  --case-bank /path/to/agent-app/agent-regression/cases/project-smoke.json \
+  --level smoke
+```
+
 ## Shape
 
-- `src/core.mjs`: adapter-neutral runner, fixture handling, selection, assertions, and reports.
-- `src/fake-openai-provider.mjs`: adapter-neutral scripted OpenAI-compatible SSE provider for deterministic agent-runtime traces, including `/health`, `/models`, and `/v1/chat/completions`.
+- `bin/ark.mjs`: standalone CLI with `inspect`, `init`, and `run`.
+- `src/index.mjs`: public API surface.
+- `src/core/`: adapter-neutral runner, fixture handling, selection, and assertions.
+- `src/project/`: project inspection and harness scaffolding.
+- `src/harness/`: capability taxonomy and model-profile policy.
+- `src/fake-providers/openai-compatible.mjs`: adapter-neutral scripted OpenAI-compatible SSE provider for deterministic agent-runtime traces, including `/health`, `/models`, and `/v1/chat/completions`.
+- `src/reporters/`: console and JSON reporters.
 - `case-bank.schema.json`: portable JSON schema for case banks.
 - `cases/lynn-backend-v1.json`: Lynn's first backend/CLI regression case bank.
 - `cases/lynn-gates-v1.json`: unified CLI/GUI gate case bank that wraps existing deterministic and live gates.
@@ -60,6 +86,21 @@ npm run test:agent-regression:gates:nightly
 ```
 
 The command writes a report under `/tmp/lynn-agent-regression/` by default.
+
+## Capability Harness
+
+The generated `agent-regression/capability-plan.json` gives each project a starting map:
+
+- `turn.lifecycle`: prompt accepted, progress observable, turn closes once.
+- `context.isolation`: retry/edit/next prompt do not leak stale metadata or text.
+- `provider.contract`: model API injection and request tracing work.
+- `tool.trajectory`: tool choice, args, result handoff, and final answer are assertable.
+- `failure.recovery`: empty answer, timeout, malformed stream, and provider errors are bounded.
+- `cli.surface`: headless prompt surface is parseable and bounded.
+- `gui.surface`: browser/Electron user actions emit expected runtime payloads.
+- `live.capability`: live model checks use structural outcomes, not exact prose.
+
+This lets weak, strong, local, and live models share the same runtime contract harness. The model profile only changes the live assertion policy.
 
 ## Layering
 

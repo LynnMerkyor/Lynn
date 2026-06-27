@@ -1,0 +1,33 @@
+{
+  "name": "@agent-regression/kit",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Adapter-driven contract regression runner for AI agent runtimes.",
+  "license": "Apache-2.0",
+  "bin": {
+    "ark": "./bin/ark.mjs",
+    "agent-regression-kit": "./bin/ark.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs",
+    "./core": "./src/core.mjs",
+    "./fake-providers/openai-compatible": "./src/fake-providers/openai-compatible.mjs",
+    "./fake-openai-provider": "./src/fake-openai-provider.mjs",
+    "./adapters/loader": "./src/adapters/loader.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "case-bank.schema.json",
+    "README.md",
+    "docs",
+    "examples"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node --check bin/ark.mjs && find src examples -name '*.mjs' -print0 | xargs -0 -n1 node --check",
+    "self-test": "node bin/ark.mjs --adapter examples/minimal-adapter.mjs --case-bank examples/minimal-case-bank.json --level release --no-report"
+  }
+}

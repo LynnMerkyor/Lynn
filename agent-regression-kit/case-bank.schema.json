@@ -55,6 +55,24 @@
       "properties": {
         "path": { "type": "string" },
         "message": { "type": "string" },
+        "operator": {
+          "enum": [
+            "equals",
+            "notEquals",
+            "contains",
+            "notContains",
+            "matches",
+            "notMatches",
+            "truthy",
+            "falsy",
+            "greaterThan",
+            "greaterThanOrEqual",
+            "lessThan",
+            "lessThanOrEqual",
+            "absent",
+            "present"
+          ]
+        },
         "equals": {},
         "notEquals": {},
         "contains": {},
@@ -67,6 +85,8 @@
         "greaterThanOrEqual": { "type": "number" },
         "lessThan": { "type": "number" },
         "lessThanOrEqual": { "type": "number" },
+        "absent": { "type": "boolean" },
+        "present": { "type": "boolean" },
         "flags": { "type": "string" }
       }
     }

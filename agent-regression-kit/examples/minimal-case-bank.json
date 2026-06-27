@@ -1,0 +1,20 @@
+{
+  "name": "minimal-agent-contracts",
+  "version": "1.0.0",
+  "description": "Tiny case bank proving the standalone adapter contract.",
+  "cases": [
+    {
+      "id": "echo.visible-output",
+      "title": "Adapter returns visible text and a closed turn",
+      "level": "smoke",
+      "tags": ["example", "contract"],
+      "operation": "echo",
+      "input": { "text": "hello agent" },
+      "assertions": [
+        { "path": "text", "equals": "hello agent" },
+        { "path": "eventTypes", "contains": "turn_end" },
+        { "path": "missingField", "absent": true }
+      ]
+    }
+  ]
+}
