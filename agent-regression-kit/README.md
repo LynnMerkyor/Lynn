@@ -7,7 +7,7 @@ The important distinction: this is not primarily a model-quality eval. It is an 
 ## Shape
 
 - `src/core.mjs`: adapter-neutral runner, fixture handling, selection, assertions, and reports.
-- `src/fake-openai-provider.mjs`: adapter-neutral scripted OpenAI-compatible SSE provider for deterministic agent-runtime traces.
+- `src/fake-openai-provider.mjs`: adapter-neutral scripted OpenAI-compatible SSE provider for deterministic agent-runtime traces, including `/health`, `/models`, and `/v1/chat/completions`.
 - `case-bank.schema.json`: portable JSON schema for case banks.
 - `cases/lynn-backend-v1.json`: Lynn's first backend/CLI regression case bank.
 - `adapters/lynn.mjs`: Lynn-specific operations that call the real backend routing, tool, stream, and retry helpers.
@@ -22,9 +22,12 @@ For agent-runtime cases, use a scripted provider and assert the event/request tr
 - `toolStarts`, `toolEnds`
 - `finalText`, `finalTexts`
 - `provider.requests`, including `lastUserText`, `lastToolText`, and `toolNames`
+- `diagnostics`, a compact contract summary for turn closure, visible answers, tool handoff, reasoning-only fallback, stale prompt echoes, and parse errors
 - canonical session `messages`
 
 Lynn's `cli_provider_trace` operation uses the same fake provider through the real `cli/bin/lynn.mjs` prompt command in JSON mode. That gives v1 a cheap CLI shell regression without requiring live Brain or StepFun.
+
+`scripted_provider_probe` verifies the fake provider's health/model endpoints before a case relies on it. Keep this kind of probe in the kit so provider health/cooldown bugs are caught before live Brain-route work starts.
 
 Minimal case:
 

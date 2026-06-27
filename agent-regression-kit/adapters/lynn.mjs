@@ -64,6 +64,8 @@ export function createLynnAdapter() {
           return runLocalQwen35Retry(input);
         case "local_qwen35_history":
           return runLocalQwen35History(input, context);
+        case "scripted_provider_probe":
+          return runScriptedProviderProbe(input, context);
         case "native_session_trace":
           return runNativeSessionTrace(input, context);
         case "cli_provider_trace":
@@ -232,6 +234,7 @@ async function runNativeSessionTrace(input, context) {
   const provider = await startScriptedOpenAIProvider({
     script: input.providerScript || input.script || [],
     defaultModel: input.model?.id || "scripted-model",
+    models: input.models || [],
   });
   context.addCleanup?.(() => provider.close());
   const cwd = await resolveTraceCwd(input, context);
@@ -271,6 +274,14 @@ async function runNativeSessionTrace(input, context) {
   }
 
   const messages = sessionManager.buildSessionContext().messages || [];
+  const providerRequests = provider.requests.map(canonicalProviderRequest);
+  const diagnostics = buildTraceDiagnostics({
+    prompts: Array.isArray(input.prompts) ? input.prompts : [input.prompt || ""],
+    events,
+    finalTexts,
+    messages,
+    providerRequests,
+  });
   return {
     cwd,
     events,
@@ -282,10 +293,12 @@ async function runNativeSessionTrace(input, context) {
     finalText: finalTexts.at(-1) || "",
     messages: messages.map(canonicalMessage),
     messagesJson: JSON.stringify(messages),
+    diagnostics,
     provider: {
       baseUrl: provider.baseUrl,
       requestCount: provider.requestCount,
-      requests: provider.requests.map(canonicalProviderRequest),
+      modelProbeCount: provider.modelProbeCount,
+      requests: providerRequests,
       requestModels: provider.requests.map((request) => request.body?.model || ""),
       lastUserTexts: provider.requests.map((request) => lastMessageText(request.body?.messages, "user")),
       requestToolNames: provider.requests.map((request) => Array.isArray(request.body?.tools)
@@ -458,6 +471,7 @@ async function runCliProviderTrace(input, context) {
   const provider = await startScriptedOpenAIProvider({
     script: input.providerScript || input.script || [],
     defaultModel: input.model?.id || "scripted-cli-model",
+    models: input.models || [],
   });
   context.addCleanup?.(() => provider.close());
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `lynn-cli-agent-regression-${context.case?.id || "case"}-`.replace(/[^a-z0-9._-]+/gi, "-")));
@@ -497,6 +511,14 @@ async function runCliProviderTrace(input, context) {
       .map((event) => event.text)
       .join("");
     const finished = [...events].reverse().find((event) => event.type === "run.finished") || null;
+    const providerRequests = provider.requests.map(canonicalProviderRequest);
+    const diagnostics = buildCliDiagnostics({
+      events,
+      assistantText,
+      finished,
+      child,
+      providerRequests,
+    });
     return {
       code: child.code,
       stdout: child.stdout,
@@ -505,11 +527,47 @@ async function runCliProviderTrace(input, context) {
       eventTypes: events.map((event) => event.type),
       assistantText,
       finished,
+      diagnostics,
       provider: {
         baseUrl: provider.baseUrl,
         requestCount: provider.requestCount,
-        requests: provider.requests.map(canonicalProviderRequest),
+        modelProbeCount: provider.modelProbeCount,
+        requests: providerRequests,
         lastUserTexts: provider.requests.map((request) => lastMessageText(request.body?.messages, "user")),
+      },
+    };
+  } finally {
+    await provider.close();
+  }
+}
+
+async function runScriptedProviderProbe(input, context) {
+  const defaultModel = input.model?.id || input.defaultModel || "scripted-probe-model";
+  const provider = await startScriptedOpenAIProvider({
+    script: input.providerScript || input.script || [{ content: "probe ok" }],
+    defaultModel,
+    models: input.models || [defaultModel],
+  });
+  context.addCleanup?.(() => provider.close());
+  try {
+    const health = await fetchJson(`${provider.origin}/health`);
+    const v1Models = await fetchJson(`${provider.baseUrl}/models`);
+    const rootModels = await fetchJson(`${provider.origin}/models`);
+    return {
+      origin: provider.origin,
+      baseUrl: provider.baseUrl,
+      health,
+      v1Models,
+      rootModels,
+      modelIds: [
+        ...new Set([
+          ...modelIds(v1Models),
+          ...modelIds(rootModels),
+        ]),
+      ],
+      provider: {
+        requestCount: provider.requestCount,
+        modelProbeCount: provider.modelProbeCount,
       },
     };
   } finally {
@@ -553,4 +611,75 @@ function parseJsonLines(text) {
         return { type: "parse_error", raw: line };
       }
     });
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url);
+  const text = await res.text();
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+  return {
+    ok: res.ok,
+    status: res.status,
+    json,
+    text,
+  };
+}
+
+function modelIds(response) {
+  const data = response?.json?.data;
+  return Array.isArray(data) ? data.map((item) => item?.id).filter(Boolean) : [];
+}
+
+function buildTraceDiagnostics({ prompts, events, finalTexts, messages, providerRequests }) {
+  const assistantEventTypes = events.map((event) => event.assistantEventType).filter(Boolean);
+  const eventTypes = events.map((event) => event.type);
+  const promptTexts = (Array.isArray(prompts) ? prompts : []).map(String);
+  const lastUserTexts = providerRequests.map((request) => request.lastUserText || "");
+  const finalNonEmpty = finalTexts.filter((text) => String(text || "").trim()).length;
+  const finalEmpty = finalTexts.length - finalNonEmpty;
+  const staleEchoes = finalTexts.map((text, index) => {
+    const priorPrompts = promptTexts.slice(0, index).filter(Boolean);
+    return priorPrompts.filter((prompt) => String(text || "").includes(prompt));
+  });
+  return {
+    promptCount: promptTexts.length,
+    providerRequestCount: providerRequests.length,
+    messageEndCount: eventTypes.filter((type) => type === "message_end").length,
+    agentEndCount: eventTypes.filter((type) => type === "agent_end").length,
+    textDeltaCount: assistantEventTypes.filter((type) => type === "text_delta").length,
+    thinkingDeltaCount: assistantEventTypes.filter((type) => type === "thinking_delta").length,
+    toolStartCount: eventTypes.filter((type) => type === "tool_execution_start").length,
+    toolEndCount: eventTypes.filter((type) => type === "tool_execution_end").length,
+    toolResultHandoffCount: providerRequests.filter((request) => request.lastToolText).length,
+    visibleAnswerCount: finalNonEmpty,
+    emptyFinalCount: finalEmpty,
+    reasoningOnlyFallbackCount: finalTexts.filter((text) => /模型这次没有返回可见内容/.test(String(text || ""))).length,
+    turnClosed: eventTypes.filter((type) => type === "agent_end").length === promptTexts.length,
+    lastUserTexts,
+    latestUserText: lastUserTexts.at(-1) || "",
+    staleEchoes,
+    staleEchoCount: staleEchoes.reduce((sum, items) => sum + items.length, 0),
+    sessionMessageRoles: (messages || []).map((message) => message?.role || ""),
+  };
+}
+
+function buildCliDiagnostics({ events, assistantText, finished, child, providerRequests }) {
+  const parseErrors = events.filter((event) => event.type === "parse_error");
+  return {
+    exitCode: child.code,
+    timedOut: child.timedOut === true,
+    parseErrorCount: parseErrors.length,
+    providerRequestCount: providerRequests.length,
+    assistantDeltaCount: events.filter((event) => event.type === "assistant.delta").length,
+    providerEventCount: events.filter((event) => event.type === "provider").length,
+    runFinishedCount: events.filter((event) => event.type === "run.finished").length,
+    finishedOk: finished?.ok === true,
+    visibleAnswerNonEmpty: String(assistantText || "").trim().length > 0,
+    lastUserTexts: providerRequests.map((request) => request.lastUserText || ""),
+  };
 }

@@ -1,14 +1,21 @@
 import http from "node:http";
 
-export async function startScriptedOpenAIProvider({ script = [], defaultModel = "scripted-model" } = {}) {
+export async function startScriptedOpenAIProvider({ script = [], defaultModel = "scripted-model", models = [] } = {}) {
   const state = {
     requestCount: 0,
+    modelProbeCount: 0,
     requests: [],
   };
   const server = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true, requestCount: state.requestCount }));
+      return;
+    }
+    if (req.method === "GET" && isModelsPath(req.url || "")) {
+      state.modelProbeCount += 1;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(buildModelsPayload({ defaultModel, models })));
       return;
     }
     if (req.method !== "POST" || !isChatCompletionsPath(req.url || "")) {
@@ -47,6 +54,9 @@ export async function startScriptedOpenAIProvider({ script = [], defaultModel = 
     get requestCount() {
       return state.requestCount;
     },
+    get modelProbeCount() {
+      return state.modelProbeCount;
+    },
     get requests() {
       return state.requests;
     },
@@ -60,6 +70,24 @@ export async function startScriptedOpenAIProvider({ script = [], defaultModel = 
 
 function isChatCompletionsPath(url) {
   return /(?:^|\/)chat\/completions(?:\?|$)/.test(String(url || ""));
+}
+
+function isModelsPath(url) {
+  return /(?:^|\/)(?:v1\/)?models(?:\?|$)/.test(String(url || ""));
+}
+
+function buildModelsPayload({ defaultModel, models }) {
+  const ids = Array.isArray(models) && models.length ? models : [defaultModel];
+  return {
+    object: "list",
+    data: [...new Set(ids.map((id) => String(id || "").trim()).filter(Boolean))]
+      .map((id) => ({
+        id,
+        object: "model",
+        created: 0,
+        owned_by: "agent-regression-kit",
+      })),
+  };
 }
 
 function parseJson(raw) {

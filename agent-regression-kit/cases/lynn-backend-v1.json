@@ -297,6 +297,26 @@
       ]
     },
     {
+      "id": "provider.fake-models-probe",
+      "title": "Scripted provider exposes /models so health probes do not trip cooldown paths",
+      "level": "smoke",
+      "tags": ["provider", "probe", "fake-provider"],
+      "operation": "scripted_provider_probe",
+      "input": {
+        "model": { "id": "p-fake" },
+        "models": ["p-fake", "scripted-tool-model"]
+      },
+      "assertions": [
+        { "path": "health.status", "equals": 200 },
+        { "path": "health.json.ok", "equals": true },
+        { "path": "v1Models.status", "equals": 200 },
+        { "path": "rootModels.status", "equals": 200 },
+        { "path": "modelIds", "contains": "p-fake" },
+        { "path": "modelIds", "contains": "scripted-tool-model" },
+        { "path": "provider.modelProbeCount", "equals": 2 }
+      ]
+    },
+    {
       "id": "trace.native-tool-roundtrip",
       "title": "Native session trace captures provider tool call, real local tool execution, and final synthesis",
       "level": "release",
@@ -339,6 +359,11 @@
         { "path": "toolStarts[0].toolName", "equals": "web_search" },
         { "path": "toolEnds[0].resultText", "contains": "降雨概率 80%" },
         { "path": "provider.requests[1].lastToolText", "contains": "降雨概率 80%" },
+        { "path": "diagnostics.turnClosed", "equals": true },
+        { "path": "diagnostics.toolStartCount", "equals": 1 },
+        { "path": "diagnostics.toolEndCount", "equals": 1 },
+        { "path": "diagnostics.toolResultHandoffCount", "equals": 1 },
+        { "path": "diagnostics.visibleAnswerCount", "equals": 1 },
         { "path": "finalText", "contains": "建议带伞" },
         { "path": "finalText", "notContains": "<tool_call" }
       ]
@@ -364,6 +389,10 @@
       "assertions": [
         { "path": "provider.requestCount", "equals": 1 },
         { "path": "assistantEventTypes", "contains": "thinking_delta" },
+        { "path": "diagnostics.thinkingDeltaCount", "equals": 1 },
+        { "path": "diagnostics.reasoningOnlyFallbackCount", "equals": 1 },
+        { "path": "diagnostics.visibleAnswerCount", "equals": 1 },
+        { "path": "diagnostics.turnClosed", "equals": true },
         { "path": "finalText", "contains": "模型这次没有返回可见内容" },
         { "path": "finalText", "notEquals": "" }
       ]
@@ -396,6 +425,12 @@
         { "path": "provider.requestCount", "equals": 2 },
         { "path": "provider.requests[0].lastUserText", "equals": "上一次问题：解释什么是回归测试。" },
         { "path": "provider.requests[1].lastUserText", "equals": "新问题：今天深圳天气如何？" },
+        { "path": "diagnostics.promptCount", "equals": 2 },
+        { "path": "diagnostics.messageEndCount", "equals": 2 },
+        { "path": "diagnostics.agentEndCount", "equals": 2 },
+        { "path": "diagnostics.turnClosed", "equals": true },
+        { "path": "diagnostics.latestUserText", "equals": "新问题：今天深圳天气如何？" },
+        { "path": "diagnostics.staleEchoCount", "equals": 0 },
         { "path": "finalTexts[0]", "contains": "回归测试" },
         { "path": "finalTexts[1]", "contains": "深圳今天" },
         { "path": "finalTexts[1]", "notContains": "回归测试" }
@@ -427,6 +462,10 @@
         { "path": "eventTypes", "contains": "provider" },
         { "path": "eventTypes", "contains": "assistant.delta" },
         { "path": "eventTypes", "contains": "run.finished" },
+        { "path": "diagnostics.parseErrorCount", "equals": 0 },
+        { "path": "diagnostics.providerRequestCount", "equals": 1 },
+        { "path": "diagnostics.finishedOk", "equals": true },
+        { "path": "diagnostics.visibleAnswerNonEmpty", "equals": true },
         { "path": "assistantText", "contains": "fake provider 已连通" },
         { "path": "finished.ok", "equals": true }
       ]
