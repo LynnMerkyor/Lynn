@@ -68,6 +68,8 @@ export function createLynnAdapter() {
           return runScriptedProviderProbe(input, context);
         case "brain_v2_route_trace":
           return runBrainV2RouteTrace(input, context);
+        case "command_gate":
+          return runCommandGate(input, context);
         case "native_session_trace":
           return runNativeSessionTrace(input, context);
         case "cli_provider_trace":
@@ -638,6 +640,105 @@ async function runBrainV2RouteTrace(input, context) {
   } finally {
     await provider.close();
   }
+}
+
+async function runCommandGate(input, context) {
+  const steps = normalizeCommandGateSteps(input);
+  const startedAt = Date.now();
+  const results = [];
+  for (const step of steps) {
+    const stepStartedAt = Date.now();
+    const child = await runChild(step.command, step.args, {
+      cwd: step.cwd,
+      env: step.env,
+      timeoutMs: step.timeoutMs,
+    });
+    const result = {
+      id: step.id,
+      command: [step.command, ...step.args].join(" "),
+      cwd: path.relative(REPO_ROOT, step.cwd) || ".",
+      code: child.code,
+      timedOut: child.timedOut === true,
+      durationMs: Date.now() - stepStartedAt,
+      stdoutTail: tailText(child.stdout, step.outputTailChars),
+      stderrTail: tailText(child.stderr, step.outputTailChars),
+    };
+    results.push(result);
+    if (result.code !== 0 || result.timedOut) break;
+  }
+  const failed = results.find((result) => result.code !== 0 || result.timedOut);
+  return {
+    ok: !failed && results.length === steps.length,
+    stepCount: steps.length,
+    completedStepCount: results.length,
+    failedStepId: failed?.id || "",
+    durationMs: Date.now() - startedAt,
+    steps: results,
+    diagnostics: {
+      caseId: context.case?.id || "",
+      allStepsCompleted: results.length === steps.length,
+      failedStepId: failed?.id || "",
+      timedOutStepIds: results.filter((result) => result.timedOut).map((result) => result.id),
+      nonZeroStepIds: results.filter((result) => result.code !== 0).map((result) => result.id),
+    },
+  };
+}
+
+function normalizeCommandGateSteps(input) {
+  const rawSteps = Array.isArray(input.steps) && input.steps.length ? input.steps : [input];
+  return rawSteps.map((step, index) => normalizeCommandGateStep(step, index, input));
+}
+
+function normalizeCommandGateStep(step, index, input) {
+  const packageScript = String(step.packageScript || step.npmScript || "").trim();
+  const command = packageScript ? "npm" : String(step.command || "").trim();
+  if (!command) throw new Error(`command_gate step ${index + 1} is missing command or packageScript`);
+  const args = packageScript
+    ? ["run", packageScript, ...arrayFrom(step.args)]
+    : arrayFrom(step.args);
+  const cwd = resolveGateCwd(step.cwd || input.cwd || REPO_ROOT);
+  const env = {
+    ...process.env,
+    ...stringEnv(input.env),
+    ...stringEnv(step.env),
+    NO_COLOR: "1",
+    FORCE_COLOR: "0",
+  };
+  return {
+    id: String(step.id || packageScript || command || `step-${index + 1}`),
+    command,
+    args,
+    cwd,
+    env,
+    timeoutMs: Number(step.timeoutMs || input.timeoutMs || 120_000),
+    outputTailChars: Number(step.outputTailChars || input.outputTailChars || 12_000),
+  };
+}
+
+function resolveGateCwd(value) {
+  const cwd = path.resolve(REPO_ROOT, String(value || "."));
+  const rel = path.relative(REPO_ROOT, cwd);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error(`command_gate cwd must stay under repo root: ${cwd}`);
+  }
+  return cwd;
+}
+
+function arrayFrom(value) {
+  if (value == null) return [];
+  return Array.isArray(value) ? value.map(String) : [String(value)];
+}
+
+function stringEnv(env) {
+  if (!env || typeof env !== "object") return {};
+  return Object.fromEntries(Object.entries(env).map(([key, value]) => [key, String(value)]));
+}
+
+function tailText(text, maxChars) {
+  const raw = String(text || "");
+  const max = Number.isFinite(maxChars) && maxChars > 0 ? maxChars : 12_000;
+  if (raw.length <= max) return raw;
+  return `${raw.slice(0, Math.floor(max / 3))}\n...[truncated ${raw.length - max} chars]...\n${raw.slice(-Math.ceil((max * 2) / 3))}`;
 }
 
 function buildBrainV2RouteTraceEnv(provider, input, modelId) {

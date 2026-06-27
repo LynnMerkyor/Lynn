@@ -1,0 +1,139 @@
+{
+  "$schema": "../case-bank.schema.json",
+  "name": "lynn-gates-v1",
+  "version": 1,
+  "description": "Unified CLI/GUI gate cases for Lynn. These wrap existing deterministic and live gates through Agent Regression Kit so reports, levels, and failure contracts are centralized.",
+  "cases": [
+    {
+      "id": "gui.renderer-retry-pollution-contract",
+      "title": "Renderer prompt contracts catch retry pollution and persistent WS error feedback",
+      "level": "smoke",
+      "tags": ["gui", "renderer", "retry", "pollution", "ws", "bug"],
+      "operation": "command_gate",
+      "input": {
+        "steps": [
+          {
+            "id": "vitest-renderer-prompt-contracts",
+            "packageScript": "test",
+            "args": [
+              "--",
+              "--run",
+              "desktop/src/react/__tests__/stores/prompt-actions.test.ts",
+              "desktop/src/react/__tests__/services/ws-message-handler.test.ts"
+            ],
+            "timeoutMs": 60000
+          }
+        ]
+      },
+      "assertions": [
+        { "path": "ok", "equals": true },
+        { "path": "completedStepCount", "equals": 1 },
+        { "path": "steps[0].code", "equals": 0 },
+        { "path": "steps[0].timedOut", "equals": false },
+        { "path": "steps[0].stdoutTail", "contains": "prompt-actions" },
+        { "path": "steps[0].stdoutTail", "contains": "ws-message-handler" },
+        { "path": "steps[0].stdoutTail", "contains": "passed" }
+      ]
+    },
+    {
+      "id": "cli.smoke-package-gate",
+      "title": "CLI smoke gate runs through the unified regression runner",
+      "level": "release",
+      "tags": ["cli", "gate", "smoke"],
+      "operation": "command_gate",
+      "input": {
+        "steps": [
+          {
+            "id": "test-cli",
+            "packageScript": "test:cli",
+            "timeoutMs": 120000
+          }
+        ]
+      },
+      "assertions": [
+        { "path": "ok", "equals": true },
+        { "path": "steps[0].code", "equals": 0 },
+        { "path": "steps[0].timedOut", "equals": false },
+        { "path": "steps[0].stdoutTail", "contains": "cli-smoke" },
+        { "path": "steps[0].stdoutTail", "contains": "all checks passed" }
+      ]
+    },
+    {
+      "id": "gui.electron-ui-smoke-gate",
+      "title": "Electron UI smoke gate runs through the unified regression runner",
+      "level": "release",
+      "tags": ["gui", "electron", "gate", "layout"],
+      "operation": "command_gate",
+      "input": {
+        "env": {
+          "LYNN_UI_NO_FRONT": "1"
+        },
+        "steps": [
+          {
+            "id": "build-renderer",
+            "packageScript": "build:renderer",
+            "timeoutMs": 120000
+          },
+          {
+            "id": "electron-ui-smoke",
+            "packageScript": "test:release:ui",
+            "timeoutMs": 120000
+          }
+        ]
+      },
+      "assertions": [
+        { "path": "ok", "equals": true },
+        { "path": "completedStepCount", "equals": 2 },
+        { "path": "steps[0].code", "equals": 0 },
+        { "path": "steps[1].code", "equals": 0 },
+        { "path": "steps[1].stdoutTail", "contains": "ui-smoke" },
+        { "path": "steps[1].stdoutTail", "contains": "PASS" }
+      ]
+    },
+    {
+      "id": "cli.real-task-gate",
+      "title": "Live CLI task gate remains available as a nightly regression case",
+      "level": "nightly",
+      "tags": ["cli", "gate", "live"],
+      "operation": "command_gate",
+      "input": {
+        "steps": [
+          {
+            "id": "gate-cli-task",
+            "packageScript": "gate:cli-task",
+            "timeoutMs": 300000
+          }
+        ]
+      },
+      "assertions": [
+        { "path": "ok", "equals": true },
+        { "path": "steps[0].code", "equals": 0 },
+        { "path": "steps[0].timedOut", "equals": false }
+      ]
+    },
+    {
+      "id": "gui.real-task-gate",
+      "title": "Live GUI task gate remains available as a nightly regression case",
+      "level": "nightly",
+      "tags": ["gui", "gate", "live", "electron"],
+      "operation": "command_gate",
+      "input": {
+        "env": {
+          "LYNN_UI_NO_FRONT": "1"
+        },
+        "steps": [
+          {
+            "id": "gate-gui-task",
+            "packageScript": "gate:gui-task",
+            "timeoutMs": 360000
+          }
+        ]
+      },
+      "assertions": [
+        { "path": "ok", "equals": true },
+        { "path": "steps[0].code", "equals": 0 },
+        { "path": "steps[0].timedOut", "equals": false }
+      ]
+    }
+  ]
+}

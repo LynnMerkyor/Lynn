@@ -10,6 +10,7 @@ The important distinction: this is not primarily a model-quality eval. It is an 
 - `src/fake-openai-provider.mjs`: adapter-neutral scripted OpenAI-compatible SSE provider for deterministic agent-runtime traces, including `/health`, `/models`, and `/v1/chat/completions`.
 - `case-bank.schema.json`: portable JSON schema for case banks.
 - `cases/lynn-backend-v1.json`: Lynn's first backend/CLI regression case bank.
+- `cases/lynn-gates-v1.json`: unified CLI/GUI gate case bank that wraps existing deterministic and live gates.
 - `adapters/lynn.mjs`: Lynn-specific operations that call the real backend routing, tool, stream, and retry helpers.
 
 ## Case Design
@@ -31,6 +32,8 @@ Lynn's `brain_v2_route_trace` operation starts the fake provider in the parent p
 
 `scripted_provider_probe` verifies the fake provider's health/model endpoints before a case relies on it. Keep this kind of probe in the kit so provider health/cooldown bugs are caught before live Brain-route work starts.
 
+`command_gate` runs one or more existing package/script gates as a case-bank operation. Use it to centralize CLI/GUI gates without deleting their standalone scripts: fast renderer contracts live in `smoke`, deterministic Electron/CLI gates in `release`, and real live GUI/CLI task gates in `nightly`.
+
 Minimal case:
 
 ```json
@@ -51,6 +54,9 @@ Minimal case:
 npm run test:agent-regression:smoke
 npm run test:agent-regression
 npm run test:agent-regression:nightly
+npm run test:agent-regression:gates:smoke
+npm run test:agent-regression:gates
+npm run test:agent-regression:gates:nightly
 ```
 
 The command writes a report under `/tmp/lynn-agent-regression/` by default.
