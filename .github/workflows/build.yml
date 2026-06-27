@@ -38,7 +38,7 @@ jobs:
       # Windows: 下载 MinGit 用于打包进安装包
       - name: Download MinGit
         if: runner.os == 'Windows'
-        run: node scripts/download-git-portable.js
+        run: node --import tsx scripts/download-git-portable.ts
 
       - name: Build server bundle
         shell: bash
@@ -55,12 +55,33 @@ jobs:
       - name: Build renderer
         run: npm run build:renderer
 
+      - name: Detect macOS signing credentials
+        if: runner.os == 'macOS'
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$CSC_LINK" ] && [ -n "$CSC_KEY_PASSWORD" ]; then
+            echo "HAS_MAC_SIGNING=true" >> "$GITHUB_ENV"
+          else
+            echo "HAS_MAC_SIGNING=false" >> "$GITHUB_ENV"
+          fi
+
+          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_ID_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            echo "HAS_MAC_NOTARY=true" >> "$GITHUB_ENV"
+          else
+            echo "HAS_MAC_NOTARY=false" >> "$GITHUB_ENV"
+          fi
+
       # macOS: 手动配置签名 keychain + partition-list
       # electron-builder 内部也会导入证书，但不一定设 partition-list，
       # 导致 codesign 在无头 CI 上弹 UI 确认对话框而挂起。
       # 这里先手动搞定，再把 CSC_KEYCHAIN 传给 electron-builder 让它复用。
       - name: Setup macOS signing keychain
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && env.HAS_MAC_SIGNING == 'true'
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -90,7 +111,7 @@ jobs:
       # @electron/osx-sign 在签名大量文件时会卡死（原因不明），
       # 手动先签好 dist-server 里的 native 二进制，electron-builder 只签 Electron 框架。
       - name: Pre-sign server binaries
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && env.HAS_MAC_SIGNING == 'true'
         run: |
           IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
           echo "Using identity: $IDENTITY"
@@ -110,7 +131,7 @@ jobs:
 
       # macOS 打包（签名 + 公证）
       - name: Build macOS DMG
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && env.HAS_MAC_SIGNING == 'true'
         run: |
           ulimit -n 65536
           npx electron-builder --mac dmg --${{ matrix.arch }} --publish never
@@ -121,6 +142,14 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.HAS_MAC_SIGNING == 'true' && 'true' || 'false' }}
+          SKIP_NOTARIZE: ${{ env.HAS_MAC_NOTARY == 'true' && 'false' || 'true' }}
+
+      - name: Skip macOS DMG without signing credentials
+        if: runner.os == 'macOS' && env.HAS_MAC_SIGNING != 'true'
+        run: |
+          echo "Skipping macOS DMG packaging because CSC_LINK/CSC_KEY_PASSWORD are not configured."
+          echo "Formal macOS release artifacts are produced by the local signed + notarized release SOP."
 
       # Windows 打包
       - name: Build Windows installer
@@ -131,6 +160,7 @@ jobs:
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: Upload artifacts
+        if: runner.os == 'Windows' || env.HAS_MAC_SIGNING == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: installer-${{ matrix.os }}-${{ matrix.arch }}
@@ -142,7 +172,9 @@ jobs:
   # 双平台构建完成后，自动创建 GitHub Release 并上传安装包
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Formal Lynn releases are signed/notarized and published by the local release SOP.
+    # Set this repo variable only when intentionally publishing CI-built artifacts.
+    if: startsWith(github.ref, 'refs/tags/v') && vars.LYNN_ACTIONS_PUBLISH_RELEASE == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

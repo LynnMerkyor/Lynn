@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import YAML from 'js-yaml';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ensureFirstRun } from '../core/first-run.js';
 
 function makeTempRoot() {
@@ -89,10 +89,12 @@ describe('ensureFirstRun', () => {
     });
 
     try {
+      vi.spyOn(os, 'homedir').mockReturnValue(root);
       process.env.HOME = root;
       process.env.LYNN_IMPORT_HANAKO_ON_FIRST_RUN = '1';
       ensureFirstRun(lynnHome, productDir);
     } finally {
+      vi.restoreAllMocks();
       if (oldHomeBefore === undefined) delete process.env.HOME;
       else process.env.HOME = oldHomeBefore;
       if (oldImportFlag === undefined) delete process.env.LYNN_IMPORT_HANAKO_ON_FIRST_RUN;

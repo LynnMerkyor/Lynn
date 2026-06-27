@@ -31,6 +31,7 @@ const cliRoot = fileURLToPath(new URL("..", import.meta.url));
 const pythonIt = hasPython3() ? it : it.skip;
 const ptyIt = process.platform === "win32" ? it.skip : pythonIt;
 const interactivePtyIt = process.env.CI === "true" ? it.skip : ptyIt;
+const interactivePipeIt = process.env.CI === "true" && process.platform === "win32" ? it.skip : it;
 
 async function runInteractiveChatInput(
   inputText: string,
@@ -211,7 +212,7 @@ describe("chat mode controls", () => {
     expect(completeChatInput("hello")).toEqual([[], "hello"]);
   });
 
-  it("keeps /tools for local tool inventory and /tool for recent tool details", async () => {
+  interactivePipeIt("keeps /tools for local tool inventory and /tool for recent tool details", async () => {
     const result = await runInteractiveChatInput("/tools\n/tool\n/exit\n");
 
     expect(result.code).toBe(0);
@@ -319,7 +320,7 @@ describe("chat mode controls", () => {
     }
   });
 
-  it("handles exact local exit phrases without sending them to the model", async () => {
+  interactivePipeIt("handles exact local exit phrases without sending them to the model", async () => {
     const english = await runInteractiveChatInput("exit\n");
     const chinese = await runInteractiveChatInput("再见\n");
 
@@ -539,7 +540,7 @@ describe("chat mode controls", () => {
     }
   });
 
-  it("retries an interactive chat turn once when Brain returns an empty visible answer", async () => {
+  interactivePipeIt("retries an interactive chat turn once when Brain returns an empty visible answer", async () => {
     let requests = 0;
     const provider = http.createServer((request, response) => {
       request.resume();

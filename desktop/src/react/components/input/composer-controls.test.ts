@@ -66,14 +66,14 @@ describe('composer controls regression', () => {
   });
 
   it('lets composer controls wrap instead of clipping in narrow windows', () => {
-    const inputCss = read('desktop/src/react/components/input/InputArea.module.css');
+    const inputCss = read('desktop/src/react/components/input/InputArea.module.css').replace(/\r\n/g, '\n');
 
     expect(inputCss).toContain('@media (max-width: 980px)');
-    expect(inputCss).toContain('.input-controls {\n        justify-content: flex-start;\n        flex-wrap: wrap;');
-    expect(inputCss).toContain('.send-controls {\n        flex: 1 1 240px;');
+    expect(inputCss).toMatch(/\.input-controls\s*\{[^}]*justify-content:\s*flex-start;[^}]*flex-wrap:\s*wrap;/);
+    expect(inputCss).toMatch(/\.send-controls\s*\{[^}]*flex:\s*1 1 240px;/);
     expect(inputCss).toContain('@media (max-width: 620px)');
-    expect(inputCss).toContain('.send-controls {\n        flex: 1 1 100%;');
-    expect(inputCss).toContain('.model-selector {\n        flex: 1 1 0;');
+    expect(inputCss).toMatch(/\.send-controls\s*\{[^}]*flex:\s*1 1 100%;/);
+    expect(inputCss).toMatch(/\.model-selector\s*\{[^}]*flex:\s*1 1 0;/);
   });
 
   it('uses concise Chinese copy for deep research controls and status', () => {
