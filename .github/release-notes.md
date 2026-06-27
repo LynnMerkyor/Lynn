@@ -1,6 +1,6 @@
 # Lynn v0.85.5 Release Notes / 发布说明
 
-> 发布日期: 2026-06-27 · 会话进展右栏 / 本地模型推荐链路 / 发版回归门禁
+> 发布日期: 2026-06-27 · 2026-06-28 热修覆盖 · 会话进展右栏 / 本地模型推荐链路 / Agent 回归门禁
 
 ## 国内镜像站下载（推荐）
 
@@ -19,6 +19,14 @@
 - **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.5-Windows-Setup.exe
 - **下载页**: https://download.merkyorlynn.com/download.html
 
+## 2026-06-28 热修覆盖
+
+- **后端回归门禁升级**: 发版链路新增可复用 Agent regression gates，并把 CLI200 与 GUI100 长跑纳入门禁；失败项按 ReAct 证据链复盘，避免继续扩大关键词兜底。
+- **体育/比分链路修复**: 世界杯、半决赛、决赛、今晚赛程等问题在实时源不可用时会给出明确的赛程/赛果兜底和复核提示，不再串到 NBA 总决赛或只让用户看工具卡片。
+- **工具失败的用户体验修复**: 行情、天气、体育等实时工具失败时，最终回答会说明数据源暂不可用和下一步建议，不把内部 tool id 暴露给普通用户。
+- **来源说明更人话**: 深研答案底部从内部“工具：stock_market/sportsscore”改成“来源与核验 / 数据源：行情报价、天气预报、体育比分、新闻源 + 网页检索”。
+- **发布同步补强**: GitHub 与 Gitee main/tag 一致性纳入发版流程，腾讯镜像、GitHub Release、CLI tarball 和更新清单按同一批产物覆盖。
+
 ## 中文重点
 
 - **右侧栏从“工作地图”收敛为“会话进展”**: 右侧不再像内部调试面板，而是优先展示当前会话、需要处理的信号、最近会话和轻量预览；历史会话卡片有明确“打开”按钮，当前会话也能直接“继续输入”。
@@ -31,14 +39,18 @@
 
 ## 已验证
 
-- 右侧会话进展文案和交互回归: `desktop/src/react/components/desk/session-map-view.test.ts`。
-- 本地模型推荐 / 启动链路回归: `desktop/src/react/settings/tabs/providers/local-qwen-provider.test.ts`、`desktop/src/react/components/input/local-qwen-status.test.ts`。
-- 正式发版门禁: 全量 Vitest、Brain v2、agent-regression、typecheck、CLI pack/install/stress/PTY/Fleet、voice、release static/UI、startup、CLI live task、GUI live task、agent matrix 均需通过。
-- 正式产物验证: macOS ARM64/x64 DMG 将完成 Apple notarization、staple、Gatekeeper 验证和 `latest-mac.yml` 双架构校验；Windows x64 安装包将完成签名与 `latest.yml` 生成；packaged server / packaged CLI smoke 必须通过。
+- `npm run release:preflight` 全绿。
+- `npm run test:agent-regression:gates` 全绿。
+- CLI200: 200/200 通过；GUI100: 100/100 通过；独立审计 300 条无内部工具名、工具卡片兜底、世界杯串线、空答等问题。
+- `npm run release:finalize-mac`: macOS ARM64/x64 DMG 均完成 Apple notarization、staple、Gatekeeper 验证和 `latest-mac.yml` 校验。
+- Windows x64 安装包完成签名和 blockmap 生成。
+- `npm run release:installed-gate`: 真实 `/Applications/Lynn.app` packaged server / CLI / Settings / main UI / 并发复查门禁通过。
+- `npm run test:release:live`: 真实打包版 live regression 失败数 0。
+- `npm run release:verify-remotes`: GitHub 与 Gitee 的 `main` 和 `v0.85.5` tag 均指向当前热修提交。
 
 ---
 
-> Release date: 2026-06-27 · session progress rail / local model recommendation chain / release regression gates
+> Release date: 2026-06-27 · 2026-06-28 hotfix overwrite · session progress rail / local model recommendation chain / agent regression gates
 
 ## English highlights
 
@@ -49,4 +61,6 @@
 - **Guards against hidden-reasoning short answers**: when a model spends most of the turn in hidden reasoning but leaves only a tiny visible fragment, Lynn adds a clear visible fallback and schedules auto-review.
 - **Keeps the v0.85.4 retry-answer pollution fix**: retrying an assistant answer no longer pollutes later fresh prompts with stale replacement targets.
 - **Unifies release artifacts on v0.85.5**: GUI installers, CLI tarball, README, CLI install snippet, update manifest, and download links all use `0.85.5`.
-- **Release verification**: full Vitest, Brain v2, agent-regression, typechecks, CLI pack/install/stress/PTY/Fleet, voice, release static/UI, startup, CLI live task, GUI live task, agent matrix, macOS notarization/staple/Gatekeeper, Windows signing, and packaged server/CLI smokes are the blocking gates for this release.
+- **Hotfix regression gates**: reusable Agent regression gates, CLI200, and GUI100 are now release blockers.
+- **Realtime tool UX**: sports, market, and weather failures now produce user-readable fallback/status text instead of exposing internal tool cards or tool ids.
+- **Release verification**: full preflight, agent regression gates, CLI200, GUI100, macOS notarization/staple/Gatekeeper, Windows signing, installed-app gate, live release regression, and GitHub/Gitee remote sync passed for this hotfix overwrite.
