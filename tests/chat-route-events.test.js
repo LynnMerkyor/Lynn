@@ -547,6 +547,39 @@ describe("chat route event forwarding", () => {
     expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true);
   });
 
+  it("adds a visible fallback when hidden reasoning leaves only a tiny answer fragment", async () => {
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(() => new Promise(() => {}));
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "解释韦伯官僚制和福柯规训权力的区别，各举一个现代公司例子。" }),
+    }, connections[0].client);
+
+    subscribed({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_delta", delta: "隐".repeat(820) },
+    }, "/sessions/current.jsonl");
+    subscribed({
+      type: "message_update",
+      assistantMessageEvent: { type: "text_delta", delta: "韦伯的官僚制像一台按图纸" },
+    }, "/sessions/current.jsonl");
+    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+
+    await Promise.resolve();
+
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(visibleText).toContain("最终可见答案只剩下半句");
+    expect(visibleText.length).toBeGreaterThan(120);
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
+  });
+
   it("does not retry when a real tool ran but the assistant only says it will continue executing", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);

@@ -4,13 +4,13 @@
 
 <h1 align="center">Lynn</h1>
 
-<p align="center"><strong>GUI work map · CLI headless workers · StepFun default route · realtime voice · long-term memory</strong></p>
-<p align="center">An open-source desktop AI agent focused on chat, Session Map, and patrol-driven work state in the GUI. Parallel collaboration remains available through headless CLI workers for Codex, Claude, Qwen, and other agents.</p>
+<p align="center"><strong>GUI Session Progress · CLI headless workers · StepFun default route · realtime voice · long-term memory</strong></p>
+<p align="center">An open-source desktop AI agent focused on chat, Session Progress, files, and sync-driven work state in the GUI. Parallel collaboration remains available through headless CLI workers for Codex, Claude, Qwen, and other agents.</p>
 
 <p align="center"><a href="README.md">中文版 (默认)</a> | <strong>English</strong></p>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://gitee.com/merkyor/Lynn/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://github.com/LynnMerkyor/Lynn/releases)
 [![HuggingFace Models](https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d)](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF)
 [![ModelScope Models](https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff)](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF)
 
@@ -18,7 +18,7 @@
 
 ## Ecosystem Links
 
-- **Source and app**: [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [Gitee release mirror](https://gitee.com/merkyor/Lynn/releases)
+- **Source and app**: [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases) · [download mirror](https://download.merkyorlynn.com/download.html)
 - **Models and GGUF mirrors**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
 - **Recommended edge model**: [ModelScope 27B Q5_K_M GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) · [HuggingFace 27B Q5_K_M GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) · 32GB+ machines can use [35B-A3B Q5_K_M GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF)
 - **Agent regression**: [`agent-regression-kit/`](agent-regression-kit/) is bundled here today. Coding100, Agent20, automated regression cases, and model tooling should move into a standalone tooling repo; see [`docs/ops/agent-eval-tooling-repo.md`](docs/ops/agent-eval-tooling-repo.md).
@@ -73,19 +73,19 @@ NVFP4's real payoff is **batched throughput**. Same R6000, `VLLM_MOE_FORCE_MARLI
 - [#44672](https://github.com/vllm-project/vllm/pull/44672) ModelOpt W4A16 NVFP4 Marlin path docs
 - [#44673](https://github.com/vllm-project/vllm/pull/44673) speculative decoding correctness gate
 
-## 🔭 V0.80 Origin: CLI Workers, V0.85.4 Session Map
+## 🔭 V0.80 Origin: CLI Workers, V0.85.5 Session Progress
 
-V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.4 the GUI no longer surfaces the Fleet command deck. The desktop experience now focuses on **chat + Session Map + patrols / acceptance**, while parallel worker power stays in the CLI for terminals, CI, and other agents.
+V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.5 the GUI no longer surfaces the Fleet command deck, and the right rail has moved from an internal-feeling work map toward **chat + Session Progress + files + sync / acceptance**, while parallel worker power stays in the CLI for terminals, CI, and other agents.
 
 This is not Lynn stepping away from code. It is the opposite:code tasks, research tasks, and business tasks should share the same orchestration layer.
 
-- **GUI Session Map**: capture the current thread's goals, evidence, files, patrol state, and branch relationships.
+- **GUI Session Progress**: capture the current thread, attention signals, recent sessions, evidence, files, and branch relationships.
 - **Headless CLI workers**: dispatch Codex, Claude Code, Qwen, codebuddy, Kimi, opencode, or custom CLIs, each optionally in its own worktree.
 - **Task protocol**: generate task briefs with owned files, forbidden files, done criteria, test commands, and commit rules.
 - **Acceptance flow**: worker output returns to GUI diffs, evidence, test gates, and release flow for review.
 - **`@lynn/cli`**: the CLI package supports `Lynn -p`, `Lynn code`, `Lynn agents`, and `Lynn worker run`, usable directly in terminals and callable by other agents.
 
-Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.4 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
+Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.5 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
 
 ### CLI Quick Install
 
@@ -96,12 +96,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.4.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.5.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.85.4
+Lynn --version  # should print 0.85.5
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -127,7 +127,26 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details open>
-<summary><strong>Lynn v0.85.4</strong> · 2026-06-25 · retry-answer pollution fix + regression gate <em>(latest)</em></summary>
+<summary><strong>Lynn v0.85.5</strong> · 2026-06-27 · Session Progress rail + local model recommendation chain <em>(latest)</em></summary>
+
+**v0.85.5 UX and release update**:
+- **Turns the right rail into Session Progress**: it now prioritizes the current session, items needing attention, recent sessions, and a lightweight preview. Historical session cards have an explicit Open button, and the current session can focus input directly.
+- **Removes internal jargon and empty panels**: "map/materials/patrol/in progress/closed" copy is simplified to "progress/files/sync/active/done/needs attention"; empty related-session space falls back to recent sessions.
+- **Confirms the edge model ladder**: Lynn recommends **Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP** by default; 32GB+ machines can choose **35B-A3B Q5_K_M**; 9B / 4B stay explicit low-config downgrades. Low-config machines do not get a proactive 27B install prompt.
+- **Makes local startup more direct**: the chat input local-model prompt can prepare and start the 27B path directly instead of sending users through Settings first.
+- **Guards against hidden-reasoning short answers**: when hidden reasoning consumes the turn but the visible answer is only a tiny fragment, Lynn adds a visible fallback and triggers auto-review.
+- **Keeps the v0.85.4 retry-answer fix**: retrying an assistant answer no longer pollutes later fresh prompts with stale replacement targets.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.5.tgz"
+```
+
+[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.5)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.85.4</strong> · 2026-06-25 · retry-answer pollution fix + regression gate</summary>
 
 **v0.85.4 hotfix**:
 - **Fixes retry-answer state pollution**: after clicking retry on an assistant answer, Lynn rolls back from the matching previous user message and resends through the normal prompt path. A later new question no longer reuses the old prompt, old `replaceFromMessageId`, or old branch target.
@@ -713,9 +732,9 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 
 Lynn is a personal AI agent for the desktop: it has memory, personality, writing tools, autonomous work loops, and now a path toward orchestrating coding work.
 
-Early Lynn focused on bringing agent workflows out of the terminal so writers, researchers, operators, students, founders, and non-programmers could actually use them. V0.85.4 keeps that quieter GUI direction: chat, Session Map, patrols, and acceptance stay on the desktop, while parallel workers remain available as headless CLI capabilities for terminals, CI, and other agents.
+Early Lynn focused on bringing agent workflows out of the terminal so writers, researchers, operators, students, founders, and non-programmers could actually use them. V0.85.5 keeps that quieter GUI direction: chat, Session Progress, files, and acceptance stay on the desktop, while parallel workers remain available as headless CLI capabilities for terminals, CI, and other agents.
 
-If you use Claude Code, Codex, or Cursor, Lynn should feel familiar but more like a workbench than a command deck. It turns the current thread's goals, evidence, files, automations, and branches into an inspectable Session Map. If you have never used those tools, you can still start from the GUI and gradually hand coding, documents, research, and automation work to Lynn.
+If you use Claude Code, Codex, or Cursor, Lynn should feel familiar but more like a workbench than a command deck. It turns the current thread, attention signals, evidence, files, automations, and branches into inspectable Session Progress. If you have never used those tools, you can still start from the GUI and gradually hand coding, documents, research, and automation work to Lynn.
 
 ## Who Lynn is for
 
@@ -723,7 +742,7 @@ If you use Claude Code, Codex, or Cursor, Lynn should feel familiar but more lik
 
 - Writers and researchers who want long-term memory, writing diffs, and deep research.
 - Operators, founders, and product teams that need recurring work, reports, cross-platform messaging, and local file tasks.
-- Developers and technical leads who want a GUI work map for acceptance, plus headless CLI workers for parallel tasks.
+- Developers and technical leads who want GUI Session Progress for acceptance, plus headless CLI workers for parallel tasks.
 - Teams that want code work and business work to share one review and acceptance surface.
 - People who want a desktop AI workspace instead of another browser tab.
 
@@ -737,11 +756,11 @@ Lynn does not replace Cursor. Cursor owns the editor loop. Lynn owns the layer a
 
 ## Lynn vs Cursor / Claude Code
 
-|  | **Lynn V0.85.4** | Cursor | Claude Code / Codex CLI |
+|  | **Lynn V0.85.5** | Cursor | Claude Code / Codex CLI |
 |---|---|---|---|
-| Core shape | **GUI Session Map + headless CLI workers** | IDE coding flow | Single CLI agent |
+| Core shape | **GUI Session Progress + headless CLI workers** | IDE coding flow | Single CLI agent |
 | Parallel work | **CLI worker / worktree / JSONL protocol** | Limited | Manually managed |
-| Code acceptance | **Session Map + GUI diff + test gates** | Inside IDE | Terminal output |
+| Code acceptance | **Session Progress + GUI diff + test gates** | Inside IDE | Terminal output |
 | Long-term memory | **6-layer persistent memory** | Session-level | Session-level |
 | Writing and research | **Word-level diff + Deep Research** | Weak | Weak |
 | Built-in keyless route | **Brain provider pool** | Subscription/API required | Provider key required |
@@ -770,7 +789,7 @@ Memory and skill distillation work together: the more you use Lynn, the more acc
 
 ## Local models — three-tier hardware ladder
 
-Starting with Lynn v0.85.4, the recommended default local model is **Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP**. Low-config machines do not get a proactive local-model install prompt; 9B / 4B remain explicit downgrade choices in Settings. Local GGUF still starts only after the user enables it:
+Starting with Lynn v0.85.5, the recommended default local model remains **Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP**. Low-config machines do not get a proactive local-model install prompt; 9B / 4B remain explicit downgrade choices in Settings. Local GGUF still starts only after the user enables it:
 
 | Tier | Model | Size | Recommended hardware | Context | Capability signal |
 |------|-------|:----:|---------------------|:-------:|-------------------|
@@ -843,11 +862,11 @@ No API key needed — device authentication only. The normal text/coding lane is
 
 This is the fundamental difference between Lynn and conversational AI tools.
 
-**Session Map** is the async collaboration space between you and your Agent. The right rail is no longer a loose note pile; it tracks the current thread's goal, status, next step, evidence, and branch-from-here entry without dragging the whole long context back into the model.
+**Session Progress** is the async collaboration space between you and your Agent. The right rail is no longer a loose note pile or an internal map; it tracks the current session, attention signals, recent sessions, evidence, and branch-from-here entry without dragging the whole long context back into the model.
 
-**Heartbeat** periodically scans the workspace, conversation state, and work map. When new tasks appear, they're automatically processed and you're notified when done.
+**Heartbeat** periodically scans the workspace, conversation state, and Session Progress. When new tasks appear, they're automatically processed and you're notified when done.
 
-**Cron** lets Agents run scheduled work. Each Agent's cron jobs run concurrently and independently — switching Agents doesn't interrupt other Agents' schedules. Recurring work can be generated from chat plans and the work map.
+**Cron** lets Agents run scheduled work. Each Agent's cron jobs run concurrently and independently — switching Agents doesn't interrupt other Agents' schedules. Recurring work can be generated from chat plans and Session Progress.
 
 **Long-task stability** is the foundation of this autonomous work system. Lynn's server runs as a standalone Node.js process (independent of the Electron renderer), communicating via full-duplex WebSocket. Chat interruptions, window closures, and network hiccups won't break running tasks. A review system automatically verifies AI output quality, and the model auto-falls back to alternatives when issues are detected.
 
@@ -924,11 +943,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [Gitee release mirror](https://gitee.com/merkyor/Lynn/releases). The V0.85.4 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases). The V0.85.5 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
-**Windows:** download the latest `.exe` installer from the [Gitee release mirror](https://gitee.com/merkyor/Lynn/releases) and run it directly.
+**Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases).
 
-> **Windows SmartScreen notice:** The v0.85.4 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.85.5 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -991,8 +1010,8 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.85.4 notarized DMG) |
-| macOS (Intel) | Supported (V0.85.4 notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.85.5 notarized DMG) |
+| macOS (Intel) | Supported (V0.85.5 notarized DMG) |
 | Windows | Beta |
 | Linux | Planned |
 | Mobile (PWA) | Planned |
