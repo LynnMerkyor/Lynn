@@ -140,13 +140,13 @@ export function LocalQwenStatusStack(props: LocalQwenStatusStackProps) {
               <strong>可安装本地 Qwen3.6-27B</strong>
               <span>
                 {props.hasModel && props.hasRuntime
-                  ? '模型和 llama.cpp 已就绪，授权后即可启动本地离线端点。'
-                  : 'Qwen3.6-27B Q5_K_M imatrix MTP · 19.5GB · 32K 上下文；授权后自动准备，当前模型照常保留。'}
+                  ? '模型和 llama.cpp 已就绪，点击后启动本地离线端点。'
+                  : 'Qwen3.6-27B Q5_K_M imatrix MTP · 19.5GB · 32K 上下文；点击后准备并启动，当前模型保留。'}
               </span>
             </div>
           </div>
           <div className={styles['local-model-status-actions']}>
-            <button type="button" onClick={props.onOpenSettings}>安装本地模型</button>
+            <button type="button" onClick={props.onStart}>安装并启动</button>
             <button type="button" onClick={props.onSnooze}>稍后</button>
           </div>
         </div>

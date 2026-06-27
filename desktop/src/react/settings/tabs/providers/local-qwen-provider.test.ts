@@ -291,4 +291,11 @@ describe('Local Qwen provider UX guards', () => {
     expect(inputArea).not.toContain('首次启动后的第一问正在暖机，可能 30-60 秒；后续会明显更快。');
     expect(inputArea).not.toContain('可接收');
   });
+
+  it('starts the recommended local model directly from the chat install prompt', () => {
+    const localQwenStack = read('desktop/src/react/components/input/LocalQwenStatusStack.tsx');
+    expect(localQwenStack).toContain('安装并启动');
+    expect(localQwenStack).toContain('onClick={props.onStart}>安装并启动</button>');
+    expect(localQwenStack).toContain('点击后准备并启动，当前模型保留');
+  });
 });
