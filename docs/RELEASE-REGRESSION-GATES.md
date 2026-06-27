@@ -29,6 +29,9 @@ npm run release:preflight
 # 真实安装包门禁：候选包装入 /Applications 后运行；覆盖 GUI server、CLI、Settings、主聊天 UI、并发 Hanako 复查
 npm run release:installed-gate
 
+# 发布远端同步检查：GitHub + Gitee 的 main 和 v<version> tag 必须都更新
+npm run release:verify-remotes
+
 # 正式 macOS/Windows 打包会先强制执行 release:preflight
 npm run dist
 npm run dist:win
@@ -52,6 +55,7 @@ LYNN_HOME=~/.lynn-dev npm run test:release
 不启动模型，直接扫仓库和发布资产：
 
 - `package.json` 必须有 build/test/release manifest 入口。
+- `package.json` 必须有 `release:verify-remotes`，用于发布后校验 GitHub/Gitee 双端同步。
 - `.github/update-manifest.json` 二进制资产不能指 GitHub `.dmg/.exe`，必须走腾讯镜像。
 - `site/app.js`、`site/download.html`、`site/index.html` 不能把 `.dmg/.exe` 链到 GitHub。
 - 核心 UI 文件必须存在：AssistantMessage、ThinkingBlock、ToolGroupBlock、WritingDiffViewer、TaskModePicker、PressToTalkButton、streaming store。
@@ -134,9 +138,10 @@ V8/V9 benchmark 主要衡量模型能力和路由质量；release regression 主
 7. `npm run test:release:static`
 8. `npm run test:release:ui`
 9. 平台打包、公证、manifest、镜像站更新（`dist` / `dist:win` 会先跑 `release:preflight`）
-10. 真实安装包 smoke + `npm run release:installed-gate`
-11. 启动打包后的 Lynn 服务后跑 `npm run test:release:live`
-12. 人工 UI Gate(按钮矩阵 + 截图/日志路径)
+10. GitHub Release + Gitee Release/仓库同步，然后跑 `npm run release:verify-remotes`
+11. 真实安装包 smoke + `npm run release:installed-gate`
+12. 启动打包后的 Lynn 服务后跑 `npm run test:release:live`
+13. 人工 UI Gate(按钮矩阵 + 截图/日志路径)
 
 不要用裸 `/v1/chat/completions` 结果替代 `test:release`。裸模型端点测不到 Lynn 的 WebSocket、事件解析、UI 渲染、工具卡片和跨 prompt fence。
 

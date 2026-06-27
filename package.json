@@ -91,6 +91,7 @@
     "build:server:win": "node scripts/build-server.mjs win32 x64",
     "release:manifest": "LYNN_RELEASE_INCLUDE_WINDOWS=1 node --import tsx scripts/generate-update-manifest.ts",
     "release:verify-mac": "node scripts/verify-macos-release-artifacts.mjs",
+    "release:verify-remotes": "node scripts/verify-release-remotes.mjs",
     "release:finalize-mac": "APPLE_NOTARY_PROFILE=${APPLE_NOTARY_PROFILE:-lynn-notary} scripts/finalize-macos-dmg.sh dist/Lynn-${npm_package_version}-macOS-arm64.dmg dist/Lynn-${npm_package_version}-macOS-x64.dmg && npm run release:verify-mac",
     "lint": "eslint desktop/src/ server/",
     "test:watch": "vitest",

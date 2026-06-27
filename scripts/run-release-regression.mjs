@@ -146,6 +146,7 @@ async function runStaticChecks({ level }) {
     "release:finalize-mac",
     "release:manifest",
     "release:verify-mac",
+    "release:verify-remotes",
   ];
   for (const name of requiredScripts) {
     checks.push(makeCheck(

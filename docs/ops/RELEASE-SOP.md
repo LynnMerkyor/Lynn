@@ -147,7 +147,29 @@ npm run release:manifest
 
 其后再贴发版说明正文和 [安装片段](v080-cli-install-release-snippet.md)(记得片段里 tarball 版本已在第 1 步更新)。
 
-## 8. 装后验证(发布 ≠ 完成)
+## 8. Gitee Release + 双远端同步
+
+GitHub 和 Gitee 都是正式发版记录,不能只更新一边。GitHub Release 承担全球 release 资产页,
+Gitee Release 承担国内代码/版本记录；二进制下载默认仍走腾讯镜像站。
+
+```bash
+VERSION="$(node -p "require('./package.json').version")"
+
+git push github-lynnmerkyor main
+git push github-lynnmerkyor "v${VERSION}"
+
+git push gitee main
+git push gitee "v${VERSION}"
+
+npm run release:verify-remotes
+```
+
+- ⛔ **Gitee push 失败 = 发版未完成**,不能只在 GitHub Release 发完就向用户宣布“已全量发布”。
+- Gitee Release 页面必须创建/更新 `v<version>` 记录,正文与 GitHub Release 保持同一份版本说明,顶部同样优先放腾讯镜像下载区块。
+- 如果 Gitee UI/API 暂时不能自动创建 Release,至少必须完成 `main` + `v<version>` tag 同步,并在交付说明里写清“Gitee Release 页面待人工补正文”。这不是通过项,只是阻断原因记录。
+- `npm run release:verify-remotes` 会校验 `github-lynnmerkyor` 与 `gitee` 的 `main` 和 `v<package.version>` tag 是否都指向本地应有提交；失败时先修远端同步,不要继续交付。
+
+## 9. 装后验证(发布 ≠ 完成)
 
 ```bash
 # 真实安装包 smoke(装到 /Applications 后)
@@ -155,10 +177,14 @@ npm run test:release:live      # 连本机已启动的打包版 Lynn
 ```
 最后过一遍 [人工 UI Gate 八项](../RELEASE-REGRESSION-GATES.md)(首屏/短答/工具/长输出/diff/Settings/Voice/Bridge)。
 
-## 9. 交付(给用户的最后一条消息)
+## 10. 交付(给用户的最后一条消息)
 
 ⛔ **6 条直链一次性全给,不要问**:GitHub 3(arm/intel/win)+ 腾讯镜像 3(同三个)。
-测试链接同样两边都给(镜像规则管的是站点默认,不管对用户的交付)。
+测试链接同样两边都给(镜像规则管的是站点默认,不管对用户的交付)。交付里还要给:
+
+- GitHub Release: `https://github.com/LynnMerkyor/Lynn/releases/tag/v<version>`
+- Gitee Release: `https://gitee.com/merkyor/Lynn/releases/tag/v<version>`
+- `npm run release:verify-remotes` 的通过结果。
 
 ---
 
