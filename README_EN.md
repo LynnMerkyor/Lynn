@@ -72,9 +72,9 @@ NVFP4's real payoff is **batched throughput**. Same R6000, `VLLM_MOE_FORCE_MARLI
 - [#44672](https://github.com/vllm-project/vllm/pull/44672) ModelOpt W4A16 NVFP4 Marlin path docs
 - [#44673](https://github.com/vllm-project/vllm/pull/44673) speculative decoding correctness gate
 
-## 🔭 V0.80 Origin: CLI Workers, V0.85.5 Session Progress
+## 🔭 V0.80 Origin: CLI Workers, V0.85.6 Local File Fixes + Session Progress
 
-V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.5 the GUI no longer surfaces the Fleet command deck, and the right rail has moved from an internal-feeling work map toward **chat + Session Progress + files + sync / acceptance**, while parallel worker power stays in the CLI for terminals, CI, and other agents.
+V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.6 the GUI no longer surfaces the Fleet command deck, and the right rail has moved from an internal-feeling work map toward **chat + Session Progress + files + sync / acceptance**. This release also fixes explicit local-file reads and `file://` meta-question regressions, while parallel worker power stays in the CLI for terminals, CI, and other agents.
 
 This is not Lynn stepping away from code. It is the opposite:code tasks, research tasks, and business tasks should share the same orchestration layer.
 
@@ -84,7 +84,7 @@ This is not Lynn stepping away from code. It is the opposite:code tasks, researc
 - **Acceptance flow**: worker output returns to GUI diffs, evidence, test gates, and release flow for review.
 - **`@lynn/cli`**: the CLI package supports `Lynn -p`, `Lynn code`, `Lynn agents`, and `Lynn worker run`, usable directly in terminals and callable by other agents.
 
-Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.5 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
+Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.6 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
 
 ### CLI Quick Install
 
@@ -95,12 +95,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.5.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.6.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.85.5
+Lynn --version  # should print 0.85.6
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -126,7 +126,27 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details open>
-<summary><strong>Lynn v0.85.5</strong> · 2026-06-27 · Session Progress rail + local model recommendation chain <em>(latest)</em></summary>
+<summary><strong>Lynn v0.85.6</strong> · 2026-06-28 · local file-read fix + release gate coverage <em>(latest)</em></summary>
+
+**v0.85.6 client fix and release coverage**:
+- **Fixes IJV6WH explicit absolute file reads**: when the user asks Lynn to read `/Users/.../main.tex`, Lynn reads that file instead of falling back to the current workspace or reporting an empty directory.
+- **Stops `file://` meta-questions from triggering fake directory reads**: questions like "why was the file:// protocol blocked?" are treated as explanation requests, not local prefetch requests.
+- **Prevents previous file-task pollution**: a prior ComfyUI, `main.tex`, or other file task no longer leaks into the next ordinary question; regression coverage includes the ComfyUI → main.tex stale-answer path.
+- **Handles large explicit files more safely**: pointed local files use a capped preview so a huge LaTeX/code file does not freeze or flood the model context.
+- **Improves Windows path compatibility**: `D:\...`, `D:/...`, and `%20` encoded paths are treated as local file paths instead of URL/protocol text.
+- **Release gates included**: Agent regression, CLI200, GUI100, typecheck, and release preflight cover this client build; GUI and CLI are no longer relying on manual spot checks alone.
+- **Keeps v0.85.5 UX changes**: Session Progress, 27B local recommendation, no proactive low-config local-model prompt, and hidden-reasoning fallback remain in place.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.6.tgz"
+```
+
+[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.6)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.85.5</strong> · 2026-06-27 · Session Progress rail + local model recommendation chain</summary>
 
 **v0.85.5 UX and release update**:
 - **Turns the right rail into Session Progress**: it now prioritizes the current session, items needing attention, recent sessions, and a lightweight preview. Historical session cards have an explicit Open button, and the current session can focus input directly.
@@ -731,7 +751,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 
 Lynn is a personal AI agent for the desktop: it has memory, personality, writing tools, autonomous work loops, and now a path toward orchestrating coding work.
 
-Early Lynn focused on bringing agent workflows out of the terminal so writers, researchers, operators, students, founders, and non-programmers could actually use them. V0.85.5 keeps that quieter GUI direction: chat, Session Progress, files, and acceptance stay on the desktop, while parallel workers remain available as headless CLI capabilities for terminals, CI, and other agents.
+Early Lynn focused on bringing agent workflows out of the terminal so writers, researchers, operators, students, founders, and non-programmers could actually use them. V0.85.6 keeps that quieter GUI direction: chat, Session Progress, files, and acceptance stay on the desktop, while this release hardens local file reads and stale-task isolation; parallel workers remain available as headless CLI capabilities for terminals, CI, and other agents.
 
 If you use Claude Code, Codex, or Cursor, Lynn should feel familiar but more like a workbench than a command deck. It turns the current thread, attention signals, evidence, files, automations, and branches into inspectable Session Progress. If you have never used those tools, you can still start from the GUI and gradually hand coding, documents, research, and automation work to Lynn.
 
@@ -755,7 +775,7 @@ Lynn does not replace Cursor. Cursor owns the editor loop. Lynn owns the layer a
 
 ## Lynn vs Cursor / Claude Code
 
-|  | **Lynn V0.85.5** | Cursor | Claude Code / Codex CLI |
+|  | **Lynn V0.85.6** | Cursor | Claude Code / Codex CLI |
 |---|---|---|---|
 | Core shape | **GUI Session Progress + headless CLI workers** | IDE coding flow | Single CLI agent |
 | Parallel work | **CLI worker / worktree / JSONL protocol** | Limited | Manually managed |
@@ -788,7 +808,7 @@ Memory and skill distillation work together: the more you use Lynn, the more acc
 
 ## Local models — three-tier hardware ladder
 
-Starting with Lynn v0.85.5, the recommended default local model remains **Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP**. Low-config machines do not get a proactive local-model install prompt; 9B / 4B remain explicit downgrade choices in Settings. Local GGUF still starts only after the user enables it:
+Starting with Lynn v0.85.6, the recommended default local model remains **Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP**. Low-config machines do not get a proactive local-model install prompt; 9B / 4B remain explicit downgrade choices in Settings. Local GGUF still starts only after the user enables it:
 
 | Tier | Model | Size | Recommended hardware | Context | Capability signal |
 |------|-------|:----:|---------------------|:-------:|-------------------|
@@ -942,11 +962,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases). The V0.85.5 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases). The V0.85.6 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
 **Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases).
 
-> **Windows SmartScreen notice:** The v0.85.5 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.85.6 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -1009,8 +1029,8 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.85.5 notarized DMG) |
-| macOS (Intel) | Supported (V0.85.5 notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.85.6 notarized DMG) |
+| macOS (Intel) | Supported (V0.85.6 notarized DMG) |
 | Windows | Beta |
 | Linux | Planned |
 | Mobile (PWA) | Planned |

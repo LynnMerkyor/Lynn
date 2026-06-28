@@ -9,14 +9,14 @@
     <title>Lynn 下载 | macOS 与 Windows 安装包</title>
     <meta
       name="description"
-      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.85.5,CLI 当前为 v0.85.5。"
+      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.85.6,CLI 当前为 v0.85.6。"
     />
     <meta name="theme-color" content="#f7f1e6" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Lynn 下载 | macOS 与 Windows 安装包" />
     <meta
       property="og:description"
-      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.85.5,CLI 当前为 v0.85.5。"
+      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.85.6,CLI 当前为 v0.85.6。"
     />
     <meta property="og:image" content="../.github/assets/screenshot-main-20260407-v3.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -47,9 +47,9 @@
             <span class="eyebrow">Lynn 下载页</span>
             <h1>选择适合你设备的版本</h1>
             <p class="lead">
-              客户端 GUI 当前为 <strong id="gui-release-version">0.85.5</strong>,
-              CLI 当前为 <strong id="cli-release-version">0.85.5</strong>。
-              GUI 下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作和显式启用的本地模型；CLI 可独立安装,也可作为 Fleet worker 或 manager。macOS V0.85.5 已完成 Apple notarization、staple 和 Gatekeeper 验证。
+              客户端 GUI 当前为 <strong id="gui-release-version">0.85.6</strong>,
+              CLI 当前为 <strong id="cli-release-version">0.85.6</strong>。
+              GUI 下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作和显式启用的本地模型；CLI 可独立安装,也可作为 Fleet worker 或 manager。macOS V0.85.6 已完成 Apple notarization、staple 和 Gatekeeper 验证。
             </p>
             <div class="platform-callout" id="platform-callout">
               系统识别中…
@@ -62,7 +62,7 @@
             <span class="eyebrow">Lynn CLI / Lynn Code</span>
             <h2>给开发者和其他智能体的安装方式</h2>
             <p>
-              Lynn CLI 当前最新为 <strong>v0.85.5</strong>。它是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、Markdown 渲染、流式输出、工具调用和长任务续跑。
+              Lynn CLI 当前最新为 <strong>v0.85.6</strong>。它是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、Markdown 渲染、流式输出、工具调用和长任务续跑。
               一行命令装好,不用克隆仓库、不用编译;也可以被 Claude Code、Codex CLI、Kimi Code、Qwen CLI、CI 或 Lynn GUI Fleet 以无交互方式调用。
             </p>
           </div>
@@ -94,7 +94,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
             </div>
             <div class="code-copy-block">
               <button class="copy-button" type="button" data-copy-target="cli-install">复制</button>
-              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.5.tgz</code></pre>
+              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.6.tgz</code></pre>
             </div>
           </div>
           <div class="cli-install-card">
@@ -108,7 +108,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
               <pre><code id="cli-start">Lynn                 # 交互式聊天 TUI
 Lynn code            # 编码 agent TUI
 Lynn manager run -p "拆分并验收这个长任务" --jsonl
-Lynn --version       # 应输出 0.85.5
+Lynn --version       # 应输出 0.85.6
 Lynn agents          # 输出可复制的 Fleet / 其他 CLI 调用方式
 
 # 无交互编码 worker 示例
@@ -128,7 +128,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill">推荐给 Apple Silicon Mac</span>
               <h2>macOS Apple Silicon</h2>
             </div>
-            <p>适用于 Apple Silicon 芯片的 Mac。V0.85.5 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
+            <p>适用于 Apple Silicon 芯片的 Mac。V0.85.6 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
               <li>签名状态：Developer ID 签名</li>
@@ -138,7 +138,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="macArm"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.5-macOS-arm64.dmg"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.6-macOS-arm64.dmg"
               target="_blank"
               rel="noreferrer"
             >下载 Apple Silicon 版</a>
@@ -149,7 +149,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill pill-soft">适用于 Intel Mac</span>
               <h2>macOS Intel</h2>
             </div>
-            <p>适用于 Intel 芯片的 Mac。V0.85.5 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
+            <p>适用于 Intel 芯片的 Mac。V0.85.6 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
               <li>签名状态：Developer ID 签名</li>
@@ -159,7 +159,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="macIntel"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.5-macOS-x64.dmg"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.6-macOS-x64.dmg"
               target="_blank"
               rel="noreferrer"
             >下载 Intel 版</a>
@@ -170,7 +170,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill pill-warm">Windows 安装版</span>
               <h2>Windows</h2>
             </div>
-            <p>正式发布提供代码签名的 `Setup.exe` 安装包。客户端 GUI v0.85.5 Windows 安装包已同步到镜像站。</p>
+            <p>正式发布提供代码签名的 `Setup.exe` 安装包。客户端 GUI v0.85.6 Windows 安装包已同步到镜像站。</p>
             <ul>
               <li>文件格式：`.exe`</li>
               <li>安装方式：图形安装向导</li>
@@ -180,7 +180,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="windows"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.5-Windows-Setup.exe"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.6-Windows-Setup.exe"
               target="_blank"
               rel="noreferrer"
             >下载 Windows 版</a>
@@ -231,20 +231,20 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
 
         <section class="section release-summary">
           <div class="release-card">
-            <h2>V0.85.5:会话进展与本地模型推荐</h2>
+            <h2>V0.85.6:本地文件读取修复与门禁覆盖</h2>
             <p>
-              V0.85.5 把右侧栏从内部调试感较重的工作地图收敛为会话进展:当前会话、需要处理、
-              最近会话和打开入口更清楚。端侧模型推荐链路也同步更新:27B Q5_K_M imatrix MTP 作为默认本地推荐,
-              32GB+ 机器可选 35B-A3B Q5_K_M,9B / 4B 保留为低配置显式降级。
+              V0.85.6 修复了用户明确点名本地文件时读错目录、file:// 说明类问题误触发目录读取、
+              以及上一题文件任务污染下一题的回归。右侧会话进展和端侧模型推荐链路继续保留:
+              27B Q5_K_M imatrix MTP 作为默认本地推荐,32GB+ 机器可选 35B-A3B Q5_K_M。
             </p>
             <ul>
-              <li>右侧栏改为“会话进展”:减少地图、资料、巡检、推进中等内部术语</li>
-              <li>当前会话可以直接继续输入,历史会话卡片提供明确“打开”入口</li>
-              <li>没有相关会话时不再展示大块空白面板,更早会话引导到左侧搜索</li>
-              <li>低配置机器不会主动弹 27B 安装引导,避免用户被端侧模型推荐打扰</li>
-              <li>聊天输入区的本地模型提示可以直接准备并启动 27B 默认路线</li>
-              <li>保留 V0.85.4 “重新回答”污染修复,新问题不会继承旧 prompt 或旧分支目标</li>
-              <li>GUI / CLI / agent-regression 门禁继续覆盖桌面、终端、Brain V2、runtime frames 和发布静态校验</li>
+              <li>明确读取 `/Users/.../main.tex` 这类绝对路径时,按目标文件读取,不回退 workspace 目录</li>
+              <li>解释 `file://` 协议问题时不再把它当成本地路径预取</li>
+              <li>上一轮 ComfyUI、main.tex 或其它文件任务不会污染下一轮普通追问</li>
+              <li>大文件只做可控 preview,避免巨大 LaTeX/代码文件塞满上下文</li>
+              <li>Windows `D:\...`、`D:/...` 和 `%20` 编码路径兼容性补强</li>
+              <li>保留上版会话进展、27B 默认推荐、低配不主动弹本地模型引导</li>
+              <li>Agent regression、CLI200、GUI100 和 release preflight 继续作为发版门禁</li>
             </ul>
             <a
               class="button button-secondary"
@@ -270,6 +270,6 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
       </footer>
     </div>
 
-    <script src="./app.js?v=0.85.5-cli"></script>
+    <script src="./app.js?v=0.85.6-cli"></script>
   </body>
 </html>

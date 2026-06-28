@@ -1,14 +1,14 @@
 const RELEASE = {
-  guiVersion: "0.85.5",
-  cliVersion: "0.85.5",
-  releasePage: "https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.5",
+  guiVersion: "0.85.6",
+  cliVersion: "0.85.6",
+  releasePage: "https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.6",
   assets: {
     macArm:
-      "https://download.merkyorlynn.com/downloads/Lynn-0.85.5-macOS-arm64.dmg",
+      "https://download.merkyorlynn.com/downloads/Lynn-0.85.6-macOS-arm64.dmg",
     macIntel:
-      "https://download.merkyorlynn.com/downloads/Lynn-0.85.5-macOS-x64.dmg",
+      "https://download.merkyorlynn.com/downloads/Lynn-0.85.6-macOS-x64.dmg",
     windows:
-      "https://download.merkyorlynn.com/downloads/Lynn-0.85.5-Windows-Setup.exe",
+      "https://download.merkyorlynn.com/downloads/Lynn-0.85.6-Windows-Setup.exe",
   },
 };
 
