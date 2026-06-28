@@ -38,6 +38,8 @@ export const TOOL_USE_BEHAVIOR: Readonly<{ RUN_LLM_AGAIN: "run_llm_again"; PREFE
   PREFETCH_THEN_RUN_OR_STOP: "prefetch_then_run_or_stop",
 });
 
+const FILE_CREATION_REQUEST_RE = /(?:保存|写入|创建|生成|导出).{0,16}(?:文件|文档|md|markdown|docx|pdf|xlsx|表格|到书桌|到桌面)|(?:形成|输出).{0,16}(?:文件|文档|docx|pdf|xlsx)/iu;
+
 /**
  * Some prompts are explicitly chat-only: "do not call tools", same-conversation
  * recall with "only reply X", or a simple "remember this normal label"
@@ -47,6 +49,7 @@ export const TOOL_USE_BEHAVIOR: Readonly<{ RUN_LLM_AGAIN: "run_llm_again"; PREFE
 export function shouldDisableToolsForTurn(promptText: unknown): boolean {
   const text = String(promptText || "").trim();
   if (!text) return false;
+  if (buildBudgetCalculationContext(text)) return true;
   const compact = text.replace(/\s+/g, "");
   const explicitNoTools = /(?:不要|不用|不必|无需|禁止).{0,12}(?:调用|使用|启用|走|打开)?(?:任何)?(?:工具|tool|tools|联网|搜索|网页|浏览器)|(?:do\s+not|don't|without|no)\s+(?:call\s+|use\s+)?(?:any\s+)?(?:tools?|web|browser|search)/iu.test(text);
   if (explicitNoTools) return true;
@@ -75,6 +78,20 @@ export function shouldDisableToolsForTurn(promptText: unknown): boolean {
   const commandSnippetRequest = /(?:写|给|提供|生成|构造).{0,20}(?:bash|shell|终端|命令|command)|(?:bash|shell).{0,8}(?:命令|command)/iu.test(text)
     && !/(?:运行|执行|帮我跑|实际跑|检查|验证|run|execute|check|verify)/iu.test(text);
   if (commandSnippetRequest) return true;
+
+  const medicalAdviceRequest = /(?:体检报告|肝功能|发烧|发热|就医|医生|药师|药品说明书|膝盖疼|牙痛|慢性病|复诊|病情|处方|诊断)/iu.test(text)
+    && !/(?:查一下|查询|搜索|检索|最新|实时|今天|现在|指南|官方|来源|链接|论文|文献|药价|医院号源|挂号)/iu.test(text);
+  if (medicalAdviceRequest) return true;
+
+  const contentPlanningRequest = /(?:帮我|给我|写|设计|整理|安排|做|列|拟).{0,60}(?:计划|排期|行程|清单|模板|邮件|JD|职位描述|评分表|rubric|大纲|章节规划|采购清单|风险登记表|OKR|话术|纪要|周报|投诉)/iu.test(text)
+    && !FILE_CREATION_REQUEST_RE.test(text)
+    && !/(?:查一下|查询|搜索|检索|最新|实时|今天|明天|现在|天气|政策|签证|行情|价格|来源|链接)/iu.test(text);
+  if (contentPlanningRequest) return true;
+
+  const operationalAdviceRequest = /(?:如何|怎么|怎样|帮我|设计|判断|排查|优化|处理).{0,120}(?:排队|分诊|预约|叫号|排班|备货|缺货|SKU|不良率|5\s*Why|物流|客服|运营|餐饮|便利店|制造业|门诊|医院|跨部门|风险登记|事故|线上事故)|(?:排队|分诊|预约|叫号|排班|备货|缺货|SKU|不良率|5\s*Why|物流|客服|运营|餐饮|便利店|制造业|门诊|医院|跨部门).{0,120}(?:如何|怎么|怎样|设计|判断|排查|优化|处理)/iu.test(text)
+    && !explicitToolAsk
+    && !/(?:查一下|查询|搜索|检索|最新|实时|今天|明天|现在|天气|政策|签证|行情|价格|来源|链接|新闻|预警)/iu.test(text);
+  if (operationalAdviceRequest) return true;
 
   const codeSnippetRequest = /(?:写|给|提供|生成|解释).{0,40}(?:TypeScript|JavaScript|Node\.?js|CSS|zod|Electron|React|useMemo|Vitest|JSON\s*schema|IPC\s*handler|函数|schema|伪代码|布局|beforeEach)/iu.test(text)
     && !/(?:运行|执行|帮我跑|实际跑|检查|验证|写入|保存到|创建文件|改文件|run|execute|write\s+to|save\s+to|create\s+file)/iu.test(text);
@@ -131,8 +148,8 @@ export function resolveInitialToolUseBehavior(promptText: unknown, opts: ToolUse
 
   const reportKind = inferReportResearchKind(text);
   const budgetContext = buildBudgetCalculationContext(text);
-  const hasDeterministicLocalAnswer = !!buildLocalOfficeDirectAnswer(text);
-  const disableTools = shouldDisableToolsForTurn(text) || hasDeterministicLocalAnswer;
+  const hasDeterministicLocalAnswer = !FILE_CREATION_REQUEST_RE.test(text) && !!buildLocalOfficeDirectAnswer(text);
+  const disableTools = shouldDisableToolsForTurn(text) || hasDeterministicLocalAnswer || !!budgetContext;
   const effectivePromptText = budgetContext
     ? buildPrefetchAugmentedPrompt(text, "", budgetContext)
     : text;

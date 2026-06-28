@@ -1,0 +1,213 @@
+{
+  "benchmark": "orch_eval_3way SOLO (orch=exec=step37, review=none, max_steps=10, workers=3)",
+  "judge_ds": "deepseek-v4-pro",
+  "judge_claude": "claude-opus-4-8 (ground truth: re-ran tests + read full obs)",
+  "totals": {
+    "lastweek_ds": 17,
+    "thisweek_ds_run1": 14,
+    "thisweek_ds_keep": 16,
+    "thisweek_claude": 19
+  },
+  "rows": [
+    {
+      "i": 0,
+      "task": "stats.py 统计函数",
+      "cat": "基础+测试",
+      "ds_lastweek": false,
+      "ds_run1": true,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 1,
+      "task": "购物车计价系统",
+      "cat": "业务逻辑",
+      "ds_lastweek": false,
+      "ds_run1": true,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 2,
+      "task": "修 quicksort 3个bug",
+      "cat": "调试",
+      "ds_lastweek": true,
+      "ds_run1": true,
+      "ds_keep": false,
+      "claude": true,
+      "note": "DS误判✗→真✓: 200随机数组全过+正确定位3bug"
+    },
+    {
+      "i": 3,
+      "task": "销售CSV生成+分析",
+      "cat": "数据处理",
+      "ds_lastweek": true,
+      "ds_run1": false,
+      "ds_keep": false,
+      "claude": false,
+      "note": "真✗: final吐<tool_call>JSON而非<code_run>,没执行,工作目录空"
+    },
+    {
+      "i": 4,
+      "task": "LRU Cache",
+      "cat": "数据结构",
+      "ds_lastweek": true,
+      "ds_run1": true,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 5,
+      "task": "todo CLI 工具",
+      "cat": "工具/CLI",
+      "ds_lastweek": true,
+      "ds_run1": true,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 6,
+      "task": "Dijkstra 最短路",
+      "cat": "经典算法",
+      "ds_lastweek": true,
+      "ds_run1": true,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 7,
+      "task": "自实现 base64",
+      "cat": "经典算法",
+      "ds_lastweek": true,
+      "ds_run1": false,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 8,
+      "task": "access.log 分析",
+      "cat": "数据处理",
+      "ds_lastweek": true,
+      "ds_run1": true,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 9,
+      "task": "线程安全计数器",
+      "cat": "并发",
+      "ds_lastweek": false,
+      "ds_run1": false,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 10,
+      "task": "Stack/Queue 类",
+      "cat": "数据结构",
+      "ds_lastweek": true,
+      "ds_run1": true,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 11,
+      "task": "deep_merge 深合并",
+      "cat": "工具/配置",
+      "ds_lastweek": true,
+      "ds_run1": false,
+      "ds_keep": false,
+      "claude": true,
+      "note": "DS误判✗→真✓: 12个pytest全过(我亲自复跑)"
+    },
+    {
+      "i": 12,
+      "task": "自实现 bisect_left",
+      "cat": "经典算法",
+      "ds_lastweek": true,
+      "ds_run1": false,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 13,
+      "task": "CSV→JSON 类型推断",
+      "cat": "数据处理",
+      "ds_lastweek": true,
+      "ds_run1": true,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 14,
+      "task": "令牌桶限流器",
+      "cat": "并发/时间",
+      "ds_lastweek": true,
+      "ds_run1": true,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 15,
+      "task": "自实现正则 .*",
+      "cat": "经典算法",
+      "ds_lastweek": true,
+      "ds_run1": false,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 16,
+      "task": "归并排序+逆序对",
+      "cat": "经典算法",
+      "ds_lastweek": true,
+      "ds_run1": true,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 17,
+      "task": "Markdown TOC 提取",
+      "cat": "数据处理",
+      "ds_lastweek": true,
+      "ds_run1": true,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 18,
+      "task": "EventBus 发布订阅",
+      "cat": "数据结构",
+      "ds_lastweek": true,
+      "ds_run1": true,
+      "ds_keep": true,
+      "claude": true,
+      "note": ""
+    },
+    {
+      "i": 19,
+      "task": "词频 Top-K",
+      "cat": "数据处理",
+      "ds_lastweek": true,
+      "ds_run1": true,
+      "ds_keep": false,
+      "claude": true,
+      "note": "DS误判✗→真✓: 词频验证✓通过"
+    }
+  ]
+}

@@ -974,7 +974,7 @@ describe("chat route event forwarding", () => {
         .map((evt) => evt.delta)
         .join("");
       // 事实行:真实 tool_end 证据摘要,不是模型口吻的编造内容。
-      expect(visibleText).toContain("根据本轮已执行操作返回的可见结果");
+      expect(visibleText).toContain("这轮操作已有可见结果");
       expect(visibleText).toContain("bash");
       expect(visibleText).toContain("mkdir -p 表格");
       expect(visibleText).toContain("moved");
@@ -1057,7 +1057,7 @@ describe("chat route event forwarding", () => {
         .map((evt) => evt.delta)
         .join("");
 
-      expect(visibleText).toContain("根据本轮已执行工具返回的证据");
+      expect(visibleText).toContain("这轮检索拿到的可核验线索有限");
       expect(visibleText).toContain("网页搜索");
       expect(visibleText).toContain("Mexico beat South Africa 2-0");
       expect(visibleText).toContain("网页抓取");
@@ -1070,6 +1070,64 @@ describe("chat route event forwarding", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("closes a model timeout after successful web evidence without broadcasting a user-visible error", async () => {
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(() => new Promise(() => {}));
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "查一下南京 2026 社保缴费基数最新政策，给我办理口径。" }),
+    }, connections[0].client);
+
+    subscribed({
+      type: "tool_execution_start",
+      toolCallId: "call_policy_search",
+      toolName: "web_search",
+      args: { query: "南京 2026 社保缴费基数 最新政策" },
+    }, "/sessions/current.jsonl");
+    subscribed({
+      type: "tool_execution_end",
+      toolCallId: "call_policy_search",
+      toolName: "web_search",
+      args: { query: "南京 2026 社保缴费基数 最新政策" },
+      result: {
+        content: [
+          { type: "text", text: "南京社保缴费基数政策查询摘要：请以南京市人社局、税务局发布页面为准。" },
+        ],
+      },
+      isError: false,
+    }, "/sessions/current.jsonl");
+    subscribed({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "error",
+        error: "LLM request timed out after 45000ms",
+      },
+    }, "/sessions/current.jsonl");
+
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+
+    expect(clients[0].sent.filter((evt) => evt.type === "error")).toHaveLength(0);
+    expect(visibleText).toContain("这轮检索拿到的可核验线索有限");
+    expect(visibleText).toContain("南京社保缴费基数政策查询摘要");
+    expect(visibleText).toContain("不会继续猜");
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "turn_end",
+      sessionPath: "/sessions/current.jsonl",
+    }));
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "status",
+      isStreaming: false,
+      sessionPath: "/sessions/current.jsonl",
+    }));
   });
 
   it("closes a tool authorization turn when no final event arrives after confirmation flow", async () => {
@@ -1836,7 +1894,7 @@ describe("chat route event forwarding", () => {
         .map((evt) => evt.delta)
         .join("");
       // 事实行:真实 tool_end 证据摘要,不是模型口吻的编造内容。
-      expect(visibleText).toContain("根据本轮已执行操作返回的可见结果");
+      expect(visibleText).toContain("这轮操作已有可见结果");
       expect(visibleText).toContain("bash");
       expect(visibleText).toContain("moved 3 image files");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({
@@ -2151,7 +2209,7 @@ describe("chat route event forwarding", () => {
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
         .join("");
-      expect(visibleText).toContain("根据本轮已执行工具返回的证据");
+      expect(visibleText).toContain("这轮检索拿到的可核验线索有限");
       expect(visibleText).toContain("体育比分");
       expect(visibleText).toContain("卡塔尔 vs 瑞士");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));

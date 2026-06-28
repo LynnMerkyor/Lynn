@@ -124,6 +124,84 @@ describe("prompt stdin handling", () => {
     expect(output).not.toContain("fetch failed");
   });
 
+  it("answers Apple notarization official research prompts with local evidence", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runPrompt(parseArgs([
+        "-p",
+        "查 Apple 开发者文档里 notarization 的用途",
+        "--json",
+        "--brain-url",
+        "http://127.0.0.1:1",
+      ]), { json: true })).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain("\"type\":\"tool_progress\"");
+    expect(output).toContain("Apple notarization 的用途");
+    expect(output).toContain("developer.apple.com/documentation/security/notarizing_macos_software_before_distribution");
+    expect(output).toContain("\"researchPrefetch\":true");
+    expect(output).not.toContain("fetch failed");
+  });
+
+  it("answers latest Claude public model prompts with the bounded official answer", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runPrompt(parseArgs([
+        "-p",
+        "Claude 最新公开模型是哪一代？",
+        "--json",
+        "--brain-url",
+        "http://127.0.0.1:1",
+      ]), { json: true })).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain("\"type\":\"tool_progress\"");
+    expect(output).toContain("Claude 4 系列");
+    expect(output).toContain("docs.anthropic.com/en/docs/about-claude/models/overview");
+    expect(output).toContain("\"researchPrefetch\":true");
+    expect(output).not.toContain("抓取失败");
+    expect(output).not.toContain("fetch failed");
+  });
+
+  it("answers Japan tourist visa prompts with source boundaries instead of thin miss text", async () => {
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runPrompt(parseArgs([
+        "-p",
+        "查一下中国游客去日本旅行签证最新材料要求，列来源和不确定点",
+        "--json",
+        "--brain-url",
+        "http://127.0.0.1:1",
+      ]), { json: true })).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+
+    expect(output).toContain("中国游客赴日旅游签证材料");
+    expect(output).toContain("日本国驻华大使馆签证入口");
+    expect(output).toContain("\"researchPrefetch\":true");
+    expect(output).not.toContain("工具结果中未查到");
+  });
+
   it("runs prompt mode through CLI BYOK when local Brain is offline", async () => {
     const provider = http.createServer((request, response) => {
       expect(request.url).toBe("/v1/chat/completions");

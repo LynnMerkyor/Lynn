@@ -863,7 +863,7 @@ function buildDeterministicOfficialModelAnswer(prompt: unknown, result: unknown)
   const lines = [
     currentTemporalContext(),
     '',
-    '本轮只使用官方入口/官方文档候选作为依据；如果页面抓取失败或没有明确条目，不补推具体型号。',
+    '本轮只使用官方入口/官方文档候选作为依据；如果官方页面没有明确条目，不补推具体型号。',
   ];
   if (/(?:Claude|Anthropic)/i.test(question)) {
     const hasClaude4 = /Claude\s+(?:Opus\s+4|Sonnet\s+4|4\b)/i.test(raw);

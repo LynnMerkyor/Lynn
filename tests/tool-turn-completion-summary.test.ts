@@ -36,12 +36,49 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
       ],
     });
 
-    expect(out).toContain("根据本轮已执行工具返回的证据");
+    expect(out).toContain("这轮检索拿到的可核验线索有限");
     expect(out).toContain("网页搜索");
     expect(out).toContain("Mexico beat South Africa 2-0");
     expect(out).toContain("网页抓取");
     expect(out).toContain("Canada drew Bosnia and Herzegovina 1-1");
     expect(out).not.toContain("已执行 2 个操作");
+  });
+
+  it("scrubs internal research scaffolding from realtime evidence fallbacks", () => {
+    const out = buildToolCompletionSummary({
+      successfulToolCount: 1,
+      lastSuccessfulTools: [{
+        name: "web_search",
+        outputPreview: [
+          "【研究资料】",
+          "【补充搜索线索】",
+          "查询：查一下深圳 2026 年社保缴费政策有没有最新变化 最新 资料 数据 来源",
+          "来源：深圳市人力资源和社会保障局",
+          "摘要：2026 年缴费基数上下限以官方公告为准。",
+        ].join("\n"),
+      }],
+    });
+
+    expect(out).toContain("深圳市人力资源和社会保障局");
+    expect(out).toContain("2026 年缴费基数上下限");
+    expect(out).not.toContain("【研究资料】");
+    expect(out).not.toContain("【补充搜索线索】");
+    expect(out).not.toContain("最新 资料 数据 来源");
+  });
+
+  it("does not present query-only realtime scaffolding as evidence", () => {
+    const out = buildToolCompletionSummary({
+      successfulToolCount: 1,
+      lastSuccessfulTools: [{
+        name: "web_search",
+        outputPreview: "【研究资料】 【补充搜索线索】 查询：查一下深圳 2026 年社保缴费政策有没有最新变化 最新 资料 数据 来源 查询：深圳社保 官方 公告 报告 文档",
+      }],
+    });
+
+    expect(out).toContain("这轮检索没有拿到可核验内容");
+    expect(out).not.toContain("【研究资料】");
+    expect(out).not.toContain("查询：");
+    expect(out).not.toContain("已执行 1 个操作");
   });
 
   it("uses generic tool evidence for complex tools when available", () => {
@@ -60,7 +97,7 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
       ],
     });
 
-    expect(out).toContain("根据本轮已执行操作返回的可见结果");
+    expect(out).toContain("这轮操作已有可见结果");
     expect(out).toContain("image_analyze");
     expect(out).toContain("检测到 2 张截图");
     expect(out).toContain("bash");
@@ -96,6 +133,37 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
     expect(out).not.toContain("请查看上方工具卡片");
   });
 
+  it("turns realtime search failures into actionable source-check guidance", () => {
+    const out = buildToolCompletionSummary({
+      originalPromptText: "查一下深圳 2026 年社保缴费政策有没有最新变化，给来源和不确定点",
+      successfulToolCount: 0,
+      hasFailedTool: true,
+      lastFailedTools: ["web_search"],
+    });
+
+    expect(out).toContain("网页搜索数据源本轮暂时不可用");
+    expect(out).toContain("下一步建议");
+    expect(out).toContain("官方页面");
+    expect(out).toContain("发布日期");
+    expect(out).toContain("适用地区");
+    expect(out).not.toContain("工具执行包含");
+  });
+
+  it("turns parallel research all-failures into actionable source-check guidance", () => {
+    const out = buildToolCompletionSummary({
+      originalPromptText: "种植户要看明天降雨和近期玉米价格，帮我查证后给风险提示",
+      successfulToolCount: 0,
+      hasFailedTool: true,
+      lastFailedTools: ["web_search", "parallel_research"],
+    });
+
+    expect(out).toContain("网页搜索");
+    expect(out).toContain("并行检索");
+    expect(out).toContain("没能形成可核验结论");
+    expect(out).not.toContain("工具执行包含");
+    expect(out).not.toContain("工具卡片");
+  });
+
   it("keeps successful realtime evidence visible when a later duplicate tool fails", () => {
     const out = buildToolCompletionSummary({
       successfulToolCount: 1,
@@ -109,10 +177,10 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
       ],
     });
 
-    expect(out).toContain("根据本轮已执行工具返回的证据");
+    expect(out).toContain("这轮检索拿到的可核验线索有限");
     expect(out).toContain("行情");
     expect(out).toContain("907.29 元/克");
-    expect(out).toContain("后续工具失败");
+    expect(out).toContain("后续操作失败");
     expect(out).not.toContain("请查看上方工具卡片中的失败项");
   });
 
@@ -147,6 +215,67 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
     expect(selected).toContain("example.com 页面");
     expect(selected).toContain("用于文档示例");
     expect(selected).not.toContain("没有提取到足够可靠");
-    expect(selected).not.toContain("根据本轮已执行工具返回的证据");
+    expect(selected).not.toContain("这轮检索拿到的可核验线索有限");
+  });
+
+  it("does not turn web_fetch errors into page summaries", () => {
+    const state = {
+      originalPromptText: "查一下中国游客去日本旅行签证最新材料要求，列来源和不确定点",
+      successfulToolCount: 1,
+      lastSuccessfulTools: [{
+        name: "webfetch",
+        outputPreview: "来源: example.gov\n抓取出错: 抓取失败: HTTP 403 Forbidden",
+      }],
+    };
+
+    expect(buildDirectWebFetchEvidenceAnswer(state)).toBe("");
+    const selected = selectToolEvidenceVisibleText(
+      state,
+      "页面：抓取出错: 抓取失败: HTTP 403 Forbidden\n要点：抓取出错: 抓取失败: HTTP 403 Forbidden",
+    );
+    expect(selected).not.toContain("HTTP 403");
+    expect(selected).not.toContain("抓取出错");
+  });
+
+  it("replaces model text that leaks internal research scaffolding after web tools", () => {
+    const state = {
+      originalPromptText: "查一下深圳 2026 年社保缴费政策有没有最新变化，给来源和不确定点",
+      successfulToolCount: 1,
+      lastSuccessfulTools: [{
+        name: "web_search",
+        outputPreview: "【研究资料】 【补充搜索线索】 查询：深圳社保 2026 最新 资料 数据 来源 查询：深圳社保 官方 公告 报告 文档",
+      }],
+    };
+
+    const selected = selectToolEvidenceVisibleText(
+      state,
+      "针对“【研究资料】 【补充搜索线索】 查询：深圳社保 2026 最新 资料 数据 来源”，目前可以回答如下。",
+    );
+
+    expect(selected).toContain("这轮检索没有拿到可核验内容");
+    expect(selected).toContain("下一步建议");
+    expect(selected).not.toContain("【研究资料】");
+    expect(selected).not.toContain("查询：深圳社保");
+  });
+
+  it("replaces the internal tool-evidence confirmation template after web tools", () => {
+    const state = {
+      originalPromptText: "查一下深圳 2026 年社保缴费政策有没有最新变化，给来源和不确定点",
+      successfulToolCount: 1,
+      lastSuccessfulTools: [{
+        name: "web_search",
+        outputPreview: "来源：深圳市人力资源和社会保障局\n摘要：2026 年社保缴费基数口径以官方公告为准。",
+      }],
+    };
+
+    const selected = selectToolEvidenceVisibleText(
+      state,
+      "针对“查一下深圳 2026 年社保缴费政策有没有最新变化，给来源和不确定点”，我能从工具证据中确认：- 北京2023年的最低工资标准为2320元。",
+    );
+
+    expect(selected).toContain("这轮检索拿到的可核验线索有限");
+    expect(selected).toContain("深圳市人力资源和社会保障局");
+    expect(selected).not.toContain("工具证据中确认");
+    expect(selected).not.toContain("北京2023");
   });
 });

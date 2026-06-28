@@ -84,6 +84,72 @@ describe("tool-use behavior resolver", () => {
     expect(decision.toolName).toBeUndefined();
   });
 
+  it("keeps personal budget calculations local and tool-free", () => {
+    const prompt = "我月收入 18000，房租 5200，固定支出 3800，想 8 个月攒 60000，帮我算每月该存多少并给建议";
+    const decision = resolveInitialToolUseBehavior(prompt, {
+      modelInfo: { isBrain: true },
+    });
+
+    expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);
+    expect(decision.disableTools).toBe(true);
+    expect(decision.toolName).toBeUndefined();
+    expect(decision.effectivePromptText).toContain("每月需要存：7500");
+    expect(decision.effectivePromptText).toContain("完成储蓄后每月可支配：1500");
+    expect(shouldDisableToolsForTurn(prompt)).toBe(true);
+  });
+
+  it("keeps non-realtime medical advice prompts tool-free", () => {
+    const prompt = "体检报告里肝功能有几项偏高，我应该带着哪些问题去问医生？不要替医生诊断";
+    const decision = resolveInitialToolUseBehavior(prompt, {
+      modelInfo: { isBrain: true },
+    });
+
+    expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);
+    expect(decision.disableTools).toBe(true);
+    expect(decision.toolName).toBeUndefined();
+    expect(shouldDisableToolsForTurn(prompt)).toBe(true);
+  });
+
+  it("keeps ordinary planning and drafting prompts tool-free unless a file is requested", () => {
+    for (const prompt of [
+      "考研复习还剩 120 天，帮我做一个三阶段排期",
+      "第一次去杭州三天两晚，帮我安排一个不赶路的行程",
+      "为一个 AI Agent 前端工程师写 JD，要求务实不要堆黑话",
+      "给客户写一封道歉邮件，说明延期原因并给补救计划",
+      "我拿到 offer 但薪资低于预期，帮我写一段谈判话术",
+    ]) {
+      const decision = resolveInitialToolUseBehavior(prompt, {
+        modelInfo: { isBrain: true },
+      });
+
+      expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);
+      expect(decision.disableTools).toBe(true);
+      expect(decision.toolName).toBeUndefined();
+      expect(shouldDisableToolsForTurn(prompt)).toBe(true);
+    }
+  });
+
+  it("keeps operational optimization prompts tool-free", () => {
+    const prompt = "医院门诊排队太长，如何从分诊、预约、叫号三个环节优化？";
+    const decision = resolveInitialToolUseBehavior(prompt, {
+      modelInfo: { isBrain: true },
+    });
+
+    expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);
+    expect(decision.disableTools).toBe(true);
+    expect(decision.toolName).toBeUndefined();
+    expect(shouldDisableToolsForTurn(prompt)).toBe(true);
+  });
+
+  it("keeps tools available when the user explicitly asks to save a plan file", () => {
+    const prompt = "考研复习还剩 120 天，帮我做一个三阶段排期并保存成 markdown 文件到桌面";
+    const decision = resolveInitialToolUseBehavior(prompt, {
+      modelInfo: { isBrain: true },
+    });
+
+    expect(decision.disableTools).toBe(false);
+  });
+
   it("disables tools for conceptual product and workflow reasoning prompts", () => {
     for (const prompt of [
       "如果复核模型和主模型结论冲突，产品上怎么展示比较好？",

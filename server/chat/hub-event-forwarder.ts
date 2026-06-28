@@ -107,6 +107,14 @@ function shouldGuardShortVisibleAfterThinking(ss: unknown, hasToolEvidence: bool
   return countThinkingDeltaChars(ss) >= SHORT_VISIBLE_AFTER_THINKING_MIN_THINKING_CHARS;
 }
 
+function hasToolEvidenceState(ss: any): boolean {
+  return !!(ss?.hasToolCall || ss?.hasPrefetchToolCall || Number(ss?.successfulToolCount || 0) > 0);
+}
+
+function isRecoverableModelCompletionError(message: unknown): boolean {
+  return /(?:LLM request timed out|timed out|timeout|aborted|AbortError|fetch failed|socket hang up|ECONNRESET|ETIMEDOUT)/iu.test(String(message || ""));
+}
+
 function buildSportsDirectToolAnswer(ss: unknown, toolName: unknown, event: unknown): string {
   if (!isSportsScoreToolName(toolName)) return "";
   const eventRecord = recordOf(event);
@@ -230,8 +238,21 @@ export function createHubEventForwarder({
       } else if (sub === "toolcall_end") {
         maybeRecoverArtifactFromMessageUpdate(sessionPath, ss, event, "toolcall_end");
       } else if (sub === "error") {
+        const message = event.assistantMessageEvent.error || "Unknown error";
+        if (!ss.hasOutput && hasToolEvidenceState(ss) && isRecoverableModelCompletionError(message)) {
+          const fallbackText = String(ss.realtimeToolFallbackText || "").trim() || buildToolCompletionSummary(ss);
+          if (fallbackText && closeStreamWithVisibleFallback(
+            sessionPath,
+            ss,
+            fallbackText,
+            "tool_evidence_model_error_fallback",
+            { trustedFallback: true },
+          )) {
+            return;
+          }
+        }
         ss.hasError = true;
-        if (isActive) broadcast({ type: "error", message: event.assistantMessageEvent.error || "Unknown error" });
+        if (isActive) broadcast({ type: "error", message });
         closeStreamAfterError(sessionPath, ss);
       }
     } else if (event.type === "tool_execution_start") {
@@ -598,7 +619,7 @@ export function createHubEventForwarder({
         debugLog()?.log("ws", `[TURN-END v4] defer turn_end (tool still in flight count=${ss.activeToolCallCount || 0}, recovered=${!!ss.recoveredBashInFlight}) · hasOutput=${ss.hasOutput} · ${sessionPath}`);
         return;
       }
-      const hasToolEvidence = !!(ss.hasToolCall || ss.hasPrefetchToolCall || Number(ss.successfulToolCount || 0) > 0);
+      const hasToolEvidence = hasToolEvidenceState(ss);
       if (hasToolEvidence && !ss.hasError && !ss._turnEndDeferred) {
         ss._turnEndDeferred = true;
         scheduleToolFinalizationFallback(sessionPath, ss);

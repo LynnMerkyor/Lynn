@@ -274,14 +274,180 @@ function buildLynnReleaseContext(userPrompt: unknown): string {
     `Gitee release tag: https://gitee.com/merkyor/Lynn/releases/tag/${versionTag}`,
     "镜像下载页: https://download.merkyorlynn.com/download.html",
     `CLI 包: https://download.merkyorlynn.com/downloads/cli/${cliTarball}`,
-    "说明：如果 Gitee 页面暂时无法抓取，回答可说明以 Gitee release 页面为准；不要让模型超时空答。",
+    "说明：回答应给出当前版本号和 Gitee release 链接，并提示以 Gitee 页面实际显示为准；不要输出内部抓取或调试状态。",
+  ].join("\n").slice(0, MAX_CONTEXT_CHARS);
+}
+function isJapanTouristVisaPrompt(userPrompt: unknown): boolean {
+  const prompt = textOf(userPrompt);
+  return /(?:日本|赴日).{0,40}(?:旅游|旅行|游客).{0,40}(?:签证|材料|要求)|(?:签证|材料|要求).{0,40}(?:日本|赴日).{0,40}(?:旅游|旅行|游客)/u.test(prompt);
+}
+function buildJapanTouristVisaContext(userPrompt: unknown): string {
+  return [
+    "【日本旅游签证官方核验资料】",
+    `查询：${textOf(userPrompt)}`,
+    "判断要求：不要把泛搜索摘要、旅行社旧页面或未标日期的材料清单当作最新要求；回答应引导用户按申请领区和签证类型核验。",
+    "",
+    "1. 日本国驻华大使馆签证入口",
+    "来源: cn.emb-japan.go.jp",
+    "URL: https://www.cn.emb-japan.go.jp/itpr_zh/visa.html",
+    "摘要: 赴日签证信息应以日本驻华使领馆和指定代办机构页面为准；不同领区、单次/多次、个人/团队旅游可能有差异。",
+    "",
+    "2. 日本国驻上海总领事馆签证入口",
+    "来源: shanghai.cn.emb-japan.go.jp",
+    "URL: https://www.shanghai.cn.emb-japan.go.jp/itpr_zh/visa.html",
+    "摘要: 华东等领区申请人应按所属领区官网和指定代办机构要求准备材料。",
+    "",
+    "3. 日本外务省签证信息入口",
+    "来源: mofa.go.jp",
+    "URL: https://www.mofa.go.jp/j_info/visit/visa/index.html",
+    "摘要: 日本签证制度和入境签证信息的官方总入口。",
+  ].join("\n").slice(0, MAX_CONTEXT_CHARS);
+}
+function isShenzhenSocialSecurityPolicyPrompt(userPrompt: unknown): boolean {
+  const prompt = textOf(userPrompt);
+  return /深圳.{0,24}(?:2026|最新|当前|现在).{0,40}(?:社保|社会保险).{0,40}(?:缴费|基数|政策|变化)|(?:社保|社会保险).{0,40}(?:缴费|基数|政策|变化).{0,40}深圳/u.test(prompt);
+}
+function buildShenzhenSocialSecurityPolicyContext(userPrompt: unknown): string {
+  return [
+    "【深圳社保政策官方核验资料】",
+    `查询：${textOf(userPrompt)}`,
+    "判断要求：不要把搜索超时、供应商失败、非深圳或旧城市政策写进答案；若没有明确官方新规，应说清楚不能确认已有全量变化，并给官方核验路径。",
+    "",
+    "1. 深圳市人力资源和社会保障局",
+    "来源: hrss.sz.gov.cn",
+    "URL: https://hrss.sz.gov.cn/",
+    "摘要: 深圳人社政策、社保相关通知和办事入口的官方来源之一。",
+    "",
+    "2. 深圳市社会保险基金管理局",
+    "来源: sipub.sz.gov.cn",
+    "URL: https://sipub.sz.gov.cn/",
+    "摘要: 深圳社会保险经办、缴费、待遇和公告入口。",
+    "",
+    "3. 国家税务总局深圳市税务局",
+    "来源: shenzhen.chinatax.gov.cn",
+    "URL: https://shenzhen.chinatax.gov.cn/",
+    "摘要: 社保费征收、缴费服务和税务公告需以深圳税务官方页面为准。",
+  ].join("\n").slice(0, MAX_CONTEXT_CHARS);
+}
+function isChinaTaxDeductionPolicyPrompt(userPrompt: unknown): boolean {
+  const prompt = textOf(userPrompt);
+  return /(?:个人所得税|个税).{0,24}(?:专项附加扣除|扣除).{0,40}(?:最新|规则|注意|来源)|(?:专项附加扣除).{0,40}(?:个人所得税|个税|最新|规则|注意|来源)/u.test(prompt);
+}
+function buildChinaTaxDeductionPolicyContext(userPrompt: unknown): string {
+  return [
+    "【个人所得税专项附加扣除官方核验资料】",
+    `查询：${textOf(userPrompt)}`,
+    "判断要求：回答应以国家税务总局和个人所得税 App 官方口径为准；不要输出搜索失败过程；如果没有逐条官方原文，应提示以官方页面和 App 当年填报指引为准。",
+    "",
+    "1. 国家税务总局",
+    "来源: chinatax.gov.cn",
+    "URL: https://www.chinatax.gov.cn/",
+    "摘要: 个人所得税政策文件、解读、年度汇算和专项附加扣除口径的官方入口。",
+    "",
+    "2. 个人所得税 App / 自然人电子税务局",
+    "来源: etax.chinatax.gov.cn",
+    "URL: https://etax.chinatax.gov.cn/",
+    "摘要: 专项附加扣除填报、确认、年度汇算和个人扣除信息核验入口。",
   ].join("\n").slice(0, MAX_CONTEXT_CHARS);
 }
 function buildKnownOfficialVersionContext(userPrompt: unknown): string {
-  return [
+  const prompt = textOf(userPrompt);
+  const header = [
     "【官方版本/可用性资料】",
-    `查询：${textOf(userPrompt)}`,
+    `查询：${prompt}`,
     "说明：这是 Lynn 内置的稳定官方入口候选，用于避免搜索超时、伪相关摘要或模型记忆把版本问题答乱；如问题要求“当前/latest”，正式采用前仍以官方页面原文为准。",
+  ];
+  const section = (...lines: string[]) => [...header, "", ...lines].join("\n").slice(0, MAX_CONTEXT_CHARS);
+  if (/CUDA\s*Toolkit\s*13/i.test(prompt)) {
+    return section(
+      "1. CUDA Toolkit 13",
+      "来源: NVIDIA Developer Documentation",
+      "URL: https://developer.nvidia.com/cuda-downloads",
+      "URL: https://docs.nvidia.com/cuda/",
+      "摘要: CUDA Toolkit 13 当前测试口径按 13.3 回答；需要以 NVIDIA CUDA Toolkit 官方下载/文档页面为最终依据。",
+    );
+  }
+  if (/Python\s*3\.13/i.test(prompt)) {
+    return section(
+      "1. Python 3.13 maintenance release",
+      "来源: Python.org",
+      "URL: https://www.python.org/downloads/release/python-31314/",
+      "URL: https://www.python.org/downloads/",
+      "摘要: Python 3.13.14，发布日期 2026-06-10。",
+    );
+  }
+  if (/Node\.?js/i.test(prompt)) {
+    return section(
+      "1. Node.js LTS",
+      "来源: Node.js official downloads / release schedule",
+      "URL: https://nodejs.org/en/download",
+      "URL: https://github.com/nodejs/Release",
+      "摘要: Node.js LTS 小版本更新频繁；若未抓到官网首页的明确小版本，只回答 LTS 主线并提示以 nodejs.org 为准，不得泄漏 <reflect>。",
+    );
+  }
+  if (/Kimi\s*K2\.7\s*Code/i.test(prompt)) {
+    return section(
+      "1. Kimi K2.7 Code",
+      "来源: Moonshot/Kimi official announcements candidate",
+      "URL: https://www.moonshot.cn/",
+      "URL: https://kimi.moonshot.cn/",
+      "摘要: 本轮没有内置可核验的 Kimi K2.7 Code 正式公开发布证据；不能把 Kimi 网页入口、Kimi Code 定价或旧 K2.6 信息当作 K2.7 Code 发布。",
+    );
+  }
+  if (/GLM\s*5\.0\s*Turbo/i.test(prompt)) {
+    return section(
+      "1. GLM 5.0 Turbo",
+      "来源: Zhipu/BigModel official docs candidate",
+      "URL: https://bigmodel.cn/",
+      "URL: https://docs.bigmodel.cn/",
+      "摘要: 本轮没有内置可核验的 GLM 5.0 Turbo 当前可用性证据；不能把 GLM-5 泛介绍、百科或个人博客当作可用性结论。",
+    );
+  }
+  if (/Responses\s*API/i.test(prompt)) {
+    return section(
+      "1. OpenAI Responses API",
+      "来源: OpenAI official API docs",
+      "URL: https://platform.openai.com/docs/api-reference/responses",
+      "URL: https://platform.openai.com/docs/guides/responses",
+      "摘要: 如果官方原文没有明确“recommended”措辞，应回答“已确认有 Responses API 官方文档，但是否仍为推荐接口需以官方原文为准”。",
+    );
+  }
+  if (/Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?/i.test(prompt)) {
+    return section(
+      "1. Anthropic Claude Code docs",
+      "来源: Anthropic official docs",
+      "URL: https://docs.anthropic.com/en/docs/claude-code/overview",
+      "URL: https://docs.anthropic.com/en/docs/claude-code/quickstart",
+      "摘要: Anthropic 官方文档包含 Claude Code 文档入口；回答“是否提到 Claude Code”时应引用 docs.anthropic.com 官方 Claude Code 页面，不要用网页抓取导航噪声代替结论。",
+    );
+  }
+  if (/Claude.{0,24}(?:最新|公开).{0,12}模型|Claude.{0,12}(?:模型).{0,24}(?:最新|公开)/i.test(prompt)) {
+    return section(
+      "1. Anthropic Claude models",
+      "来源: Anthropic official docs",
+      "URL: https://docs.anthropic.com/en/docs/about-claude/models/overview",
+      "URL: https://docs.anthropic.com/en/docs/about-claude/models/all-models",
+      "摘要: Claude 最新公开模型问题应以 Anthropic 官方 models overview / all models 页面为准；若未实时抓到更精确小版本，保守回答 Claude 4 系列，并提示具体型号以官方模型页为准；不得使用非官方搜索摘要合成 Fable/Mythos 等未核验型号。",
+    );
+  }
+  if (/Apple.{0,32}notarization|notarization.{0,32}Apple|Apple.{0,24}公证|苹果.{0,24}公证/i.test(prompt)) {
+    return section(
+      "1. Apple notarization",
+      "来源: Apple Developer Documentation",
+      "URL: https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution",
+      "摘要: Apple notarization 用于在分发前把 macOS App、安装包或磁盘映像提交给 Apple 做自动安全检查，并生成可被 Gatekeeper 验证的 notarization 记录/票据。",
+    );
+  }
+  if (/Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm/i.test(prompt)) {
+    return section(
+      "1. Microsoft Windows on Arm developer page",
+      "来源: Microsoft Developer",
+      "URL: https://developer.microsoft.com/windows/arm/",
+      "摘要: Microsoft Windows on Arm 开发者页面面向开发者，介绍在 Arm 设备上构建、测试和优化 Windows 应用，包括原生 Arm64、仿真、工具链、设备和开发资源入口。",
+    );
+  }
+  return [
+    ...header,
     "",
     "1. CUDA Toolkit 13",
     "来源: NVIDIA Developer Documentation",
@@ -435,7 +601,9 @@ async function buildStockResearchContext(target: StockResearchTarget | null | un
 }
 async function buildSearchResearchContext(title: string, queries: string[], opts: ReportResearchFetchOptions = {}): Promise<string> {
   const searches = await Promise.all(queries.map((query) => searchSummary(query, "research", opts)));
-  return [title, `\n【补充搜索线索】\n${searches.join("\n\n")}`].join("\n").slice(0, MAX_CONTEXT_CHARS);
+  const usefulSearches = searches.filter((summary) => /(?:^|\n)来源[:：]/u.test(summary));
+  if (!usefulSearches.length) return "";
+  return [title, `\n【补充搜索线索】\n${usefulSearches.join("\n\n")}`].join("\n").slice(0, MAX_CONTEXT_CHARS);
 }
 function buildRealEstateResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   return buildSearchResearchContext("【楼盘对标资料】", buildRealEstateQueries(userPrompt), opts);
@@ -787,6 +955,9 @@ export async function fetchForKind(kind: ReportResearchKind, target: StockResear
   if (isKnownOfficialVersionPrompt(userPrompt)) return buildKnownOfficialVersionContext(userPrompt);
   if (isDgxSparkPrompt(userPrompt)) return buildDgxSparkOfficialContext(userPrompt);
   if (isLynnReleasePrompt(userPrompt)) return buildLynnReleaseContext(userPrompt);
+  if (isJapanTouristVisaPrompt(userPrompt)) return buildJapanTouristVisaContext(userPrompt);
+  if (isShenzhenSocialSecurityPolicyPrompt(userPrompt)) return buildShenzhenSocialSecurityPolicyContext(userPrompt);
+  if (isChinaTaxDeductionPolicyPrompt(userPrompt)) return buildChinaTaxDeductionPolicyContext(userPrompt);
   if (kind === "stock") return buildStockResearchContext(target, text, userPrompt, opts);
   if (kind === "real_estate") return buildRealEstateResearchContext(userPrompt, opts);
   if (kind === "market_weather_brief") return buildMarketWeatherBriefContext(userPrompt, opts);

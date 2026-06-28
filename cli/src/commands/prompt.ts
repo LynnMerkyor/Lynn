@@ -98,8 +98,11 @@ function shouldUseCliDirectResearchAnswer(kind: string, promptText: string, dire
   const answer = directAnswer.trim();
   if (!answer) return false;
   if (kind === "public_data"
-    && /(?:DGX\s*Spark|RTX\s*Spark|download\.merkyorlynn\.com|Lynn\s+v?0\.85\.1|Gitee.*Lynn|CUDA\s*Toolkit\s*13|Python\s*3\.13|Node\.?js|Kimi\s*K2\.7\s*Code|GLM\s*5\.0\s*Turbo|Responses\s*API|Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?|Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm)/i.test(promptText)) {
+    && /(?:DGX\s*Spark|RTX\s*Spark|download\.merkyorlynn\.com|Lynn\s+v?\d+\.\d+\.\d+|Gitee.*Lynn|CUDA\s*Toolkit\s*13|Python\s*3\.13|Node\.?js|Kimi\s*K2\.7\s*Code|GLM\s*5\.0\s*Turbo|Responses\s*API|Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?|Claude.{0,24}(?:最新|公开).{0,12}模型|Claude.{0,12}(?:模型).{0,24}(?:最新|公开)|Apple.{0,32}notarization|notarization.{0,32}Apple|Apple.{0,24}公证|苹果.{0,24}公证|Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm|(?:日本|赴日).{0,40}(?:旅游|旅行|游客).{0,40}(?:签证|材料|要求)|(?:签证|材料|要求).{0,40}(?:日本|赴日).{0,40}(?:旅游|旅行|游客)|深圳.{0,24}(?:2026|最新|当前|现在).{0,40}(?:社保|社会保险).{0,40}(?:缴费|基数|政策|变化)|(?:个人所得税|个税).{0,24}(?:专项附加扣除|扣除).{0,40}(?:最新|规则|注意|来源)|(?:专项附加扣除).{0,40}(?:个人所得税|个税|最新|规则|注意|来源))/i.test(promptText)) {
     return true;
+  }
+  if (kind === "public_data") {
+    return /私董会/.test(promptText) && /(?:人数|收费|费用|会费|年费|入会费|价格|大概多少|多少)/.test(promptText);
   }
   if (/(?:深度|完整|全面|系统(?:性)?|报告|调研|研究|分析|对比|比较|引用|来源列表|research|report|analysis|compare)/i.test(promptText)) {
     return false;

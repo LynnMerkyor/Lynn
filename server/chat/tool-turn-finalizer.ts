@@ -41,13 +41,13 @@ export function buildToolCompletionSummary(ss: any): string {
   if (evidenceFallback) {
     if (failCount === 0) return evidenceFallback;
     const failDetail = failedTools.length ? `(${failedTools.slice(0, 3).join("、")})` : "";
-    return `${evidenceFallback}\n\n另有 ${failCount} 个后续工具失败${failDetail}；上方结论仅采用已成功返回的工具证据。`;
+    return `${evidenceFallback}\n\n另有 ${failCount} 个后续操作失败${failDetail}；上方内容只采用已成功完成的结果。`;
   }
   const genericEvidenceFallback = buildGenericToolEvidenceFallbackSummary(ss);
   if (genericEvidenceFallback) {
     if (failCount === 0) return genericEvidenceFallback;
     const failDetail = failedTools.length ? `(${failedTools.slice(0, 3).join("、")})` : "";
-    return `${genericEvidenceFallback}\n\n另有 ${failCount} 个后续工具失败${failDetail}；上方结论仅采用已成功返回的操作结果。`;
+    return `${genericEvidenceFallback}\n\n另有 ${failCount} 个后续操作失败${failDetail}；上方内容只采用已成功完成的结果。`;
   }
   // 措辞必须诚实:工具跑完≠任务完成 —— 模型没给总结时,明说"没有总结回复",
   // 不写"✅ 全部成功"那种读起来像任务完成的句式(2026-06-10 用户纠偏:"自报完成")。
@@ -65,6 +65,7 @@ const REALTIME_EVIDENCE_TOOL_NAMES = new Set([
   "webfetch",
   "sports_score",
   "sportsscore",
+  "parallel_research",
   "live_news",
   "livenews",
   "weather",
@@ -86,6 +87,7 @@ function displayToolName(name: string): string {
     case "webfetch": return "网页抓取";
     case "sports_score": return "体育比分";
     case "sportsscore": return "体育比分";
+    case "parallel_research": return "并行检索";
     case "live_news": return "实时新闻";
     case "livenews": return "实时新闻";
     case "weather": return "天气";
@@ -118,12 +120,30 @@ function buildRealtimeToolFailureFallbackSummary(ss: any, failedTools: string[],
   const readable = Array.from(new Set(names.map(displayToolName))).slice(0, 3).join("、") || "实时数据";
   return [
     `${readable}数据源本轮暂时不可用，没能形成可核验结论。`,
-    "我不会把旧资料或泛搜索摘要冒充实时结果；请稍后重试，或改用官方/专门数据源复核。",
+    "下一步建议：稍后重试，或直接指定官方页面；涉及政策、医疗、法律、旅行等高风险问题时，优先核对发布日期、适用地区、办理对象和执行口径。",
+    "我不会把旧资料或泛搜索摘要冒充实时结果。",
   ].join("\n");
 }
 
 function compactEvidencePreview(value: unknown): string {
-  return String(value || "")
+  const raw = String(value || "");
+  const lineCleaned = raw
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^【[^】]*(?:研究资料|补充搜索线索|工具资料|实时工具资料|系统已完成)[^】]*】$/u.test(line))
+    .filter((line) => !/^查询[:：]/u.test(line))
+    .filter((line) => !/^结果[:：]\s*搜索失败或超时/u.test(line))
+    .filter((line) => !/(?:抓取出错|抓取失败|HTTP\s+\d{3}|Forbidden|fetch failed|request timeout|aborted)/iu.test(line))
+    .join("\n");
+  return lineCleaned
+    .replace(/【[^】]*(?:研究资料|补充搜索线索|工具资料|实时工具资料|系统已完成)[^】]*】/gu, " ")
+    .replace(/查询[:：][\s\S]*?(?=(?:\s+查询[:：]|\s+来源[:：]|\s+摘要[:：]|\n|$))/gu, " ")
+    .replace(/结果[:：]\s*搜索失败或超时（[^）]*）/gu, " ")
+    .replace(/(?:页面|要点)[:：]\s*抓取出错[:：]?.{0,160}(?:Forbidden|HTTP\s+\d{3}|抓取失败)?/giu, " ")
+    .replace(/(?:抓取出错|抓取失败|HTTP\s+\d{3}|Forbidden|fetch failed|request timeout|aborted)/giu, " ")
+    .replace(/(?:最新 资料 数据 来源|官方 公告 报告 文档|分析 观点 对比 风险)/gu, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -151,6 +171,20 @@ function looksLikeToolEvidenceDismissal(value: unknown): boolean {
     || /(?:网页导航|抓取噪声|搜索摘要).{0,80}(?:当成|作为|冒充).{0,20}(?:结论|事实|答案)/iu.test(text);
 }
 
+function looksLikeFetchErrorLeak(value: unknown): boolean {
+  return /(?:页面|要点)[:：]\s*抓取出错|(?:抓取出错|抓取失败|HTTP\s+\d{3}|Forbidden|fetch failed|request timeout|aborted)/iu.test(String(value || ""));
+}
+
+function leaksInternalResearchScaffolding(value: unknown): boolean {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return false;
+  return /【[^】]*(?:研究资料|补充搜索线索)[^】]*】/u.test(text)
+    || /查询[:：].{0,180}(?:最新 资料 数据 来源|官方 公告 报告 文档|分析 观点 对比 风险)/u.test(text)
+    || /针对[“"]?【[^】]*(?:研究资料|补充搜索线索)[^】]*】/u.test(text)
+    || /针对[“"][^”"]{1,180}[”"]，?我能从工具证据中确认/u.test(text)
+    || /工具证据中确认/u.test(text);
+}
+
 function firstUsefulSentence(value: unknown): string {
   const text = String(value || "")
     .replace(/\s+/g, " ")
@@ -166,6 +200,7 @@ export function buildDirectWebFetchEvidenceAnswer(ss: any): string {
   const tools = Array.isArray(ss?.lastSuccessfulTools) ? ss.lastSuccessfulTools : [];
   const tool = [...tools].reverse().find((item: any) => isWebFetchToolName(item?.name) && String(item?.outputPreview || "").trim());
   if (!tool) return "";
+  if (/(?:抓取出错|抓取失败|HTTP\s+\d{3}|Forbidden|fetch failed|request timeout|aborted)/iu.test(String(tool.outputPreview || ""))) return "";
 
   const lines = splitEvidenceLines(tool.outputPreview);
   const sourceLine = lines.find((line) => /^来源[:：]/.test(line)) || "";
@@ -267,7 +302,7 @@ function lacksWeatherAnswerDespiteEvidence(ss: any, text: unknown): boolean {
 export function selectToolEvidenceVisibleText(ss: any, candidate: unknown): string {
   const text = String(candidate || "").trim();
   if (!text) return buildToolCompletionSummary(ss);
-  if (looksLikeToolEvidenceDismissal(text)) {
+  if (looksLikeToolEvidenceDismissal(text) || looksLikeFetchErrorLeak(text) || leaksInternalResearchScaffolding(text)) {
     return buildDirectWebFetchEvidenceAnswer(ss)
       || buildToolCompletionSummary(ss)
       || "";
@@ -285,6 +320,7 @@ export function selectToolEvidenceVisibleText(ss: any, candidate: unknown): stri
 
 export function buildRealtimeEvidenceFallbackSummary(ss: any): string {
   const tools = Array.isArray(ss?.lastSuccessfulTools) ? ss.lastSuccessfulTools : [];
+  const realtimeToolCount = tools.filter((tool: any) => REALTIME_EVIDENCE_TOOL_NAMES.has(String(tool?.name || ""))).length;
   const evidence = tools
     .filter((tool: any) => REALTIME_EVIDENCE_TOOL_NAMES.has(String(tool?.name || "")))
     .map((tool: any) => ({
@@ -294,13 +330,22 @@ export function buildRealtimeEvidenceFallbackSummary(ss: any): string {
     .filter((tool: any) => tool.name && tool.preview)
     .slice(-4);
 
-  if (!evidence.length) return "";
+  if (!evidence.length) {
+    if (realtimeToolCount > 0) {
+      return [
+        "这轮检索没有拿到可核验内容，暂时无法确认最新口径。",
+        "下一步建议：稍后重新查询，或直接指定官方页面；核对时优先看发布日期、适用地区、办理对象和执行口径。",
+        "我不会把搜索词、空摘要或超时信息当成来源。",
+      ].join("\n");
+    }
+    return "";
+  }
   const lines = evidence.map((tool: any) => `- ${displayToolName(tool.name)}: ${tool.preview}`);
   return [
-    "根据本轮已执行工具返回的证据，当前能确认：",
+    "这轮检索拿到的可核验线索有限，先按可见内容收口：",
     ...lines,
     "",
-    "以上只包含工具结果中可见的事实；工具未返回或来源未覆盖的部分，不能继续补推。",
+    "结论边界：还没有足够来源覆盖的部分，我不会继续猜；可以指定官方链接或稍后重新查询。",
   ].join("\n");
 }
 
@@ -316,7 +361,7 @@ function buildGenericToolEvidenceFallbackSummary(ss: any): string {
       ].filter(Boolean);
       return { name, preview: bits.join(" · ") };
     })
-    .filter((tool: any) => tool.name || tool.preview)
+    .filter((tool: any) => tool.preview)
     .slice(-6);
 
   if (!evidence.length) return "";
@@ -325,10 +370,10 @@ function buildGenericToolEvidenceFallbackSummary(ss: any): string {
     return tool.preview ? `- ${label}: ${tool.preview}` : `- ${label}: 已完成`;
   });
   return [
-    "根据本轮已执行操作返回的可见结果，当前能确认：",
+    "这轮操作已有可见结果，先按结果收口：",
     ...lines,
     "",
-    "以上只包含操作结果中可见的事实；未覆盖的部分不能继续补推。",
+    "未覆盖的部分我不会继续猜。",
   ].join("\n");
 }
 
@@ -465,6 +510,12 @@ export function createToolTurnFinalizer({
     return !!(ss?.hasToolCall || ss?.hasPrefetchToolCall || Number(ss?.successfulToolCount || 0) > 0);
   }
 
+  function selectPersistedFinalText(ss: any, finalText: any) {
+    const text = String(finalText || "");
+    if (!text || !hasToolEvidence(ss)) return text;
+    return selectToolEvidenceVisibleText(ss, text);
+  }
+
   function buildEmptyTurnFallbackText(ss: any, reason: any = "") {
     if (!ss || ss.hasOutput) return "";
     const toolFallback = String(ss.realtimeToolFallbackText || "").trim();
@@ -501,7 +552,7 @@ export function createToolTurnFinalizer({
       ? extractLatestAssistantVisibleText(session, sessionPath)
       : "";
     if (opts.requirePersistedText && !ss.hasOutput && !finalText) return false;
-    return closeStreamWithVisibleFallback(sessionPath, ss, finalText, reason, { trustedFallback: true });
+    return closeStreamWithVisibleFallback(sessionPath, ss, selectPersistedFinalText(ss, finalText), reason, { trustedFallback: true });
   }
 
   function scheduleReturnedTurnFinalizationFallback(sessionPath: any, ss: any, reason: any) {
@@ -549,7 +600,7 @@ export function createToolTurnFinalizer({
         ss.persistedAssistantTextBaseline || 0,
       );
       if (finalText) {
-        closeStreamWithVisibleFallback(sessionPath, ss, finalText, "persisted_final_answer_poll", { trustedFallback: true });
+        closeStreamWithVisibleFallback(sessionPath, ss, selectPersistedFinalText(ss, finalText), "persisted_final_answer_poll", { trustedFallback: true });
       }
     }, 1000);
     if (ss.persistedFinalAnswerPollTimer.unref) ss.persistedFinalAnswerPollTimer.unref();
@@ -684,7 +735,7 @@ export function createToolTurnFinalizer({
       const finalText = extractLatestAssistantVisibleText(engine.getSessionByPath(sessionPath), sessionPath);
       if (isMeaningfulPersistedFinalText(finalText, ss)) {
         if (hasToolExecutionInFlight(ss)) return;
-        closeStreamWithVisibleFallback(sessionPath, ss, finalText, "tool_authorization_persisted_final");
+        closeStreamWithVisibleFallback(sessionPath, ss, selectPersistedFinalText(ss, finalText), "tool_authorization_persisted_final");
       }
     }, 1000);
     if (ss.toolAuthorizationPollTimer.unref) ss.toolAuthorizationPollTimer.unref();
@@ -704,7 +755,7 @@ export function createToolTurnFinalizer({
       closeStreamWithVisibleFallback(
         sessionPath,
         ss,
-        fallbackText,
+        meaningfulFinalText ? selectPersistedFinalText(ss, fallbackText) : fallbackText,
         "tool_authorization_timeout",
         meaningfulFinalText ? {} : { trustedFallback: true },
       );

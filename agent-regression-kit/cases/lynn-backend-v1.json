@@ -276,6 +276,85 @@
       ]
     },
     {
+      "id": "realtime.kind-public-policy-tax",
+      "title": "Current tax-policy requests are recognized as public-data evidence tasks",
+      "level": "release",
+      "tags": ["route", "public-data", "government", "daily-scenario"],
+      "operation": "realtime_kind",
+      "input": {
+        "prompt": "个人所得税专项附加扣除最新规则有哪些需要注意？请查来源"
+      },
+      "assertions": [
+        { "path": "kind", "equals": "public_data" }
+      ]
+    },
+    {
+      "id": "realtime.kind-travel-visa",
+      "title": "Current travel visa requirements are recognized as public-data evidence tasks",
+      "level": "release",
+      "tags": ["route", "public-data", "travel", "daily-scenario"],
+      "operation": "realtime_kind",
+      "input": {
+        "prompt": "查一下中国游客去日本旅行签证最新材料要求，列来源和不确定点"
+      },
+      "assertions": [
+        { "path": "kind", "equals": "public_data" }
+      ]
+    },
+    {
+      "id": "realtime.kind-agriculture-weather-price",
+      "title": "Agriculture weather plus commodity-price checks enter evidence-backed public data",
+      "level": "release",
+      "tags": ["route", "public-data", "industry", "daily-scenario"],
+      "operation": "realtime_kind",
+      "input": {
+        "prompt": "种植户要看明天降雨和近期玉米价格，帮我查证后给风险提示"
+      },
+      "assertions": [
+        { "path": "kind", "equals": "public_data" }
+      ]
+    },
+    {
+      "id": "tool-behavior-public-policy-prefetch",
+      "title": "Current public-policy requests prefetch web evidence before synthesis",
+      "level": "release",
+      "tags": ["tool-routing", "prefetch", "public-data", "daily-scenario"],
+      "operation": "tool_use_behavior",
+      "input": {
+        "prompt": "个人所得税专项附加扣除最新规则有哪些需要注意？请查来源",
+        "options": {
+          "modelInfo": { "isBrain": true }
+        }
+      },
+      "assertions": [
+        { "path": "behavior", "equals": "prefetch_then_run_or_stop" },
+        { "path": "reason", "equals": "report_context_prefetch" },
+        { "path": "reportKind", "equals": "public_data" },
+        { "path": "toolName", "equals": "web_search" }
+      ]
+    },
+    {
+      "id": "tool-behavior.personal-budget-local-calculation",
+      "title": "Personal budget math uses local calculation context and disables tools",
+      "level": "release",
+      "tags": ["tool-routing", "budget", "daily-scenario"],
+      "operation": "tool_use_behavior",
+      "input": {
+        "prompt": "我月收入 18000，房租 5200，固定支出 3800，想 8 个月攒 60000，帮我算每月该存多少并给建议",
+        "options": {
+          "modelInfo": { "isBrain": true }
+        }
+      },
+      "assertions": [
+        { "path": "behavior", "equals": "run_llm_again" },
+        { "path": "reportKind", "equals": "" },
+        { "path": "disableTools", "equals": true },
+        { "path": "toolName", "absent": true },
+        { "path": "effectivePromptText", "contains": "每月需要存：7500" },
+        { "path": "effectivePromptText", "contains": "完成储蓄后每月可支配：1500" }
+      ]
+    },
+    {
       "id": "tool-storm.repeated-search",
       "title": "Repeated identical evidence searches are stopped",
       "level": "smoke",

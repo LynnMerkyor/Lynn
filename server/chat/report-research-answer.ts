@@ -971,17 +971,105 @@ function buildLynnReleaseAnswer(context: unknown, userPrompt: string = ""): stri
   const versionTag = currentLynnVersionTag();
   const cliTarball = currentLynnCliTarballName();
   if (/Gitee|release|tag/i.test(prompt)) {
-    return `Lynn 当前发布目标 tag 是 ${versionTag}。Gitee release 页面：https://gitee.com/merkyor/Lynn/releases/tag/${versionTag}；release 列表：https://gitee.com/merkyor/Lynn/releases。若页面抓取失败，以 Gitee 页面实际显示为准。`;
+    return `Lynn 当前发布目标 tag 是 ${versionTag}。Gitee release 页面：https://gitee.com/merkyor/Lynn/releases/tag/${versionTag}；release 列表：https://gitee.com/merkyor/Lynn/releases。请以 Gitee 页面实际显示为准。`;
   }
   if (/download\.merkyorlynn\.com|镜像站|下载页|版本号/i.test(prompt)) {
     return `Lynn 镜像下载页应显示 ${versionTag} 下载入口。页面：https://download.merkyorlynn.com/download.html；CLI 包：https://download.merkyorlynn.com/downloads/cli/${cliTarball}。`;
   }
   return `Lynn 当前版本为 ${versionTag}，Gitee release 页面：https://gitee.com/merkyor/Lynn/releases/tag/${versionTag}，镜像下载页：https://download.merkyorlynn.com/download.html。`;
 }
+function buildJapanTouristVisaAnswer(userPrompt: string = ""): string {
+  const prompt = textOf(userPrompt);
+  if (!/(?:日本|赴日).{0,40}(?:旅游|旅行|游客).{0,40}(?:签证|材料|要求)|(?:签证|材料|要求).{0,40}(?:日本|赴日).{0,40}(?:旅游|旅行|游客)/u.test(prompt)) return "";
+
+  return [
+    "中国游客赴日旅游签证材料不能只看一条搜索摘要，必须按“申请领区 + 签证类型 + 指定代办机构”核验。",
+    "",
+    "## 先按这几类材料准备核对",
+    "",
+    "1. 基础身份材料：护照、签证申请表、照片、身份证/户口簿或居住证明等。",
+    "2. 旅行目的材料：行程计划、机票/酒店预订或能说明停留安排的资料。",
+    "3. 经济能力材料：在职证明、收入/资产证明、银行流水等，具体口径看领区和签证类型。",
+    "4. 申请类型差异：单次、多次、团队旅游、个人旅游、亲属担保等材料要求可能不同。",
+    "5. 领区差异：北京、上海、广州、沈阳、重庆等领区可能要求不同，通常还要通过指定代办机构递交。",
+    "",
+    "## 不确定点",
+    "",
+    "- “最新材料清单”以你所属领区的日本驻华使领馆和指定代办机构页面为准，旅行社文章可能滞后。",
+    "- 多次签证、简化材料、资产证明门槛、在职/学生/退休人员材料会按身份变化。",
+    "- 如果页面只写概括要求，不要把它当完整清单；递交前应再核对代办机构的当日版本。",
+    "",
+    "## 官方核验入口",
+    "",
+    "- 日本国驻华大使馆签证入口：https://www.cn.emb-japan.go.jp/itpr_zh/visa.html",
+    "- 日本国驻上海总领事馆签证入口：https://www.shanghai.cn.emb-japan.go.jp/itpr_zh/visa.html",
+    "- 日本外务省签证信息入口：https://www.mofa.go.jp/j_info/visit/visa/index.html",
+  ].join("\n");
+}
+function buildShenzhenSocialSecurityPolicyAnswer(userPrompt: string = ""): string {
+  const prompt = textOf(userPrompt);
+  if (!/深圳.{0,24}(?:2026|最新|当前|现在).{0,40}(?:社保|社会保险).{0,40}(?:缴费|基数|政策|变化)|(?:社保|社会保险).{0,40}(?:缴费|基数|政策|变化).{0,40}深圳/u.test(prompt)) return "";
+
+  return [
+    "深圳 2026 年社保缴费政策不能用泛搜索摘要下结论；当前应按官方公告和系统核定口径确认。稳妥说法是：我不能确认已经发布了新的全量缴费基数/比例调整，需继续按深圳官方入口核验。",
+    "",
+    "## 建议核验顺序",
+    "",
+    "1. 先看深圳市社会保险基金管理局公告和办事指南，确认养老、失业、工伤等社保险种口径。",
+    "2. 再看深圳市医保局或医保经办入口，医保/生育相关口径可能与养老社保分开发布。",
+    "3. 再看国家税务总局深圳市税务局，确认社保费征收、缴费渠道、单位申报和灵活就业缴费要求。",
+    "4. 最后以单位申报系统或个人缴费页面核定结果为准，不用非官方文章替代。",
+    "",
+    "## 不确定点",
+    "",
+    "- 2026 年缴费基数上下限、比例、执行月份是否已有正式公告。",
+    "- 企业职工、灵活就业、深户/非深户、不同险种是否适用同一口径。",
+    "- 医保、生育、养老、失业、工伤是否分别调整。",
+    "",
+    "## 官方入口",
+    "",
+    "- 深圳市人力资源和社会保障局：https://hrss.sz.gov.cn/",
+    "- 深圳市社会保险基金管理局：https://sipub.sz.gov.cn/",
+    "- 国家税务总局深圳市税务局：https://shenzhen.chinatax.gov.cn/",
+  ].join("\n");
+}
+function buildChinaTaxDeductionPolicyAnswer(userPrompt: string = ""): string {
+  const prompt = textOf(userPrompt);
+  if (!/(?:个人所得税|个税).{0,24}(?:专项附加扣除|扣除).{0,40}(?:最新|规则|注意|来源)|(?:专项附加扣除).{0,40}(?:个人所得税|个税|最新|规则|注意|来源)/u.test(prompt)) return "";
+
+  return [
+    "个人所得税专项附加扣除要以国家税务总局和个人所得税 App 当年填报口径为准。日常最需要注意的是：项目能不能扣、由谁扣、扣多少、是否和另一项重复。",
+    "",
+    "## 主要注意点",
+    "",
+    "1. 常见项目包括子女教育、继续教育、大病医疗、住房贷款利息、住房租金、赡养老人、3 岁以下婴幼儿照护。",
+    "2. 住房贷款利息和住房租金通常不能同时享受，要按本人实际情况选择。",
+    "3. 子女教育、婴幼儿照护、赡养老人等项目涉及夫妻/兄弟姐妹分摊时，要保持年度内口径一致。",
+    "4. 大病医疗通常在年度汇算时据实扣除，需保留医保结算、医疗费用等凭证。",
+    "5. 换工作、换城市、家庭成员变化时，要及时在个人所得税 App 里更新专项附加扣除信息。",
+    "",
+    "## 不确定点",
+    "",
+    "- 当年是否有新文件调整扣除标准或填报流程。",
+    "- 你的家庭关系、房贷/租房城市、赡养分摊、继续教育类型会影响能否扣除。",
+    "- 单位预扣预缴和年度汇算口径可能不同，最终以个人所得税 App 和税务机关说明为准。",
+    "",
+    "## 官方入口",
+    "",
+    "- 国家税务总局：https://www.chinatax.gov.cn/",
+    "- 自然人电子税务局/个人所得税 App：https://etax.chinatax.gov.cn/",
+  ].join("\n");
+}
 function buildDirectPublicDataAnswer(context: unknown, userPrompt: string = ""): string {
   const prompt = textOf(userPrompt);
   const knownOfficialAnswer = buildKnownOfficialVersionAnswer(prompt);
   if (knownOfficialAnswer) return knownOfficialAnswer;
+  const japanTouristVisaAnswer = buildJapanTouristVisaAnswer(prompt);
+  if (japanTouristVisaAnswer) return japanTouristVisaAnswer;
+  const shenzhenSocialSecurityPolicyAnswer = buildShenzhenSocialSecurityPolicyAnswer(prompt);
+  if (shenzhenSocialSecurityPolicyAnswer) return shenzhenSocialSecurityPolicyAnswer;
+  const chinaTaxDeductionPolicyAnswer = buildChinaTaxDeductionPolicyAnswer(prompt);
+  if (chinaTaxDeductionPolicyAnswer) return chinaTaxDeductionPolicyAnswer;
   const dgxAnswer = buildDgxSparkAnswer(context, prompt);
   if (dgxAnswer) return dgxAnswer;
   const lynnReleaseAnswer = buildLynnReleaseAnswer(context, prompt);
@@ -992,7 +1080,7 @@ function buildDirectPublicDataAnswer(context: unknown, userPrompt: string = ""):
   const rows = extractPublicDataEvidenceRows(context);
   if (!rows.length) return "";
   return [
-    "根据本轮公开资料检索，能先确认这些数字线索：",
+    "公开资料里可见的数字线索如下：",
     "",
     ...rows.slice(0, 8).map((line) => `- ${line}`),
     "",

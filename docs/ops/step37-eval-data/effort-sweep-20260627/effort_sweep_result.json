@@ -1,0 +1,476 @@
+{
+  "model": "step-3.7-flash",
+  "n_questions": 12,
+  "summary": {
+    "low": {
+      "avg_tok": 927,
+      "median_tok": 439,
+      "avg_lat": 5.5,
+      "acc": 0.583,
+      "n": 12
+    },
+    "medium": {
+      "avg_tok": 4738,
+      "median_tok": 1062,
+      "avg_lat": 23.8,
+      "acc": 0.917,
+      "n": 12
+    },
+    "high": {
+      "avg_tok": 6734,
+      "median_tok": 2410,
+      "avg_lat": 32.9,
+      "acc": 0.833,
+      "n": 12
+    },
+    "auto": {
+      "avg_tok": 10046,
+      "median_tok": 2884,
+      "avg_lat": 49.6,
+      "acc": 0.75,
+      "n": 12
+    }
+  },
+  "raw": {
+    "low": [
+      {
+        "dt": 2.44189715385437,
+        "completion_tok": 321,
+        "think_chars": 892,
+        "rc_len": 892,
+        "correct": true,
+        "ans": "B",
+        "idx": 0
+      },
+      {
+        "dt": 2.602447986602783,
+        "completion_tok": 392,
+        "think_chars": 701,
+        "rc_len": 701,
+        "correct": true,
+        "ans": "D",
+        "idx": 2
+      },
+      {
+        "dt": 3.818016529083252,
+        "completion_tok": 464,
+        "think_chars": 1573,
+        "rc_len": 1573,
+        "correct": false,
+        "ans": "D",
+        "idx": 1
+      },
+      {
+        "dt": 4.071065187454224,
+        "completion_tok": 835,
+        "think_chars": 3643,
+        "rc_len": 3643,
+        "correct": false,
+        "ans": "C",
+        "idx": 3
+      },
+      {
+        "dt": 3.0155060291290283,
+        "completion_tok": 359,
+        "think_chars": 867,
+        "rc_len": 867,
+        "correct": true,
+        "ans": "B",
+        "idx": 4
+      },
+      {
+        "dt": 2.8552236557006836,
+        "completion_tok": 513,
+        "think_chars": 1023,
+        "rc_len": 1023,
+        "correct": true,
+        "ans": "A",
+        "idx": 5
+      },
+      {
+        "dt": 2.047762870788574,
+        "completion_tok": 325,
+        "think_chars": 687,
+        "rc_len": 687,
+        "correct": true,
+        "ans": "D",
+        "idx": 6
+      },
+      {
+        "dt": 2.144704580307007,
+        "completion_tok": 274,
+        "think_chars": 1071,
+        "rc_len": 1071,
+        "correct": true,
+        "ans": "A",
+        "idx": 9
+      },
+      {
+        "dt": 2.324740409851074,
+        "completion_tok": 414,
+        "think_chars": 877,
+        "rc_len": 877,
+        "correct": true,
+        "ans": "A",
+        "idx": 11
+      },
+      {
+        "dt": 4.572205305099487,
+        "completion_tok": 906,
+        "think_chars": 4009,
+        "rc_len": 4009,
+        "correct": false,
+        "ans": "B",
+        "idx": 10
+      },
+      {
+        "dt": 10.695635557174683,
+        "completion_tok": 1771,
+        "think_chars": 6742,
+        "rc_len": 6742,
+        "correct": false,
+        "ans": "A",
+        "idx": 7
+      },
+      {
+        "dt": 25.419239282608032,
+        "completion_tok": 4554,
+        "think_chars": 18033,
+        "rc_len": 18033,
+        "correct": false,
+        "ans": "B",
+        "idx": 8
+      }
+    ],
+    "medium": [
+      {
+        "dt": 4.7512195110321045,
+        "completion_tok": 801,
+        "think_chars": 2386,
+        "rc_len": 2386,
+        "correct": true,
+        "ans": "B",
+        "idx": 0
+      },
+      {
+        "dt": 2.8780887126922607,
+        "completion_tok": 465,
+        "think_chars": 944,
+        "rc_len": 944,
+        "correct": true,
+        "ans": "D",
+        "idx": 2
+      },
+      {
+        "dt": 3.867048501968384,
+        "completion_tok": 616,
+        "think_chars": 1934,
+        "rc_len": 1934,
+        "correct": true,
+        "ans": "B",
+        "idx": 4
+      },
+      {
+        "dt": 11.156718969345093,
+        "completion_tok": 1975,
+        "think_chars": 7225,
+        "rc_len": 7225,
+        "correct": true,
+        "ans": "B",
+        "idx": 1
+      },
+      {
+        "dt": 8.904792308807373,
+        "completion_tok": 1506,
+        "think_chars": 6451,
+        "rc_len": 6451,
+        "correct": true,
+        "ans": "B",
+        "idx": 3
+      },
+      {
+        "dt": 3.368976593017578,
+        "completion_tok": 628,
+        "think_chars": 1815,
+        "rc_len": 1815,
+        "correct": true,
+        "ans": "D",
+        "idx": 6
+      },
+      {
+        "dt": 5.435214042663574,
+        "completion_tok": 894,
+        "think_chars": 1817,
+        "rc_len": 1817,
+        "correct": true,
+        "ans": "A",
+        "idx": 5
+      },
+      {
+        "dt": 3.8665075302124023,
+        "completion_tok": 607,
+        "think_chars": 1830,
+        "rc_len": 1830,
+        "correct": true,
+        "ans": "A",
+        "idx": 9
+      },
+      {
+        "dt": 5.574274778366089,
+        "completion_tok": 1229,
+        "think_chars": 2596,
+        "rc_len": 2596,
+        "correct": true,
+        "ans": "A",
+        "idx": 11
+      },
+      {
+        "dt": 25.518962383270264,
+        "completion_tok": 5628,
+        "think_chars": 24555,
+        "rc_len": 24555,
+        "correct": true,
+        "ans": "D",
+        "idx": 10
+      },
+      {
+        "dt": 51.70144987106323,
+        "completion_tok": 9740,
+        "think_chars": 37366,
+        "rc_len": 37366,
+        "correct": true,
+        "ans": "C",
+        "idx": 7
+      },
+      {
+        "dt": 159.14727020263672,
+        "completion_tok": 32768,
+        "think_chars": 141392,
+        "rc_len": 141392,
+        "correct": false,
+        "ans": "?",
+        "idx": 8
+      }
+    ],
+    "high": [
+      {
+        "dt": 19.604461669921875,
+        "completion_tok": 4406,
+        "think_chars": 12515,
+        "rc_len": 12515,
+        "correct": true,
+        "ans": "B",
+        "idx": 0
+      },
+      {
+        "dt": 8.076198816299438,
+        "completion_tok": 2031,
+        "think_chars": 5213,
+        "rc_len": 5213,
+        "correct": true,
+        "ans": "D",
+        "idx": 2
+      },
+      {
+        "dt": 4.324491262435913,
+        "completion_tok": 983,
+        "think_chars": 2128,
+        "rc_len": 2128,
+        "correct": true,
+        "ans": "B",
+        "idx": 3
+      },
+      {
+        "dt": 13.541670322418213,
+        "completion_tok": 2570,
+        "think_chars": 8770,
+        "rc_len": 8770,
+        "correct": true,
+        "ans": "B",
+        "idx": 4
+      },
+      {
+        "dt": 8.443865776062012,
+        "completion_tok": 2249,
+        "think_chars": 3321,
+        "rc_len": 3321,
+        "correct": true,
+        "ans": "A",
+        "idx": 5
+      },
+      {
+        "dt": 6.79924750328064,
+        "completion_tok": 1363,
+        "think_chars": 2463,
+        "rc_len": 2463,
+        "correct": true,
+        "ans": "D",
+        "idx": 6
+      },
+      {
+        "dt": 48.14155292510986,
+        "completion_tok": 10086,
+        "think_chars": 37353,
+        "rc_len": 37353,
+        "correct": true,
+        "ans": "B",
+        "idx": 1
+      },
+      {
+        "dt": 5.213862657546997,
+        "completion_tok": 810,
+        "think_chars": 1607,
+        "rc_len": 1607,
+        "correct": true,
+        "ans": "A",
+        "idx": 9
+      },
+      {
+        "dt": 18.291142225265503,
+        "completion_tok": 3467,
+        "think_chars": 15455,
+        "rc_len": 15455,
+        "correct": true,
+        "ans": "D",
+        "idx": 10
+      },
+      {
+        "dt": 5.663737773895264,
+        "completion_tok": 1093,
+        "think_chars": 1785,
+        "rc_len": 1785,
+        "correct": true,
+        "ans": "A",
+        "idx": 11
+      },
+      {
+        "dt": 97.21360802650452,
+        "completion_tok": 18983,
+        "think_chars": 28926,
+        "rc_len": 28926,
+        "correct": false,
+        "ans": "D",
+        "idx": 8
+      },
+      {
+        "dt": 159.18916416168213,
+        "completion_tok": 32768,
+        "think_chars": 130238,
+        "rc_len": 130238,
+        "correct": false,
+        "ans": "?",
+        "idx": 7
+      }
+    ],
+    "auto": [
+      {
+        "dt": 7.532338380813599,
+        "completion_tok": 1348,
+        "think_chars": 2349,
+        "rc_len": 2349,
+        "correct": true,
+        "ans": "B",
+        "idx": 0
+      },
+      {
+        "dt": 44.93204975128174,
+        "completion_tok": 10006,
+        "think_chars": 38716,
+        "rc_len": 38716,
+        "correct": true,
+        "ans": "B",
+        "idx": 1
+      },
+      {
+        "dt": 10.437561750411987,
+        "completion_tok": 1746,
+        "think_chars": 5072,
+        "rc_len": 5072,
+        "correct": true,
+        "ans": "B",
+        "idx": 4
+      },
+      {
+        "dt": 14.715962409973145,
+        "completion_tok": 3123,
+        "think_chars": 4860,
+        "rc_len": 4860,
+        "correct": true,
+        "ans": "D",
+        "idx": 2
+      },
+      {
+        "dt": 17.0936119556427,
+        "completion_tok": 3360,
+        "think_chars": 6492,
+        "rc_len": 6492,
+        "correct": false,
+        "ans": "C",
+        "idx": 3
+      },
+      {
+        "dt": 8.465005874633789,
+        "completion_tok": 1803,
+        "think_chars": 3840,
+        "rc_len": 3840,
+        "correct": true,
+        "ans": "A",
+        "idx": 5
+      },
+      {
+        "dt": 6.479254722595215,
+        "completion_tok": 1099,
+        "think_chars": 1953,
+        "rc_len": 1953,
+        "correct": true,
+        "ans": "D",
+        "idx": 6
+      },
+      {
+        "dt": 14.211362361907959,
+        "completion_tok": 2644,
+        "think_chars": 10343,
+        "rc_len": 10343,
+        "correct": true,
+        "ans": "A",
+        "idx": 9
+      },
+      {
+        "dt": 12.283600807189941,
+        "completion_tok": 2634,
+        "think_chars": 4332,
+        "rc_len": 4332,
+        "correct": true,
+        "ans": "A",
+        "idx": 11
+      },
+      {
+        "dt": 134.8428111076355,
+        "completion_tok": 27248,
+        "think_chars": 106115,
+        "rc_len": 106115,
+        "correct": true,
+        "ans": "C",
+        "idx": 7
+      },
+      {
+        "dt": 164.71342539787292,
+        "completion_tok": 32768,
+        "think_chars": 50489,
+        "rc_len": 50489,
+        "correct": false,
+        "ans": "?",
+        "idx": 8
+      },
+      {
+        "dt": 159.87227368354797,
+        "completion_tok": 32768,
+        "think_chars": 144548,
+        "rc_len": 144548,
+        "correct": false,
+        "ans": "?",
+        "idx": 10
+      }
+    ]
+  }
+}

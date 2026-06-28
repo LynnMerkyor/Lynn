@@ -43,6 +43,24 @@ describe("report research context intent", () => {
     expect(inferReportResearchKind("中国主要私董会的人数和收费大概多少？")).toBe("public_data");
   });
 
+  it("does not pass search-timeout scaffolding to the model as research context", async () => {
+    const calls = [];
+    const context = await buildReportResearchContext("查一下深圳 2026 年社保缴费政策有没有最新变化，给来源和不确定点", {
+      toolWrappers: {
+        webSearch: async () => {
+          calls.push("webSearch");
+          throw new Error("search timeout after 9000ms");
+        },
+        webFetch: async () => ({ text: "should not be fetched" }),
+      },
+    });
+
+    expect(calls).toHaveLength(0);
+    expect(context).toContain("深圳社保政策官方核验资料");
+    expect(context).not.toContain("搜索失败或超时");
+    expect(context).not.toContain("补充搜索线索");
+  });
+
   it("does not classify local code prompts that mention counts as public data", () => {
     expect(inferReportResearchKind("写一个 Node.js 脚本读取 JSON 并输出 keys 数量")).toBe("");
   });
@@ -124,6 +142,7 @@ describe("report research context intent", () => {
 
     expect(answer).toContain(`v${packageVersion}`);
     expect(answer).toContain(`https://gitee.com/merkyor/Lynn/releases/tag/v${packageVersion}`);
+    expect(answer).not.toContain("抓取失败");
   });
 
   it("short-circuits broad today tech news when no dated source is available", async () => {
@@ -174,6 +193,8 @@ describe("report research context intent", () => {
     const context = await buildReportResearchContext(prompt);
     const answer = buildDirectResearchAnswer("public_data", context, prompt);
 
+    expect(context).toContain("Anthropic Claude models");
+    expect(context).not.toContain("Apple notarization");
     expect(answer).toContain("Claude 4 系列");
     expect(answer).toContain("https://docs.anthropic.com/en/docs/about-claude/models/overview");
     expect(answer).not.toContain("Fable");
@@ -187,9 +208,50 @@ describe("report research context intent", () => {
     const context = await buildReportResearchContext(prompt);
     const answer = buildDirectResearchAnswer("public_data", context, prompt);
 
+    expect(context).toContain("Apple notarization");
+    expect(context).not.toContain("Anthropic Claude models");
     expect(answer).toContain("Apple notarization 的用途");
     expect(answer).toContain("Gatekeeper");
     expect(answer).toContain("https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution");
+  });
+
+  it("answers Japan tourist visa material prompts with official verification boundaries", async () => {
+    const prompt = "查一下中国游客去日本旅行签证最新材料要求，列来源和不确定点";
+    expect(inferReportResearchKind(prompt)).toBe("public_data");
+
+    const context = await buildReportResearchContext(prompt);
+    const answer = buildDirectResearchAnswer("public_data", context, prompt);
+
+    expect(context).toContain("日本旅游签证官方核验资料");
+    expect(answer).toContain("中国游客赴日旅游签证材料");
+    expect(answer).toContain("不确定点");
+    expect(answer).toContain("https://www.cn.emb-japan.go.jp/itpr_zh/visa.html");
+    expect(answer).not.toContain("工具结果中未查到");
+  });
+
+  it("answers Shenzhen social security policy prompts without provider-debug leakage", async () => {
+    const prompt = "查一下深圳 2026 年社保缴费政策有没有最新变化，给来源和不确定点";
+    const context = await buildReportResearchContext(prompt);
+    const answer = buildDirectResearchAnswer("public_data", context, prompt);
+
+    expect(context).toContain("深圳社保政策官方核验资料");
+    expect(answer).toContain("深圳 2026 年社保缴费政策");
+    expect(answer).toContain("不确定点");
+    expect(answer).toContain("https://sipub.sz.gov.cn/");
+    expect(answer).not.toContain("mimo 搜索");
+    expect(answer).not.toContain("工具结果中未查到");
+  });
+
+  it("answers China individual tax deduction prompts with official verification boundaries", async () => {
+    const prompt = "个人所得税专项附加扣除最新规则有哪些需要注意？请查来源";
+    const context = await buildReportResearchContext(prompt);
+    const answer = buildDirectResearchAnswer("public_data", context, prompt);
+
+    expect(context).toContain("个人所得税专项附加扣除官方核验资料");
+    expect(answer).toContain("个人所得税专项附加扣除");
+    expect(answer).toContain("官方入口");
+    expect(answer).toContain("https://www.chinatax.gov.cn/");
+    expect(answer).not.toContain("工具结果中未查到");
   });
 
   it("answers Microsoft Windows on Arm developer page summaries from official context", async () => {

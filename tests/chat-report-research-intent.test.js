@@ -28,4 +28,18 @@ describe("report research intent module", () => {
     expect(inferReportResearchKind("今天金价如何")).toBe("market");
     expect(inferReportResearchKind("帮我研究一下这个品牌在日本市场的竞品和价格区间")).toBe("generic");
   });
+
+  it("routes daily public-policy and travel requirements into evidence-backed public data", () => {
+    expect(inferReportResearchKind("个人所得税专项附加扣除最新规则有哪些需要注意？请查来源")).toBe("public_data");
+    expect(inferReportResearchKind("查一下中国游客去日本旅行签证最新材料要求，列来源和不确定点")).toBe("public_data");
+    expect(inferReportResearchKind("访问 example.com 并用一句话概括页面内容")).toBe("public_data");
+  });
+
+  it("does not collapse agriculture weather plus commodity price checks into plain weather", () => {
+    expect(inferReportResearchKind("种植户要看明天降雨和近期玉米价格，帮我查证后给风险提示")).toBe("public_data");
+  });
+
+  it("does not treat personal budget math as public-data research just because it asks how much", () => {
+    expect(inferReportResearchKind("我月收入 18000，房租 5200，固定支出 3800，想 8 个月攒 60000，帮我算每月该存多少并给建议")).toBe("");
+  });
 });

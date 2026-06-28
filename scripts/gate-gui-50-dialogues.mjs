@@ -7,110 +7,12 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 
+import { DIALOGUE_PROMPTS } from "./dialogue-scenario-bank.mjs";
+import { additionalDialogueQualityReason, requiresFreshEvidenceForDialogue } from "./dialogue-quality-rules.mjs";
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-const PROMPTS = [
-  ["simple", "你好，只回复 OK"],
-  ["simple", "用一句话解释 ReAct"],
-  ["simple", "2+2 等于几？只给答案"],
-  ["simple", "把 hello world 翻译成中文"],
-  ["simple", "用三条 bullet 解释什么是上下文窗口"],
-  ["simple", "给我 3 条 git commit message 规范"],
-  ["simple", "解释一下 React 的 state 和 props 区别"],
-  ["simple", "写一个 JavaScript debounce 函数"],
-  ["simple", "用 Markdown 表格比较 BFS 和 DFS"],
-  ["simple", "给出一个 SQL users 表建表语句"],
-  ["realtime", "昨晚世界杯最新的比赛结果"],
-  ["realtime", "今晚世界杯有几场比赛"],
-  ["realtime", "今天世界杯赛程发我一下"],
-  ["realtime", "世界杯半决赛在哪一天？"],
-  ["realtime", "2026世界杯已经出的赛事比分"],
-  ["realtime", "NBA 总决赛打了几场，总比分如何？"],
-  ["realtime", "今年 NBA 马刺夺冠了吗，还是尼克斯？"],
-  ["realtime", "今日金价是多少？"],
-  ["realtime", "英伟达股价最新是多少？"],
-  ["realtime", "苹果公司 AAPL 最新股价是多少？"],
-  ["realtime", "美元人民币汇率现在多少？"],
-  ["realtime", "深圳明天下雨吗？"],
-  ["realtime", "北京今天空气质量怎么样？"],
-  ["realtime", "今天 A 股有什么异动？"],
-  ["realtime", "中国主要私董会的人数和收费大概多少？"],
-  ["search", "查一下 OpenAI 最近发布了什么新模型，给一句摘要"],
-  ["search", "访问 example.com 并用一句话概括页面内容"],
-  ["search", "查一下 2026 世界杯美国队上一场比分"],
-  ["search", "查一下今晚英格兰与克罗地亚是否有比赛"],
-  ["search", "查一下深圳今天有没有暴雨预警"],
-  ["format", "把这个列表排序并去重：banana, apple, banana, pear"],
-  ["format", "把“今天心情很好但是任务很多”改写得更正式一点"],
-  ["format", "给我一个三列表格：任务、优先级、风险"],
-  ["format", "写一个正则，匹配常见邮箱地址，并解释限制"],
-  ["format", "用 LaTeX 写出二次方程求根公式"],
-  ["code", "写一个 Python 函数读取 CSV 并按第一列分组计数"],
-  ["code", "写一个 bash 命令统计当前目录下所有 .ts 文件行数"],
-  ["code", "给一个 TypeScript discriminated union 的例子"],
-  ["code", "解释 async/await 和 Promise.then 的区别"],
-  ["code", "写一个 JSON schema，要求 name 字符串、age 正整数"],
-  ["reasoning", "如果一个任务三次搜索都没结果，应该如何向用户解释？"],
-  ["reasoning", "为什么模型工具成功但最后可能空答？给出两个原因"],
-  ["reasoning", "给一个 UI 输入框在窄屏不溢出的设计检查清单"],
-  ["reasoning", "如果复核模型和主模型结论冲突，产品上怎么展示比较好？"],
-  ["reasoning", "设计一个 5 步门禁测试流程验证聊天工具链"],
-  ["mixed", "查询今晚世界杯赛程，并最后用一个小表格输出"],
-  ["mixed", "查询今日金价，如果没有确切数据请明确说不确定"],
-  ["mixed", "查询英伟达股价，并说明数据时间"],
-  ["mixed", "查深圳明天天气，并说明今天和明天的区别"],
-  ["mixed", "查 NBA 总决赛结果，并给出一条可能的复核质疑点"],
-  ["product", "DGX Spark 最新版出了吗？请优先用 NVIDIA 官方来源回答"],
-  ["product", "NVIDIA DGX Spark 当前软件版本是什么？列出版本号和来源"],
-  ["product", "RTX Spark Windows PC 和 DGX Spark 是同一个产品吗？"],
-  ["product", "CUDA Toolkit 13 最新版是多少？给官方依据"],
-  ["product", "Node.js 最新 LTS 版本是多少？"],
-  ["product", "Python 3.13 最新维护版本是多少？"],
-  ["product", "OpenAI 最近官方发布的新模型是什么？"],
-  ["product", "Claude 最新公开模型是哪一代？"],
-  ["product", "Kimi K2.7 Code 是不是已经公开发布了？"],
-  ["product", "GLM 5.0 Turbo 当前是否可用？请说明依据不足时怎么说"],
-  ["official", "查 Lynn v0.85.1 镜像站下载页现在显示的版本号"],
-  ["official", "查 Gitee 上 Lynn 最新 release tag 是什么"],
-  ["official", "download.merkyorlynn.com 的下载页能打开吗？只总结状态"],
-  ["official", "查 NVIDIA DGX Spark marketplace 是否显示可购买"],
-  ["official", "查 OpenAI API 文档里 Responses API 是否仍是推荐接口"],
-  ["official", "查 Anthropic docs 是否提到 Claude Code"],
-  ["official", "查 Apple 开发者文档里 notarization 的用途"],
-  ["official", "查 Microsoft Windows on Arm 最新开发者页面一句摘要"],
-  ["realtime", "今天上海天气如何？"],
-  ["realtime", "广州明天会下雨吗？"],
-  ["realtime", "杭州今天空气质量怎么样？"],
-  ["realtime", "纳斯达克指数最新点位是多少？"],
-  ["realtime", "比特币现在价格大概多少？"],
-  ["realtime", "特斯拉 TSLA 最新股价是多少？"],
-  ["realtime", "日元兑人民币现在大概多少？"],
-  ["realtime", "今天科技新闻有什么重要更新？"],
-  ["realtime", "今晚世界杯后续赛程有没有 23 点后的比赛？"],
-  ["realtime", "你能预测今晚世界杯比分吗？请说明这是预测不是事实"],
-  ["research", "比较 DGX Spark 和 Mac Studio 做本地 AI 的定位差异"],
-  ["research", "给 Lynn Session Map 工作地图写 5 条验收标准"],
-  ["research", "给长会话 7GB 卡死问题设计一个健康检查策略"],
-  ["research", "怎么判断搜索结果是伪相关？给一个门禁规则"],
-  ["research", "设计一个证据优先搜索 Agent 的失败策略"],
-  ["research", "解释为什么不能把搜索摘要直接当事实"],
-  ["research", "给 GUI 右侧工作台写一个信息架构草案"],
-  ["research", "给 CLI 和 GUI 共用内核写一个回归测试矩阵"],
-  ["ux", "把这个错误提示改得更像产品文案：internal auth error"],
-  ["ux", "给 Session Map 的 Huge 节点写 3 个短状态文案"],
-  ["ux", "给“从此分支”按钮写一条 tooltip"],
-  ["ux", "左侧会话列表很多数字徽标时如何规整？"],
-  ["ux", "右侧工作台显示当前会话 digest 时应该避免什么？"],
-  ["ux", "把“资料不足时应继续补充来源再下结论”改写得更自然"],
-  ["code", "写一个 TypeScript 函数判断字符串是否包含 URL"],
-  ["code", "写一个 Node.js 脚本读取 JSON 并输出 keys 数量"],
-  ["code", "解释 Vitest 的 beforeEach 用途"],
-  ["code", "给一个 React useMemo 适合使用的例子"],
-  ["code", "写一个 CSS grid 三栏布局，中间自适应"],
-  ["code", "写一个 zod schema 校验 release manifest"],
-  ["code", "给一个 Electron 主进程 IPC handler 的伪代码"],
-  ["code", "解释为什么不要在前端组件里直接写复杂业务规则"],
-];
+const PROMPTS = DIALOGUE_PROMPTS;
 
 const BAD_TEXT_NEEDLES = [
   "我已经拿到工具结果",
@@ -138,18 +40,31 @@ const BAD_TEXT_NEEDLES = [
   "DSML｜｜tool_calls",
   "根据本轮已执行工具返回的证据",
   "根据本轮已执行操作返回的可见结果",
+  "这轮操作已有可见结果",
   "先看一下当前代码仓库",
   "让我先看一下当前代码仓库",
   "find /Users/lynn/Downloads/Lynn",
   "工具已经返回内容",
+  "工具执行包含",
+  "请查看上方工具卡片",
+  "抓取出错",
+  "抓取失败",
+  "HTTP 403",
   "没有提取到足够可靠的事实",
   "能先确认这些数字线索",
   "如果需要更精确的实时结论",
+  "【研究资料】",
+  "【补充搜索线索】",
+  "最新 资料 数据 来源",
+  "官方 公告 报告 文档",
+  "分析 观点 对比 风险",
   "aborted",
   "request timeout",
   "模型请求超时",
   "模型请求超时，请重试",
   "请缩小问题范围后重试",
+  "工具结果中未查到",
+  "mimo 搜索",
 ];
 
 const BAD_ERROR_NEEDLES = [
@@ -157,7 +72,6 @@ const BAD_ERROR_NEEDLES = [
   "Error:",
 ];
 
-const FRESH_EVIDENCE_CATEGORIES = new Set(["realtime", "search", "mixed", "product", "official"]);
 const CURRENT_YEAR = 2026;
 const TURN_SETTLE_MS = Math.max(0, Number(process.env.LYNN_GUI_GATE_TURN_SETTLE_MS || 2500));
 const EMPTY_TIMEOUT_RETRY_MS = Math.max(0, Number(process.env.LYNN_GUI_GATE_EMPTY_TIMEOUT_RETRY_MS || 1500));
@@ -554,7 +468,10 @@ function hasToolEvidence(result) {
 }
 
 function buildReactReview(result) {
-  const requiresFreshEvidence = FRESH_EVIDENCE_CATEGORIES.has(result.category);
+  const requiresFreshEvidence = requiresFreshEvidenceForDialogue({
+    category: result.category,
+    prompt: result.prompt,
+  });
   const tools = Array.isArray(result.tools) ? result.tools : [];
   const toolEvents = Array.isArray(result.toolEvents) ? result.toolEvents : [];
   const providerTrail = Array.isArray(result.providerTrail) ? result.providerTrail : [];
@@ -600,7 +517,7 @@ function buildReactReview(result) {
 }
 
 function claimsFreshToolEvidence(text) {
-  return /根据(?:最新|真实)?(?:查询结果|搜索结果|工具结果|检索结果|返回结果|工具返回)|实时(?:天气|行情|比分|赛程|数据)|查到|搜索结果|工具结果/.test(text);
+  return /根据(?:最新|真实)?(?:查询结果|搜索结果|工具结果|检索结果|返回结果|工具返回)|实时(?:天气|行情|比分|赛程|价格|新闻|汇率|金价)|(?:搜索|检索|查询)(?:结果|显示|到)|搜索结果|工具结果/.test(text);
 }
 
 function deniesAvailableToolCapability(text) {
@@ -778,6 +695,21 @@ function hasSportsContextCrosswire(prompt, text) {
   return /总决赛已打场次|NBA\s*总决赛|马刺|尼克斯/i.test(String(text || ""));
 }
 
+function toolNamesOf(result = {}) {
+  return Array.isArray(result.tools)
+    ? result.tools.map((tool) => String(tool?.name || tool || "")).filter(Boolean)
+    : [];
+}
+
+function allowsFileCreation(prompt) {
+  return /(?:保存|写入|创建|生成|导出).{0,16}(?:文件|文档|md|markdown|docx|pdf|xlsx|表格|到书桌|到桌面)|(?:形成|输出).{0,16}(?:文件|文档|docx|pdf|xlsx)/iu.test(String(prompt || ""));
+}
+
+function usedUnrequestedFileCreation(prompt, result = {}) {
+  if (allowsFileCreation(prompt)) return false;
+  return toolNamesOf(result).some((name) => /^(?:write|present_files|edit|edit-diff|create_report|create_docx|create_xlsx)$/i.test(name));
+}
+
 function qualityReason(prompt, text, result = {}) {
   if (/针对“[^”]+”，我能从工具证据中确认/.test(String(text || ""))) {
     return "tool-evidence-template-leaked";
@@ -785,6 +717,16 @@ function qualityReason(prompt, text, result = {}) {
   if (hasInternalToolLabelVisible(text)) {
     return "internal-tool-label-visible";
   }
+  if (usedUnrequestedFileCreation(prompt, result)) {
+    return "unrequested-file-creation-tool-used";
+  }
+  const sharedQualityIssue = additionalDialogueQualityReason({
+    category: result.category,
+    prompt,
+    text,
+    hasToolEvidence: hasToolEvidence(result),
+  });
+  if (sharedQualityIssue) return sharedQualityIssue;
   if (hasSportsContextCrosswire(prompt, text)) {
     return "sports-answer-crosswired-competition-context";
   }

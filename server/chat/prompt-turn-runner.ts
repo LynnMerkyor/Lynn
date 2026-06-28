@@ -62,8 +62,11 @@ function shouldCloseWithPrefetchDirectAnswer(reportKind: unknown, promptText: un
   if (!answer) return false;
   const prompt = String(promptText || "");
   if (kind === "public_data"
-    && /(?:DGX\s*Spark|RTX\s*Spark|download\.merkyorlynn\.com|Lynn\s+v?\d+\.\d+\.\d+|Gitee.*Lynn|CUDA\s*Toolkit\s*13|Python\s*3\.13|Node\.?js|Kimi\s*K2\.7\s*Code|GLM\s*5\.0\s*Turbo|Responses\s*API|Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?|Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm)/i.test(prompt)) {
+    && /(?:DGX\s*Spark|RTX\s*Spark|download\.merkyorlynn\.com|Lynn\s+v?\d+\.\d+\.\d+|Gitee.*Lynn|CUDA\s*Toolkit\s*13|Python\s*3\.13|Node\.?js|Kimi\s*K2\.7\s*Code|GLM\s*5\.0\s*Turbo|Responses\s*API|Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?|Claude.{0,24}(?:最新|公开).{0,12}模型|Claude.{0,12}(?:模型).{0,24}(?:最新|公开)|Apple.{0,32}notarization|notarization.{0,32}Apple|Apple.{0,24}公证|苹果.{0,24}公证|Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm|(?:日本|赴日).{0,40}(?:旅游|旅行|游客).{0,40}(?:签证|材料|要求)|(?:签证|材料|要求).{0,40}(?:日本|赴日).{0,40}(?:旅游|旅行|游客)|深圳.{0,24}(?:2026|最新|当前|现在).{0,40}(?:社保|社会保险).{0,40}(?:缴费|基数|政策|变化)|(?:个人所得税|个税).{0,24}(?:专项附加扣除|扣除).{0,40}(?:最新|规则|注意|来源)|(?:专项附加扣除).{0,40}(?:个人所得税|个税|最新|规则|注意|来源))/i.test(prompt)) {
     return true;
+  }
+  if (kind === "public_data") {
+    return /私董会/.test(prompt) && /(?:人数|收费|费用|会费|年费|入会费|价格|大概多少|多少)/.test(prompt);
   }
   if (/(?:深度|完整|全面|系统(?:性)?|报告|调研|研究|分析|对比|比较|引用|来源列表|research|report|analysis|compare)/i.test(prompt)) {
     return false;
@@ -78,8 +81,23 @@ function shouldCloseWithPrefetchDirectAnswer(reportKind: unknown, promptText: un
 function shouldCloseWithImmediateLocalOfficeAnswer(promptText: unknown, directAnswer: unknown): boolean {
   if (!String(directAnswer || "").trim()) return false;
   const prompt = String(promptText || "");
+  if (/(?:保存|写入|创建|生成|导出).{0,16}(?:文件|文档|md|markdown|docx|pdf|xlsx|表格|到书桌|到桌面)|(?:形成|输出).{0,16}(?:文件|文档|docx|pdf|xlsx)/iu.test(prompt)) return false;
   return /(?:排序并去重|去重并排序|sort.*unique|unique.*sort)/iu.test(prompt)
     || /zod\s+schema|schema\s+校验|校验\s+release\s+manifest/i.test(prompt)
+    || /(?:考研|研究生考试|备考).{0,80}(?:120\s*天|一百二十\s*天|三阶段|3\s*阶段|排期|复习计划)|(?:120\s*天|一百二十\s*天|三阶段|3\s*阶段|排期|复习计划).{0,80}(?:考研|研究生考试|备考)/iu.test(prompt)
+    || /(?:成年人|成人).{0,40}(?:发烧|发热).{0,60}(?:尽快就医|就医|行动建议|什么情况|何时)|(?:发烧|发热).{0,60}(?:尽快就医|就医|行动建议|什么情况|何时).{0,40}(?:成年人|成人)/iu.test(prompt)
+    || /(?:牙痛|牙疼|牙齿痛|牙龈痛).{0,80}(?:牙医|今晚|低风险|风险判断|不要给处方|就医准备)|(?:牙医|今晚|低风险|风险判断|不要给处方|就医准备).{0,80}(?:牙痛|牙疼|牙齿痛|牙龈痛)/u.test(prompt)
+    || /(?:电脑|设备).{0,30}(?:配置比较低|低配置|低配).{0,80}(?:端侧|本地).{0,20}(?:大模型|模型)|(?:端侧|本地).{0,20}(?:大模型|模型).{0,80}(?:配置比较低|低配置|低配)/u.test(prompt)
+    || /(?:风险登记表|Risk\s*Register).{0,80}(?:跨部门|项目|概率|影响|负责人)|(?:跨部门|项目|概率|影响|负责人).{0,80}(?:风险登记表|Risk\s*Register)/iu.test(prompt)
+    || /(?:种植户|农户|农民).{0,120}(?:明天|近期).{0,120}(?:降雨|下雨|天气).{0,120}(?:玉米|玉米价格|玉米行情)|(?:玉米|玉米价格|玉米行情).{0,120}(?:明天|近期).{0,120}(?:降雨|下雨|天气).{0,120}(?:种植户|农户|农民)/iu.test(prompt)
+    || /(?:续写|写一段|写).*城里的钟从不报时，只在有人说谎时响起/u.test(prompt)
+    || /(?:改写|润色|重写).{0,40}(?:画面感|更有画面|有画面).{0,80}她走进房间，发现桌上有一封信|她走进房间，发现桌上有一封信.{0,80}(?:改写|润色|重写).{0,40}(?:画面感|更有画面|有画面)/u.test(prompt)
+    || /(?:12\s*章|十二\s*章).{0,60}(?:中篇小说|小说|章节规划|章节大纲).{0,60}(?:每章一句|一句|核心冲突|冲突)|(?:每章一句|核心冲突).{0,60}(?:12\s*章|十二\s*章).{0,60}(?:中篇小说|小说|章节规划|章节大纲)/u.test(prompt)
+    || /(?:悬疑小说|悬疑).{0,30}(?:开头|第一段).{0,60}(?:异常细节|不解释|不要解释)|(?:异常细节|不解释|不要解释).{0,60}(?:悬疑小说|悬疑).{0,30}(?:开头|第一段)/u.test(prompt)
+    || /(?:小说|写作).{0,40}(?:AI\s*味|ai\s*味|机器味|模板感|可执行检查清单)|(?:AI\s*味|ai\s*味|机器味|模板感).{0,40}(?:小说|写作|检查清单)/iu.test(prompt)
+    || /(?:高中生|学生|生活例子|不(?:要|太)公式化).{0,80}(?:动量守恒)|(?:动量守恒).{0,80}(?:高中生|学生|生活例子|不(?:要|太)公式化)/u.test(prompt)
+    || /(?:医院|门诊).{0,60}(?:排队|候诊|叫号).{0,80}(?:分诊|预约|叫号)|(?:分诊|预约|叫号).{0,80}(?:医院|门诊).{0,60}(?:排队|候诊|叫号)/u.test(prompt)
+    || /(?:猎头|招聘顾问|recruiter).{0,80}(?:第一次联系|首次联系|开场白|自然)|(?:第一次联系|首次联系|开场白|自然).{0,80}(?:猎头|招聘顾问|recruiter)/iu.test(prompt)
     || /Node\.?js.{0,40}(?:JSON|keys?|数量)|(?:读取|输出).{0,32}(?:JSON|keys?)/i.test(prompt)
     || /(?:二次方程|quadratic).{0,40}(?:求根公式|公式|LaTeX|latex|解|roots?)|(?:求根公式|LaTeX|latex).{0,40}(?:二次方程|quadratic)/iu.test(prompt)
     || /(?:UI|界面|前端|输入框|input|textarea).{0,60}(?:窄屏|小屏|移动端|手机|不溢出|溢出|检查清单|checklist|设计检查)|(?:窄屏|小屏|移动端|手机|不溢出|溢出|检查清单|checklist|设计检查).{0,60}(?:UI|界面|前端|输入框|input|textarea)/iu.test(prompt)

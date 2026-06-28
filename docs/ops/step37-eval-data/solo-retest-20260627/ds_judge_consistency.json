@@ -1,0 +1,247 @@
+{
+  "model": "deepseek-v4-pro",
+  "N": 5,
+  "per_task": {
+    "0": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "1": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "2": {
+      "verdicts": [
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "3": {
+      "verdicts": [
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "flip": false,
+      "ground": false
+    },
+    "4": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "5": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "6": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "7": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "8": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "9": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "10": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "11": {
+      "verdicts": [
+        null,
+        false,
+        false,
+        true,
+        null
+      ],
+      "flip": true,
+      "ground": true
+    },
+    "12": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "13": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "14": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "15": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      "flip": true,
+      "ground": true
+    },
+    "16": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "17": {
+      "verdicts": [
+        true,
+        true,
+        false,
+        false,
+        true
+      ],
+      "flip": true,
+      "ground": true
+    },
+    "18": {
+      "verdicts": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "flip": false,
+      "ground": true
+    },
+    "19": {
+      "verdicts": [
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "flip": true,
+      "ground": true
+    }
+  },
+  "summary": {
+    "per_run_totals": [
+      17,
+      16,
+      15,
+      16,
+      15
+    ],
+    "flip_tasks": [
+      11,
+      15,
+      17,
+      19
+    ],
+    "ds_vs_ground_errors": [
+      2,
+      11,
+      19
+    ],
+    "ground_total": 19
+  }
+}
