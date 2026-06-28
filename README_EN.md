@@ -135,7 +135,7 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 - **Handles large explicit files more safely**: pointed local files use a capped preview so a huge LaTeX/code file does not freeze or flood the model context.
 - **Improves Windows path compatibility**: `D:\...`, `D:/...`, and `%20` encoded paths are treated as local file paths instead of URL/protocol text.
 - **Stabilizes settings deep links**: opening Model Services from chat or local-model prompts no longer occasionally lands on About; the installed-app gate now covers provider-list and model-removal regressions.
-- **Release gates included**: Agent regression, CLI200, GUI100, typecheck, and release preflight cover this client build; GUI and CLI are no longer relying on manual spot checks alone.
+- **Release gates included**: Agent regression 32/32, CLI200, GUI100, typecheck, and release preflight cover this client build; daily life, public-service/legal, medical, education, travel, recruiting, office, industry ops, coding, and fiction-writing prompts now live in the same regression gate, so GUI and CLI are no longer relying on manual spot checks alone.
 - **Keeps v0.85.5 UX changes**: Session Progress, 27B local recommendation, no proactive low-config local-model prompt, and hidden-reasoning fallback remain in place.
 
 ```bash

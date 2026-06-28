@@ -1,6 +1,6 @@
 # Lynn v0.85.6 Release Notes / 发布说明
 
-> 发布日期: 2026-06-28 · 本地文件读取修复 / 串题污染回归 / CLI200 + GUI100 门禁覆盖
+> 发布日期: 2026-06-28 · 本地文件读取修复 / 串题污染回归 / Agent regression 32/32 + CLI200 + GUI100 门禁覆盖
 
 ## 国内镜像站下载（推荐）
 
@@ -28,23 +28,25 @@
 - **Windows 路径更兼容**: `D:\...`、`D:/...` 和 `%20` 编码路径都按本地文件处理，不会误判成 URL 或协议说明。
 - **设置页入口更稳**: 从聊天窗/本地模型提示跳到“模型服务”设置时，不再偶发落回“关于”页；安装态门禁已覆盖设置页供应商列表和模型删除回归。
 - **保留 v0.85.5 体验改动**: 右侧“会话进度”、27B 端侧默认推荐、低配不主动弹本地模型引导、隐藏推理短答兜底继续保留。
-- **发版门禁继续加严**: 本次客户端包纳入 Agent regression、CLI200、GUI100、typecheck 和 release preflight；CLI/GUI 同核回归不再只靠人工体验。
+- **发版门禁继续加严**: 本次客户端包纳入 Agent regression、CLI200、GUI100、typecheck 和 release preflight；日常生活、政务/法律、医疗、教育、旅行、招聘、办公、行业运营、代码和小说写作场景都已进同一套回归门禁，CLI/GUI 同核回归不再只靠人工体验。
 
 ## 已验证
 
-- `npm run release:full-gate` 通过。
+- release full-gate 组件通过：`release:preflight` + agent regression gates + CLI200 + GUI100。
 - `npm run release:preflight` 通过。
 - `npm test -- tests/local-workspace-context.test.js` 通过。
-- `npm run test:agent-regression` 27/27 通过，包含本次本地文件读取与串题污染新增 case。
+- `npm run test:agent-regression` 32/32 通过，包含本次本地文件读取、串题污染、reasoning-only 空答和 BYOK 假 provider case。
 - `npm run test:agent-regression:gates` 3/3 通过。
 - CLI200: 200/200 通过。
-- GUI100: 100/100 通过。
+- CLI 扩展综合场景：146/146 通过。
+- GUI 扩展综合场景：146/146 通过；发版 GUI100 采样门禁 100/100 通过。
 - `npm run release:installed-gate` 通过，包含安装态 GUI/server/CLI/settings/main-ui/review concurrency。
 - macOS arm64/x64 DMG 已签名、公证、staple，并通过 Gatekeeper 校验。
+- Windows x64 安装包已重新打包并签名。
 
 ---
 
-> Release date: 2026-06-28 · local file-read fix / stale-task regression / CLI200 + GUI100 gate coverage
+> Release date: 2026-06-28 · local file-read fix / stale-task regression / Agent regression 32/32 + CLI200 + GUI100 gate coverage
 
 ## English highlights
 
@@ -55,4 +57,4 @@
 - **Improves Windows path compatibility**: `D:\...`, `D:/...`, and `%20` encoded paths are treated as local file paths instead of URL/protocol text.
 - **Stabilizes settings deep links**: opening Model Services from chat or local-model prompts no longer occasionally lands on About; the installed-app gate now covers provider-list and model-removal regressions.
 - **Keeps v0.85.5 UX changes**: Session Progress, 27B local recommendation, no proactive low-config local-model prompt, and hidden-reasoning fallback remain in place.
-- **Keeps release gates strict**: Agent regression, CLI200, GUI100, typecheck, and release preflight cover this client build, so GUI/CLI parity is not left to manual spot checks alone.
+- **Keeps release gates strict**: Agent regression, CLI200, GUI100, typecheck, and release preflight cover this client build. The shared gate now includes daily life, public-service/legal, medical, education, travel, recruiting, office, industry-ops, coding, and fiction-writing prompts, so GUI/CLI parity is not left to manual spot checks alone.
