@@ -14,15 +14,16 @@ function withSavedEnv(keys, fn) {
 }
 
 describe('provider registry', () => {
-  it('keeps MiMo UltraSpeed as the text/tool execution head with StepFun and DS as fallback reviewers', () => {
+  it('keeps production text routing on StepFun, then DS V4 Flash, then MiMo Token Plan', () => {
     expect(universalOrder.map(String).slice(0, 6)).toEqual([
-      'mimo-ultraspeed',
       'step-3.7-flash',
       'deepseek-chat',
-      'apex-spark-i-balanced',
       'mimo-token-plan-pro',
+      'apex-spark-i-balanced',
       'deepseek-pro',
+      'glm-5-turbo',
     ]);
+    expect(universalOrder.map(String)).not.toContain('mimo-ultraspeed');
   });
 
   it('registers MiMo ordinary API UltraSpeed separately from Token Plan', () => {
@@ -46,7 +47,7 @@ describe('provider registry', () => {
     });
   });
 
-  it('registers MiMo Token Plan Pro as a bounded tail fallback', () => {
+  it('registers MiMo Token Plan Pro as the production MiMo route lane', () => {
     const tokenPlan = getProvider('mimo-token-plan-pro');
     expect(tokenPlan).toBeTruthy();
     expect(String(tokenPlan.id)).toBe('mimo-token-plan-pro');
@@ -113,7 +114,9 @@ describe('provider registry', () => {
     expect(visionOrder[1]).toBe('mimo-multimodal');
     expect(visionOrder).toContain('step-3.7-flash');
     expect(visionOrder).toContain('mimo-multimodal');
-    expect(universalOrder.map(String)[0]).toBe('mimo-ultraspeed');
+    expect(universalOrder.map(String)[0]).toBe('step-3.7-flash');
+    expect(universalOrder.map(String)[1]).toBe('deepseek-chat');
+    expect(universalOrder.map(String)[2]).toBe('mimo-token-plan-pro');
     expect(visionOrder).not.toContain('apex-spark-i-balanced');
     expect(visionOrder).not.toContain('deepseek-chat');
   });
@@ -152,23 +155,38 @@ describe('provider registry', () => {
   it('exposes a sanitized provider status snapshot without leaking keys', () => {
     const snapshot = getProviderStatusSnapshot();
     const fast = snapshot.providers.find((provider) => provider.id === 'mimo-ultraspeed');
+    const tokenPlan = snapshot.providers.find((provider) => provider.id === 'mimo-token-plan-pro');
     const ds = snapshot.providers.find((provider) => provider.id === 'deepseek-chat');
     const step = snapshot.providers.find((provider) => provider.id === 'step-3.7-flash');
     const spark = snapshot.providers.find((provider) => provider.id === 'apex-spark-i-balanced');
 
-    expect(snapshot.route.slice(0, 4)).toEqual(['mimo-ultraspeed', 'step-3.7-flash', 'deepseek-chat', 'apex-spark-i-balanced']);
-    expect(fast).toMatchObject({ id: 'mimo-ultraspeed', routeRole: 'head', inRoute: true });
+    expect(snapshot.route.slice(0, 4)).toEqual(['step-3.7-flash', 'deepseek-chat', 'mimo-token-plan-pro', 'apex-spark-i-balanced']);
+    expect(tokenPlan).toMatchObject({ id: 'mimo-token-plan-pro', routeRole: 'tail', inRoute: true });
+    expect(fast).toMatchObject({ id: 'mimo-ultraspeed', inRoute: false });
     expect(ds).toMatchObject({ id: 'deepseek-chat', routeRole: 'escape', inRoute: true });
-    expect(step).toMatchObject({ id: 'step-3.7-flash', routeRole: 'escape', credential: expect.any(String), inRoute: true });
+    expect(step).toMatchObject({ id: 'step-3.7-flash', routeRole: 'head', credential: expect.any(String), inRoute: true });
     expect(spark).toMatchObject({
       credential: 'not_required',
       configured: true,
       local: true,
       routeRole: 'local_single_slot_manager',
       localConcurrencyLimit: 1,
-      busyFallbackProvider: 'mimo-ultraspeed or step-3.7-flash',
+      busyFallbackProvider: 'deepseek-pro or glm-5-turbo',
     });
     expect(JSON.stringify(snapshot)).not.toContain('apiKey');
+  });
+
+  it('only adds MiMo UltraSpeed to the text route behind an explicit eval switch', async () => {
+    await withSavedEnv(['BRAIN_V2_ENABLE_MIMO_ULTRASPEED_ROUTE'], async () => {
+      process.env.BRAIN_V2_ENABLE_MIMO_ULTRASPEED_ROUTE = '1';
+      const isolated = await import('../provider-registry.js?mimo-ultraspeed-route-enabled');
+      expect(isolated.providerOrderForCapability().map(String).slice(0, 4)).toEqual([
+        'mimo-ultraspeed',
+        'step-3.7-flash',
+        'deepseek-chat',
+        'mimo-token-plan-pro',
+      ]);
+    });
   });
 
   it('keeps p-fake absent from the default production registry and route', () => {
@@ -204,9 +222,9 @@ describe('provider registry', () => {
       expect(fake.health_path).toBe('/models');
       expect(textRoute.slice(0, 4)).toEqual([
         'p-fake',
-        'mimo-ultraspeed',
         'step-3.7-flash',
         'deepseek-chat',
+        'mimo-token-plan-pro',
       ]);
       expect(visionRoute[0]).toBe('step-3.7-flash');
       expect(visionRoute).not.toContain('p-fake');

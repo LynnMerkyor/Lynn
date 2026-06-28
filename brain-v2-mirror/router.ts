@@ -633,7 +633,7 @@ function buildDeterministicSportsEvidenceAnswer(messages: ChatMessage[]): string
       ...predictionRows,
     ].join('\n');
   }
-  const wantsCount = /(几场|多少场|赛程|今晚|今天|今日|tonight|today|schedule)/i.test(prompt);
+  const wantsCount = /(几场|多少场|只有一场|就一场|一场吗|赛程|今晚|今天|今日|tonight|today|schedule)/i.test(prompt);
   const title = wantsCount
     ? `根据 ESPN scoreboard 工具证据，共查到 ${rows.length} 场相关比赛：`
     : '根据 ESPN scoreboard 工具证据，查到以下相关比赛：';
@@ -643,6 +643,23 @@ function buildDeterministicSportsEvidenceAnswer(messages: ChatMessage[]): string
     ...rows.slice(0, 24).map((row) => `| ${row.time} | ${row.matchup} | ${row.result} |`),
   ].join('\n');
   return `${title}\n\n${table}`;
+}
+
+function buildDeterministicSportsFactAnswer(messages: ChatMessage[]): string | null {
+  const evidenceText = messages
+    .filter((message) => message.role === 'tool' || /sports_score|espn_scoreboard/i.test(String(message.content || '')))
+    .map((message) => typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''))
+    .join('\n');
+  if (/directSourceStatus:\s*fallback_static_schedule/i.test(evidenceText)) return null;
+  const rows = parseScoreboardRowsFromEvidence(messages);
+  if (!rows.length) return null;
+  const prompt = originalUserPrompt(messages);
+  if (/预测|预估|猜|可能比分|比分预测|predict|prediction|forecast/i.test(prompt)) return null;
+  const asksCompletedScores = /(已出|已经|比分|赛果|结果|完赛|score|result|final)/i.test(prompt)
+    && !/(几场|多少场|只有一场|就一场|一场吗|赛程|对阵|今晚|今天|今日|tonight|today|schedule)/i.test(prompt);
+  const hasCompletedScore = rows.some((row) => /\d+\s*[-–—:：比]\s*\d+|FT|Final|Full Time/i.test(row.result));
+  if (asksCompletedScores && !hasCompletedScore) return null;
+  return buildDeterministicSportsEvidenceAnswer(messages);
 }
 
 function buildDeterministicAirQualityAnswer(prompt: unknown, result: unknown): string | null {
@@ -1805,6 +1822,14 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       });
     }
     workingMessages = compactToolResults(workingMessages, toolResultCompactionConfig);
+    const deterministicSportsFactAnswer = evidenceToolCount > 0
+      ? buildDeterministicSportsFactAnswer(workingMessages)
+      : null;
+    if (deterministicSportsFactAnswer) {
+      await onChunk({ type: 'content', delta: deterministicSportsFactAnswer }, { providerId: lastProviderId });
+      await onChunk({ type: 'finish', reason: 'stop' }, { providerId: lastProviderId });
+      return { ok: true, providerId: lastProviderId, iterations: iter };
+    }
     if (
       isEvidenceHandoffEnabled()
       && !evidenceHandoffDone

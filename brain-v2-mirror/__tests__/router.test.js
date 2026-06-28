@@ -1250,6 +1250,57 @@ describe('Router', () => {
     expect(visible).toContain(`| ${eventTime.label} | Spain vs Saudi Arabia | Scheduled |`);
   });
 
+  it('closes factual ESPN web_search evidence without cascading across synthesis providers', async () => {
+    mockState.order = ['p-step', 'p-spark', 'p-cloud'];
+    const eventTime = beijingTonightMidnightEvent();
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      if (provider.id === 'p-step') {
+        yield {
+          type: 'tool_call_delta',
+          delta: [{
+            index: 0,
+            id: 'tc-espn-web-search',
+            type: 'function',
+            function: { name: 'web_search', arguments: '{"query":"今晚世界杯只有一场吗？"}' },
+          }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: `${provider.id} should not synthesize` };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        events: [{
+          date: eventTime.iso,
+          status: { type: { completed: false, shortDetail: 'Scheduled' } },
+          competitions: [{ competitors: [
+            { homeAway: 'home', score: '0', team: { displayName: 'South Africa' } },
+            { homeAway: 'away', score: '0', team: { displayName: 'Canada' } },
+          ] }],
+        }],
+      }),
+    })));
+
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: '只有一场吗？' }],
+      onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'p-step', iterations: 1 });
+    expect(mockState.adapterCalls).toEqual(['p-step']);
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toContain('根据 ESPN scoreboard 工具证据，共查到 1 场相关比赛');
+    expect(visible).toContain(`| ${eventTime.label} | South Africa vs Canada | Scheduled |`);
+    expect(visible).not.toContain('p-spark should not synthesize');
+    expect(visible).not.toContain('p-cloud should not synthesize');
+  });
+
   it('prefetches sports_score evidence for direct World Cup score prompts before provider synthesis', async () => {
     process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH = '1';
     mockState.providers = {

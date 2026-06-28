@@ -58,9 +58,8 @@ const PROVIDER_DEFS = {
     default_thinking: false,
     thinking_control: 'qwen_chat_template',
   },
-  // MiMo ordinary API UltraSpeed. Agent20 (2026-06-25): 17/20, avg 7.8s,
-  // strong execution lane. Keep reasoning low and the output budget roomy enough
-  // to avoid reasoning-only empty answers on harder coding turns.
+  // MiMo ordinary API UltraSpeed is kept registered for explicit regression/eval
+  // runs only. Production Brain text routing uses Token Plan Pro as the MiMo lane.
   'mimo-ultraspeed': {
     id: providerId('mimo-ultraspeed'),
     endpoint: env('MIMO_ULTRASPEED_BASE', 'https://api.xiaomimimo.com/v1'),
@@ -174,18 +173,25 @@ export const PROVIDERS: Record<string, Provider> = P_FAKE_ENABLED
   ? { 'p-fake': buildPFakeProvider(), ...PROVIDER_DEFS }
   : PROVIDER_DEFS;
 
-// universalOrder — 文本/工具编排链路。2026-06-25 Agent20:
-// UltraSpeed 是当前最强执行候选;Step/DS V4 Flash 保留为复核/打回式 fallback。
-// Token Plan Pro 因长尾只放后段,并由 provider timeout 截断慢队列。
-export const universalOrder = [
-  providerId('mimo-ultraspeed'),       // 头位:普通 MiMo API UltraSpeed,Agent 执行优先
-  providerId('step-3.7-flash'),        // 高速复核/打回 fallback:StepFun 3.7 Flash low+48K
-  providerId('deepseek-chat'),         // DS V4 Flash 复核/事实编排 fallback
+function mimoUltraspeedRouteEnabled(): boolean {
+  return process.env.BRAIN_V2_ENABLE_MIMO_ULTRASPEED_ROUTE === '1'
+    || process.env.BRAIN_V2_TEST_MIMO_ULTRASPEED === '1';
+}
+
+const productionTextOrder = [
+  providerId('step-3.7-flash'),        // 生产文本/工具主链路: StepFun 3.7 Flash
+  providerId('deepseek-chat'),         // DS V4 Flash 紧跟 Step 接班/复核
+  providerId('mimo-token-plan-pro'),   // 生产 MiMo 只用 Token Plan Pro,不用 UltraSpeed 测试线
   providerId('apex-spark-i-balanced'), // 本地 A3B 单槽 manager/fallback;忙时 router 跳过,保护 GUI 交互
-  providerId('mimo-token-plan-pro'),   // Token Plan Pro 质量可用但长尾重,限时后段兜底
   providerId('deepseek-pro'),          // 云兜底 V4-pro
   providerId('glm-5-turbo'),           // 末位
 ] as const satisfies readonly ProviderId[];
+
+// universalOrder — 文本/工具编排链路。
+// UltraSpeed 只在显式评测/实验开关下进入 route,避免普通 Brain 请求误走测试 key/model。
+export const universalOrder: readonly ProviderId[] = mimoUltraspeedRouteEnabled()
+  ? [providerId('mimo-ultraspeed'), ...productionTextOrder]
+  : productionTextOrder;
 
 const multimodalOrder = [
   providerId('step-3.7-flash'),        // 多模态仍由 StepFun/vision_model 承接
@@ -291,7 +297,7 @@ export function getProviderStatusSnapshot(capabilityRequired?: { vision?: boolea
           ? DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY
           : undefined,
         busyFallbackProvider: String(provider.id) === 'apex-spark-i-balanced'
-          ? 'mimo-ultraspeed or step-3.7-flash'
+          ? 'deepseek-pro or glm-5-turbo'
           : undefined,
       };
     }),
