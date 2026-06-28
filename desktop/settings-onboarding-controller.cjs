@@ -52,6 +52,10 @@ function createSettingsOnboardingController({
     const navigationTarget = normalizeSettingsNavigationTarget(target);
     const desiredStamp = getWindowEntryStamp("settings");
     let settingsHealAttempts = 0;
+    const sendNavigationTarget = () => {
+      if (!navigationTarget || !settingsWindow || settingsWindow.isDestroyed()) return;
+      settingsWindow.webContents.send("settings-switch-tab", navigationTarget);
+    };
     const verifySettingsRenderer = () => {
       const win = settingsWindow;
       if (!win || win.isDestroyed()) return;
@@ -167,7 +171,16 @@ function createSettingsOnboardingController({
       }
     });
 
-    settingsWindow.webContents.on("did-finish-load", verifySettingsRenderer);
+    settingsWindow.webContents.on("did-finish-load", () => {
+      verifySettingsRenderer();
+      // The settings renderer also asks for an initial target during boot, but
+      // a persisted tab can briefly win the race in packaged builds. Re-sending
+      // the target after load keeps deep links such as "open providers" stable.
+      if (navigationTarget) {
+        setTimeout(sendNavigationTarget, 250);
+        setTimeout(sendNavigationTarget, 1200);
+      }
+    });
 
     void Promise.allSettled([
       settingsWindow.webContents.session.clearCache(),
