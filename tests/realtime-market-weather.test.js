@@ -960,20 +960,28 @@ describe("realtime market/weather tools", () => {
   });
 
   it("uses the built-in World Cup fixture fallback when tonight scoreboard fetch fails", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new Error("fetch failed");
-    }));
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-06-28T20:20:00+08:00"));
+      vi.stubGlobal("fetch", vi.fn(async () => {
+        throw new Error("fetch failed");
+      }));
 
-    const result = await createSportsScoreTool().execute("test", {
-      query: "今晚世界杯有几场比赛",
-      maxResults: 5,
-    });
-    const text = result.content[0].text;
+      const pending = createSportsScoreTool().execute("test", {
+        query: "今晚世界杯有几场比赛",
+        maxResults: 5,
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+      const result = await pending;
+      const text = result.content[0].text;
 
-    expect(result.details.provider).toBe("espn_scoreboard");
-    expect(text).toContain("directSourceStatus: fallback_static_schedule");
-    expect(text).toContain("2026/06/29 03:00 Group stage: South Africa vs Canada");
-    expect(text).not.toContain("directSourceStatus: unavailable");
+      expect(result.details.provider).toBe("espn_scoreboard");
+      expect(text).toContain("directSourceStatus: fallback_static_schedule");
+      expect(text).toContain("2026/06/29 03:00 Group stage: South Africa vs Canada");
+      expect(text).not.toContain("directSourceStatus: unavailable");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not inject weak HTML fallback results as sports score evidence", async () => {
