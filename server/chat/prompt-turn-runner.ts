@@ -263,8 +263,8 @@ export function createPromptTurnRunner({
             maxDocs: 8,
             maxDocChars: 3200,
           });
-          if (directReply.ok && directReply.text.trim()) {
-            ss.hasLocalPrefetchEvidence = true;
+          if (directReply.text.trim()) {
+            ss.hasLocalPrefetchEvidence = directReply.ok;
             closeStreamWithVisibleFallback(
               promptSessionPath,
               ss,

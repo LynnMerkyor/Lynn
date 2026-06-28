@@ -39,6 +39,7 @@ describe("local workspace context", () => {
   it("uses direct local workspace replies only for read-only local file requests", () => {
     expect(shouldUseLocalWorkspaceDirectReply("请阅读本地第一章小说", "utility")).toBe(true);
     expect(shouldUseLocalWorkspaceDirectReply("请查找这个本地目录里的文件", "utility")).toBe(true);
+    expect(shouldUseLocalWorkspaceDirectReply("为什么我无法直接读取本地文件路径（file:// 协议被阻止）", "utility")).toBe(false);
     expect(shouldUseLocalWorkspaceDirectReply("请删除下载文件夹里的旧文件", "utility")).toBe(false);
     expect(shouldUseLocalWorkspaceDirectReply("帮我分析桌面上的 Excel", "utility")).toBe(false);
     expect(shouldUseLocalWorkspaceDirectReply("随便聊两句", "chat")).toBe(false);
@@ -53,6 +54,13 @@ describe("local workspace context", () => {
     ].join("\n");
 
     expect(shouldAttachLocalWorkspaceContext(prompt, "utility")).toBe(false);
+  });
+
+  it("does not treat browser file protocol explanations as local file read tasks", () => {
+    const prompt = "为什么我无法直接读取本地文件路径（file:// 协议被阻止）";
+
+    expect(shouldAttachLocalWorkspaceContext(prompt, "utility")).toBe(false);
+    expect(shouldUseLocalWorkspaceDirectReply(prompt, "utility")).toBe(false);
   });
 
   it("builds a real local snapshot with directory and note previews", () => {
@@ -111,5 +119,50 @@ describe("local workspace context", () => {
     } finally {
       fs.rmSync(otherDir, { recursive: true, force: true });
     }
+  });
+
+  it("reads an explicit absolute file path instead of falling back to the session cwd", () => {
+    const otherDir = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-workspace-other-"));
+    const paperDir = path.join(tmpDir, "paper", "alphaT3SOC_v2");
+    const paperPath = path.join(paperDir, "main.tex");
+    try {
+      fs.mkdirSync(paperDir, { recursive: true });
+      fs.writeFileSync(paperPath, "\\section{Alpha T3SOC}\n真实论文内容\n", "utf8");
+      fs.writeFileSync(path.join(otherDir, "wrong.md"), "错误目录内容", "utf8");
+
+      const result = buildLocalWorkspaceDirectReply({
+        promptText: `阅读${paperPath}`,
+        cwd: otherDir,
+        now: new Date("2026-04-11T04:00:00Z"),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.root).toBe(paperDir);
+      expect(result.text).toContain(`我已读取 \`${paperPath}\``);
+      expect(result.text).toContain("\\section{Alpha T3SOC}");
+      expect(result.text).toContain("真实论文内容");
+      expect(result.text).not.toContain("错误目录内容");
+      expect(result.text).not.toContain("当前看到 0 个目录项");
+    } finally {
+      fs.rmSync(otherDir, { recursive: true, force: true });
+    }
+  });
+
+  it("limits explicit file previews for large files", () => {
+    const paperDir = path.join(tmpDir, "paper");
+    const paperPath = path.join(paperDir, "large.tex");
+    fs.mkdirSync(paperDir, { recursive: true });
+    fs.writeFileSync(paperPath, `${"A".repeat(700_000)}\n尾部不应出现在预览里`, "utf8");
+
+    const result = buildLocalWorkspaceDirectReply({
+      promptText: `阅读${paperPath}`,
+      cwd: tmpDir,
+      maxDocChars: 120,
+      now: new Date("2026-04-11T04:00:00Z"),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.text).toContain("内容过长，仅读取前");
+    expect(result.text).not.toContain("尾部不应出现在预览里");
   });
 });

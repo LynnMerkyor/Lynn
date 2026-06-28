@@ -10,7 +10,12 @@ import { createLynnAgentSession } from "../../core/agent-runtime/create-session.
 import { SessionManager } from "../../core/agent-runtime/session-manager.ts";
 import { buildLocalQwen35DirectMessages, shouldRetryLocalQwen35WithoutThinking } from "../../server/chat/local-qwen35-direct-policy.ts";
 import { buildLocalOfficeDirectAnswer } from "../../server/chat/local-office-answer.ts";
-import { buildLocalWorkspaceContext, shouldAttachLocalWorkspaceContext } from "../../server/chat/local-workspace-context.ts";
+import {
+  buildLocalWorkspaceContext,
+  buildLocalWorkspaceDirectReply,
+  shouldAttachLocalWorkspaceContext,
+  shouldUseLocalWorkspaceDirectReply,
+} from "../../server/chat/local-workspace-context.ts";
 import { shouldUseLocalQwen35DirectBridge } from "../../server/chat/local-qwen35-direct-policy.ts";
 import { inferReportResearchKind } from "../../server/chat/report-research-context.ts";
 import {
@@ -92,11 +97,21 @@ function runLocalWorkspaceContext(input) {
   const routeIntent = input.routeIntent || classifyRouteIntent(prompt, input.routeOptions || {});
   const cwd = path.resolve(String(input.cwd || process.cwd()));
   const attach = shouldAttachLocalWorkspaceContext(prompt, routeIntent);
-  const contextText = buildLocalWorkspaceContext({
-    promptText: prompt,
-    cwd,
-    ...(input.options || {}),
-  });
+  const localDirect = shouldUseLocalWorkspaceDirectReply(prompt, routeIntent);
+  const directReply = localDirect
+    ? buildLocalWorkspaceDirectReply({
+      promptText: prompt,
+      cwd,
+      ...(input.options || {}),
+    })
+    : null;
+  const contextText = attach
+    ? buildLocalWorkspaceContext({
+      promptText: prompt,
+      cwd,
+      ...(input.options || {}),
+    })
+    : "";
   const directBridge = shouldUseLocalQwen35DirectBridge(prompt, {
     isLocalModel: true,
     routeIntent,
@@ -107,6 +122,8 @@ function runLocalWorkspaceContext(input) {
     routeIntent,
     cwd,
     attach,
+    localDirect,
+    directReply,
     directBridge,
     contextText,
   };

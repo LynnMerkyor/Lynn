@@ -74,6 +74,60 @@
       ]
     },
     {
+      "id": "workspace.explicit-absolute-file-direct",
+      "title": "Explicit absolute file reads return the requested file instead of falling back to the session cwd",
+      "level": "smoke",
+      "tags": ["local-workspace", "absolute-path", "bug", "ijv6wh"],
+      "operation": "local_workspace_context",
+      "fixture": {
+        "files": [
+          {
+            "path": "paper/alphaT3SOC_v2/main.tex",
+            "content": "\\section{Alpha T3SOC}\n这是一段真实论文内容，不能被工作区根目录摘要替代。"
+          },
+          {
+            "path": "wrong-root.md",
+            "content": "如果答案里出现这段，说明回退到了错误工作区。"
+          }
+        ]
+      },
+      "input": {
+        "prompt": "阅读{{fixtureRoot}}/paper/alphaT3SOC_v2/main.tex",
+        "cwd": "{{fixtureRoot}}",
+        "routeIntent": "utility",
+        "options": { "maxEntries": 20, "maxDocs": 4, "maxDocChars": 800 }
+      },
+      "assertions": [
+        { "path": "attach", "equals": true },
+        { "path": "localDirect", "equals": true },
+        { "path": "directReply.ok", "equals": true },
+        { "path": "directReply.root", "contains": "alphaT3SOC_v2" },
+        { "path": "directReply.text", "contains": "main.tex" },
+        { "path": "directReply.text", "contains": "Alpha T3SOC" },
+        { "path": "directReply.text", "contains": "真实论文内容" },
+        { "path": "directReply.text", "notContains": "错误工作区" },
+        { "path": "directReply.text", "notContains": "当前看到 0 个目录项" }
+      ]
+    },
+    {
+      "id": "workspace.file-protocol-meta-no-prefetch",
+      "title": "Questions about file:// browser blocking do not trigger a fake local directory read",
+      "level": "smoke",
+      "tags": ["local-workspace", "file-protocol", "bug", "ijv6wh"],
+      "operation": "local_workspace_context",
+      "input": {
+        "prompt": "为什么我无法直接读取本地文件路径（file:// 协议被阻止）",
+        "cwd": "{{caseBankRoot}}",
+        "routeIntent": "utility",
+        "options": { "maxEntries": 20, "maxDocs": 4, "maxDocChars": 800 }
+      },
+      "assertions": [
+        { "path": "attach", "equals": false },
+        { "path": "localDirect", "equals": false },
+        { "path": "directReply", "equals": null }
+      ]
+    },
+    {
       "id": "sanitizer.pseudo-tool-xml",
       "title": "Pseudo tool XML is stripped while visible answer text survives",
       "level": "smoke",
@@ -434,6 +488,42 @@
         { "path": "finalTexts[0]", "contains": "回归测试" },
         { "path": "finalTexts[1]", "contains": "深圳今天" },
         { "path": "finalTexts[1]", "notContains": "回归测试" }
+      ]
+    },
+    {
+      "id": "trace.local-file-after-comfyui-no-stale-answer",
+      "title": "A local file prompt after an unrelated ComfyUI task must not inherit the previous answer",
+      "level": "smoke",
+      "tags": ["trace", "pollution", "local-workspace", "bug", "ijv6wh"],
+      "operation": "native_session_trace",
+      "input": {
+        "prompts": [
+          "帮我检查 ComfyUI custom_nodes/foo.py 的导入问题。",
+          "阅读/Users/zaintan/Documents/2026-physics/paper/alphaT3SOC_v2/main.tex"
+        ],
+        "model": {
+          "id": "scripted-sequential-local-file",
+          "provider": "scripted-provider"
+        },
+        "providerScript": [
+          {
+            "content": "请在 custom_nodes/foo.py 里核对 FooNode，并运行 python main.py 验证。"
+          },
+          {
+            "content": "已切换到最新问题：目标是读取 alphaT3SOC_v2/main.tex。"
+          }
+        ]
+      },
+      "assertions": [
+        { "path": "provider.requestCount", "equals": 2 },
+        { "path": "provider.requests[1].lastUserText", "equals": "阅读/Users/zaintan/Documents/2026-physics/paper/alphaT3SOC_v2/main.tex" },
+        { "path": "provider.requests[1].lastUserText", "notContains": "ComfyUI" },
+        { "path": "diagnostics.latestUserText", "equals": "阅读/Users/zaintan/Documents/2026-physics/paper/alphaT3SOC_v2/main.tex" },
+        { "path": "diagnostics.staleEchoCount", "equals": 0 },
+        { "path": "finalTexts[1]", "contains": "alphaT3SOC_v2/main.tex" },
+        { "path": "finalTexts[1]", "notContains": "ComfyUI" },
+        { "path": "finalTexts[1]", "notContains": "custom_nodes/foo.py" },
+        { "path": "finalTexts[1]", "notContains": "python main.py" }
       ]
     },
     {

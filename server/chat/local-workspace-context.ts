@@ -11,7 +11,7 @@ const LOCAL_WORKSPACE_RE = /(?:\b(?:workspace|working directory|folder|directory
 const LOCAL_ACTION_RE = /(?:\b(?:read|scan|inspect|look at|list|find|search|summarize|organize|review|check|delete|remove|clean)\b|读一下|读读|帮我读|阅读|读取|看看|看一下|查看|查找|找到|搜索|寻找|检查|扫描|列出|整理|总结|汇总|分析|打开|删除|删掉|移除|清理)/i;
 const LOCAL_DIRECT_READ_RE = /(?:\b(?:read|scan|inspect|look at|list|find|search|summarize|review|check)\b|读一下|读读|帮我读|阅读|读取|看看|看一下|查看|查找|找到|搜索|寻找|检查|扫描|列出|总结|汇总|打开)/i;
 const LOCAL_MUTATION_RE = /(?:\b(?:delete|remove|clean|move|copy|rename|write|edit|modify|create|make|organize)\b|删除|删掉|移除|清理|移动|挪到|复制|拷贝|重命名|写入|编辑|修改|改写|创建|新建|整理|归档)/i;
-const ABSOLUTE_PATH_RE = /((?:\/(?:Users|Volumes|Applications|opt|var|tmp|private|home|srv|mnt|etc)[^\s"'`“”‘’）),，。；;]*)|(?:[A-Za-z]:\\[^\s"'`“”‘’）),，。；;]*))/g;
+const ABSOLUTE_PATH_RE = /((?:\/(?:Users|Volumes|Applications|opt|var|tmp|private|home|srv|mnt|etc)[^\s"'`“”‘’）),，。；;]*)|(?:[A-Za-z]:[\\/][^\s"'`“”‘’）),，。；;]*))/g;
 const SKIP_DIRS = new Set([
   ".git",
   "node_modules",
@@ -24,8 +24,9 @@ const SKIP_DIRS = new Set([
   "venv",
   "__pycache__",
 ]);
-const DOC_EXT_RE = /\.(?:md|markdown|txt|todo|log)$/i;
+const DOC_EXT_RE = /\.(?:md|markdown|txt|todo|log|tex|bib|rst|json|ya?ml|csv|ts|tsx|js|jsx|py|java|go|rs|c|cc|cpp|h|hpp|css|html|xml)$/i;
 const NOTE_NAME_RE = /(?:笺|便签|工作|清单|待办|计划|优先|jian|note|todo|task|plan|readme)/i;
+const LOCAL_ACCESS_META_RE = /(?:为什么|为何|怎么会|无法|不能|打不开|被阻止|协议被阻止|file:\/\/|browser blocked|protocol blocked|can't|cannot|unable)/i;
 
 interface WorkspaceEntry {
   rel: string;
@@ -60,6 +61,7 @@ type WorkspaceSnapshot = {
   now: Date;
   entries: WorkspaceEntry[];
   docs: WorkspaceDocument[];
+  requestedFile?: WorkspaceDocument | null;
 } | {
   ok: false;
   root: string;
@@ -67,6 +69,7 @@ type WorkspaceSnapshot = {
   now: Date;
   entries: WorkspaceEntry[];
   docs: WorkspaceDocument[];
+  requestedFile?: WorkspaceDocument | null;
   error: string;
 };
 
@@ -91,22 +94,49 @@ function safeReadDir(dir: string): Dirent[] {
   try { return fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; }
 }
 
-function extractExplicitWorkspacePath(promptText: unknown): string {
+function extractExplicitPathCandidates(promptText: unknown): string[] {
   const text = String(promptText || "");
   const matches: string[] = [];
   for (const match of text.matchAll(ABSOLUTE_PATH_RE)) {
     const raw = String(match[1] || "").replace(/[，。；;:：,.]+$/g, "");
-    if (raw) matches.push(raw);
+    if (!raw) continue;
+    const matchIndex = Number(match.index ?? 0);
+    if (/^[A-Za-z]:[\\/]/.test(raw) && matchIndex > 0 && /[A-Za-z0-9]/.test(text[matchIndex - 1] || "")) {
+      continue;
+    }
+    try {
+      matches.push(decodeURI(raw));
+    } catch {
+      matches.push(raw);
+    }
   }
+  return matches.map((candidate) => path.resolve(candidate));
+}
+
+function hasExplicitLocalPath(promptText: unknown): boolean {
+  return extractExplicitPathCandidates(promptText).length > 0;
+}
+
+function extractExplicitFilePath(promptText: unknown): string {
+  for (const candidate of extractExplicitPathCandidates(promptText)) {
+    const stat = safeStat(candidate);
+    if (stat?.isFile()) return candidate;
+  }
+  return "";
+}
+
+function extractExplicitWorkspacePath(promptText: unknown): string {
+  const text = String(promptText || "");
+  const matches = extractExplicitPathCandidates(promptText);
   for (const candidate of matches) {
-    const resolved = path.resolve(candidate);
-    const stat = safeStat(resolved);
-    if (stat?.isDirectory()) return resolved;
+    const stat = safeStat(candidate);
+    if (stat?.isDirectory()) return candidate;
+    if (stat?.isFile()) return path.dirname(candidate);
   }
   if (/(?:下载文件夹|下载目录|Downloads(?:\s+folder)?)/i.test(text)) {
     return path.join(process.env.HOME || "", "Downloads");
   }
-  return matches[0] ? path.resolve(matches[0]) : "";
+  return matches[0] || "";
 }
 
 function formatSize(bytes: unknown): string {
@@ -170,14 +200,48 @@ function pickDocuments(entries: WorkspaceEntry[], maxDocs = 6): WorkspaceEntry[]
 
 function readDocumentPreview(entry: WorkspaceEntry, maxChars: number): string {
   try {
-    const raw = fs.readFileSync(entry.full, "utf8");
+    const maxReadBytes = Math.max(16_384, Math.min(512_000, Math.max(1, maxChars) * 8));
+    const raw = entry.size > maxReadBytes
+      ? readFilePrefix(entry.full, maxReadBytes)
+      : fs.readFileSync(entry.full, "utf8");
     const text = raw.replace(/\0/g, "").trim();
-    if (text.length <= maxChars) return text;
-    return `${text.slice(0, maxChars)}\n\n[内容过长，已截断 ${text.length - maxChars} 字]`;
+    if (text.length <= maxChars && entry.size <= maxReadBytes) return text;
+    const suffix = entry.size > maxReadBytes
+      ? `内容过长，仅读取前 ${formatSize(maxReadBytes)} / 共 ${formatSize(entry.size)}`
+      : `内容过长，已截断 ${text.length - maxChars} 字`;
+    return `${text.slice(0, maxChars)}\n\n[${suffix}]`;
   } catch (err) {
     const message = err && typeof err === "object" && "message" in err ? err.message : err;
     return `[读取失败: ${message || err}]`;
   }
+}
+
+function readFilePrefix(filePath: string, maxBytes: number): string {
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(maxBytes);
+    const bytesRead = fs.readSync(fd, buffer, 0, maxBytes, 0);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function buildRequestedFileDocument(filePath: string, root: string, maxChars: number): WorkspaceDocument | null {
+  const stat = safeStat(filePath);
+  if (!stat?.isFile()) return null;
+  const rel = path.relative(root, filePath) || path.basename(filePath);
+  const entry: WorkspaceEntry = {
+    rel: toPosixPath(rel),
+    full: filePath,
+    isDir: false,
+    size: stat.size || 0,
+    mtimeMs: stat.mtimeMs || 0,
+  };
+  return {
+    ...entry,
+    preview: readDocumentPreview(entry, maxChars),
+  };
 }
 
 function extractOpenTasks(text: unknown): string[] {
@@ -191,6 +255,7 @@ function extractOpenTasks(text: unknown): string[] {
 }
 
 function getSnapshot({ promptText, cwd, maxEntries = 80, maxDocs = 6, maxDocChars = 2600, now = new Date() }: WorkspaceOptions = {}): WorkspaceSnapshot {
+  const explicitFile = extractExplicitFilePath(promptText);
   const explicitRoot = extractExplicitWorkspacePath(promptText);
   const root = explicitRoot || path.resolve(String(cwd || process.cwd()));
   const stat = safeStat(root);
@@ -206,10 +271,15 @@ function getSnapshot({ promptText, cwd, maxEntries = 80, maxDocs = 6, maxDocChar
     };
   }
   const entries = walkWorkspace(root, { maxEntries });
+  const requestedFile = explicitFile ? buildRequestedFileDocument(explicitFile, root, maxDocChars) : null;
   const docs = pickDocuments(entries, maxDocs).map((entry) => ({
     ...entry,
     preview: readDocumentPreview(entry, maxDocChars),
   }));
+  if (requestedFile && !docs.some((doc) => doc.full === requestedFile.full)) {
+    docs.unshift(requestedFile);
+    if (docs.length > maxDocs) docs.length = maxDocs;
+  }
   return {
     ok: true,
     root,
@@ -217,6 +287,7 @@ function getSnapshot({ promptText, cwd, maxEntries = 80, maxDocs = 6, maxDocChar
     now,
     entries,
     docs,
+    requestedFile,
   };
 }
 
@@ -244,12 +315,15 @@ export function shouldAttachLocalWorkspaceContext(promptText: unknown, routeInte
   if (intent !== ROUTE_INTENTS.UTILITY && intent !== ROUTE_INTENTS.CODING) return false;
   const text = String(promptText || "");
   if (isInternalAutomationPrompt(text)) return false;
+  if (LOCAL_ACCESS_META_RE.test(text) && !hasExplicitLocalPath(text)) return false;
+  if (hasExplicitLocalPath(text)) return LOCAL_ACTION_RE.test(text);
   return LOCAL_WORKSPACE_RE.test(text) && LOCAL_ACTION_RE.test(text);
 }
 
 export function shouldUseLocalWorkspaceDirectReply(promptText: unknown, routeIntent?: string | null): boolean {
   if (!shouldAttachLocalWorkspaceContext(promptText, routeIntent)) return false;
   const text = String(promptText || "");
+  if (LOCAL_ACCESS_META_RE.test(text) && !/^\s*(?:read|scan|inspect|look at|list|find|search|summarize|review|check|读一下|读读|帮我读|阅读|读取|看看|看一下|查看|查找|找到|搜索|寻找|检查|扫描|列出|总结|汇总|打开)/i.test(text)) return false;
   if (LOCAL_MUTATION_RE.test(text)) return false;
   return LOCAL_DIRECT_READ_RE.test(text);
 }
@@ -278,7 +352,23 @@ export function buildLocalWorkspaceDirectReply({
       ok: false,
       root: snapshot.root,
       entriesCount: 0,
-      text: `我刚刚读取了 \`${snapshot.root}\`，但这个路径不存在或不是目录。`,
+      text: `我无法读取 \`${snapshot.root}\`：路径不存在、不可访问，或不是可列出的本地目录。`,
+    };
+  }
+
+  if (snapshot.requestedFile) {
+    const preview = String(snapshot.requestedFile.preview || "").trim();
+    return {
+      ok: true,
+      root: snapshot.root,
+      entriesCount: snapshot.entries.length,
+      docsCount: snapshot.docs.length,
+      text: [
+        `我已读取 \`${snapshot.requestedFile.full}\`（${formatSize(snapshot.requestedFile.size)}）。`,
+        "",
+        "主要内容：",
+        preview || "(文件为空)",
+      ].join("\n"),
     };
   }
 
@@ -363,12 +453,16 @@ export function buildLocalWorkspaceContext({
   ];
 
   if (!snapshot.ok) {
-    lines.push(`读取状态：失败，路径不存在或不是目录。`);
+    lines.push(`读取状态：失败，路径不存在、不可访问，或不是可列出的本地目录。`);
     return lines.join("\n");
   }
 
   const entries = snapshot.entries;
-  lines.push(`读取状态：成功。目录项摘要 ${entries.length} 条。`);
+  if (snapshot.requestedFile) {
+    lines.push(`读取状态：成功。已读取用户指定文件 \`${snapshot.requestedFile.full}\`（${formatSize(snapshot.requestedFile.size)}）。`);
+  } else {
+    lines.push(`读取状态：成功。目录项摘要 ${entries.length} 条。`);
+  }
   lines.push("");
   lines.push("目录摘要：");
   if (entries.length === 0) {
