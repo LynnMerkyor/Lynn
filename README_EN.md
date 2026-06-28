@@ -4,8 +4,8 @@
 
 <h1 align="center">Lynn</h1>
 
-<p align="center"><strong>GUI Session Progress · CLI headless workers · StepFun default route · realtime voice · long-term memory</strong></p>
-<p align="center">An open-source desktop AI agent focused on chat, Session Progress, files, and sync-driven work state in the GUI. Parallel collaboration remains available through headless CLI workers for Codex, Claude, Qwen, and other agents.</p>
+<p align="center"><strong>Open-source desktop AI assistant · see where every chat & task stands · realtime voice · long-term memory</strong></p>
+<p align="center">An open-source desktop AI agent. The main window keeps you focused on the conversation — see how far each chat has gotten and what still needs attention, manage files, and review every change it makes. When you want to run several tasks at once, Lynn's CLI can act as a background worker driven by Codex, Claude, Qwen, and other tools.</p>
 
 <p align="center"><a href="README.md">中文版 (默认)</a> | <strong>English</strong></p>
 
@@ -21,7 +21,6 @@
 - **Source and app**: [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases) · [download mirror](https://download.merkyorlynn.com/download.html)
 - **Models and GGUF mirrors**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
 - **Recommended edge model**: [ModelScope 27B Q5_K_M GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) · [HuggingFace 27B Q5_K_M GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF) · 32GB+ machines can use [35B-A3B Q5_K_M GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF)
-- **Agent regression**: [`agent-regression-kit/`](agent-regression-kit/) is bundled here today. Coding100, Agent20, automated regression cases, and model tooling should move into a standalone tooling repo; see [`docs/ops/agent-eval-tooling-repo.md`](docs/ops/agent-eval-tooling-repo.md).
 
 ---
 
