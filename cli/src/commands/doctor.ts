@@ -5,7 +5,7 @@ import { resolveDataDir } from "../session/store.js";
 import { readVersionInfo } from "../version.js";
 import { brainRouteReadiness, fetchBrainProviderStatus, type BrainProviderStatus } from "../brain-status.js";
 import { parseBrainStreamPayload, parseSsePayloads } from "../brain-client.js";
-import { signedBrainHeaders } from "../brain-auth.js";
+import { registerRemoteBrainDevice, signedBrainHeaders } from "../brain-auth.js";
 import { brainEndpointUrl, resolveDefaultBrainUrl } from "../brain-url.js";
 
 export interface DoctorResult {
@@ -117,7 +117,7 @@ export async function smokeBrainRoute(brainUrl: string, timeoutMs = 5000): Promi
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   let activeProvider = "";
   try {
-    const response = await fetch(brainEndpointUrl(brainUrl, "/v1/chat/completions"), {
+    let response = await fetch(brainEndpointUrl(brainUrl, "/v1/chat/completions"), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -132,6 +132,23 @@ export async function smokeBrainRoute(brainUrl: string, timeoutMs = 5000): Promi
       }),
       signal: ctrl.signal,
     });
+    if (response.status === 401 && await registerRemoteBrainDevice(brainUrl)) {
+      response = await fetch(brainEndpointUrl(brainUrl, "/v1/chat/completions"), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...signedBrainHeaders({ pathname: "/v1/chat/completions" }),
+        },
+        body: JSON.stringify({
+          model: "lynn-brain-router",
+          stream: true,
+          max_tokens: 8,
+          messages: [{ role: "user", content: "Reply with OK." }],
+          extra_body: { enable_thinking: false },
+        }),
+        signal: ctrl.signal,
+      });
+    }
     if (!response.ok) {
       return { ok: false, message: `request failed: ${response.status} ${response.statusText}`.trim() };
     }

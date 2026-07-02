@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { getBrainRegistrationToken } from "../../shared/brain-provider.js";
 import { readVersionInfo } from "./version.js";
 import { brainEndpointUrl } from "./brain-url.js";
 
@@ -148,6 +149,7 @@ export async function registerRemoteBrainDevice(brainUrl: string, options: { lyn
       secret: identity.secret,
       clientVersion: version,
       clientPlatform: process.platform,
+      registrationToken: getBrainRegistrationToken(),
     }),
   });
   if (response.ok) return true;
