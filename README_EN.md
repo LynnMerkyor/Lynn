@@ -20,7 +20,7 @@
 
 - **Source and app**: [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases) · [download mirror](https://download.merkyorlynn.com/download.html)
 - **Models and GGUF mirrors**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
-- **Recommended edge model**: [ModelScope 27B Coding SFT/RL main repo](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding) · [ModelScope 27B LynnStyle GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM-SFT-55XH-RL-Coding) · [HuggingFace 27B Coding SFT/RL](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding)
+- **Recommended edge model**: [ModelScope 27B Coding SFT/RL main repo](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding) · [ModelScope 27B LynnStyle GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF) · [HuggingFace 27B Coding SFT/RL](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding)
 
 ---
 
@@ -41,7 +41,7 @@ Same harness, thinking-on, vs the base A3B:
 
 Distilled and base have **identical single-stream TPS** (~224 tok/s on R6000) — the orchestration speedup comes from **fewer tokens to a decision** (we distilled the *thinking style*, not raw speed). Hard tasks (e.g. concurrency) are still backstopped by **harness objective verification + a DS-V4 Flash escape hatch**.
 
-📦 **Default edge model**: [`Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding`](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding); **GGUF mirror**: [ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM-SFT-55XH-RL-Coding) · [HuggingFace](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
+📦 **Default edge model**: [`Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding`](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding); **GGUF mirror**: [ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF) · [HuggingFace](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
 
 ### ② Engine route: we chose the fastest edge framework — llama.cpp — and give back
 
@@ -830,7 +830,7 @@ Lynn now recommends **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding LynnStyle De
 
 **Recommended 27B** (choose Q5/Q4/Q3/Q2 by hardware):
 - 🇨🇳 **ModelScope main repo**: [Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding) (BF16 + `gguf/` subdirectory)
-- 🇨🇳 **ModelScope GGUF mirror**: [Merkyor/Qwen3.6-27B-DSV4Pro-GLM-SFT-55XH-RL-Coding](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM-SFT-55XH-RL-Coding)
+- 🇨🇳 **ModelScope GGUF mirror**: [Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
 - 🤗 **Hugging Face**: [nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding) / [GGUF mirror](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
 
 **Low-config 9B / 4B and high-end 35B** (explicit hardware choices):
