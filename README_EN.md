@@ -152,7 +152,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 **v0.85.5 UX and release update**:
 - **Turns the right rail into Session Progress**: it now prioritizes the current session, items needing attention, recent sessions, and a lightweight preview. Historical session cards have an explicit Open button, and the current session can focus input directly.
 - **Removes internal jargon and empty panels**: "map/materials/patrol/in progress/closed" copy is simplified to "progress/files/sync/active/done/needs attention"; empty related-session space falls back to recent sessions.
-- **Confirms the edge model ladder**: Lynn now recommends **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding LynnStyle Dense** by default: Q5 for 32GB, Q4 for 24GB, Q3/Q4 for 16GB, and Q2 as an 8GB experimental tier. 9B / 4B stay explicit low-config downgrades, while 35B-A3B remains a legacy option. Low-config machines do not get a proactive 27B install prompt.
+- **Confirms the edge model ladder**: Lynn now recommends **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding LynnStyle Dense** by default: Q5 for 32GB, Q4 for 24GB, Q3 for 16GB, and Q2 as an 8GB experimental tier. 9B / 4B stay explicit low-config downgrades, while 35B-A3B remains a legacy option. Low-config machines do not get a proactive 27B install prompt.
 - **Makes local startup more direct**: the chat input local-model prompt can prepare and start the 27B path directly instead of sending users through Settings first.
 - **Guards against hidden-reasoning short answers**: when hidden reasoning consumes the turn but the visible answer is only a tiny fragment, Lynn adds a visible fallback and triggers auto-review.
 - **Keeps the v0.85.4 retry-answer fix**: retrying an assistant answer no longer pollutes later fresh prompts with stale replacement targets.
@@ -809,7 +809,7 @@ Memory and skill distillation work together: the more you use Lynn, the more acc
 
 ## Local models — hardware ladder
 
-Lynn now recommends **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding LynnStyle Dense** as the default edge model: Q5 for 32GB, Q4 for 24GB, Q3/Q4 for 16GB, and Q2 as an 8GB experimental tier. Low-config machines do not get a proactive local-model install prompt; 9B / 4B remain explicit downgrade choices in Settings, while 35B-A3B remains a legacy option. Local GGUF still starts only after the user enables it:
+Lynn now recommends **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding LynnStyle Dense** as the default edge model: Q5 for 32GB, Q4 for 24GB, Q3 for 16GB, and Q2 as an 8GB experimental tier. Low-config machines do not get a proactive local-model install prompt; 9B / 4B remain explicit downgrade choices in Settings, while 35B-A3B remains a legacy option. Local GGUF still starts only after the user enables it:
 
 | Tier | Model | Size | Recommended hardware | Context | Capability signal |
 |------|-------|:----:|---------------------|:-------:|-------------------|
@@ -818,7 +818,7 @@ Lynn now recommends **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding LynnStyle De
 | Low-config downgrade | Qwen3.5-4B Q4_K_M imatrix (Lynn) | 2.6 GB | 8~16GB optional | 32K | **Q4_K_M imatrix** · MMLU thinking-off 73.00% · GPQA thinking-off 16.67% · thinking-on may think for a long time and return no visible answer |
 | Legacy option | Qwen3.6-35B-A3B DSV4Pro Distill Q5_K_M imatrix MTP | 25.3 GB | 32GB VRAM/unified memory+ | 32K | Legacy 35B orchestrator path kept for existing users and comparison tests |
 
-> The default recommendation is now the **Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding** LynnStyle Dense ladder: Q5 for 32GB, Q4 for 24GB, Q3/Q4 for 16GB, and Q2 as an 8GB experimental tier. 9B / 4B are downgrade lanes only; 35B-A3B is kept as a legacy option.
+> The default recommendation is now the **Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding** LynnStyle Dense ladder: Q5 for 32GB, Q4 for 24GB, Q3 for 16GB, and Q2 as an 8GB experimental tier. 9B / 4B are downgrade lanes only; 35B-A3B is kept as a legacy option.
 
 | Universal | Details |
 |---|---|
