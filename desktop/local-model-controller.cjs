@@ -440,6 +440,7 @@ function stopManagedQwen35LlamaServer() {
       encoding: "utf8",
       timeout: 2000,
       maxBuffer: 512 * 1024,
+      windowsHide: true,
     });
     for (const line of stdout.split("\n")) {
       const match = line.trim().match(/^(\d+)\s+(.+)$/);

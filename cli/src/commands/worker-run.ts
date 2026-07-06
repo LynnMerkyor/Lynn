@@ -349,6 +349,7 @@ async function runCommand(command: string, cwd: string): Promise<{ ok: boolean; 
     shell: true,
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, LYNN_NO_MODEL_DOWNLOADS: "1" },
+    windowsHide: true,
   });
   let stdout = "";
   let stderr = "";
@@ -402,6 +403,7 @@ async function runExternalWorker(input: {
     cwd: input.worktree,
     shell: true,
     stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
     env: {
       ...process.env,
       LYNN_WORKER_ID: input.workerId,

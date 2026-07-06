@@ -39,6 +39,7 @@ export function runDryRunValidation(cwd: string, validateCommand: unknown[] | un
     cwd,
     encoding: "utf-8",
     maxBuffer: 1024 * 1024,
+    windowsHide: true,
   });
   return {
     command,

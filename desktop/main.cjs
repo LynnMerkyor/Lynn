@@ -37,6 +37,7 @@ if (process.platform !== "win32") {
     const resolved = execFileSync(loginShell, ["-l", "-c", "printenv PATH"], {
       timeout: 5000,
       encoding: "utf8",
+      windowsHide: true,
     }).trim();
     if (resolved) process.env.PATH = resolved;
   } catch {}

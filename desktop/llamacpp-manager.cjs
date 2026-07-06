@@ -113,7 +113,7 @@ function systemBinaryCandidates(platform) {
     "/usr/bin/llama-server",
   ];
   try {
-    const resolved = spawnSync("which", ["llama-server"], { encoding: "utf8", timeout: 1000 });
+    const resolved = spawnSync("which", ["llama-server"], { encoding: "utf8", timeout: 1000, windowsHide: true });
     const fromPath = String(resolved.stdout || "").trim();
     if (fromPath) candidates.unshift(fromPath);
   } catch {
@@ -360,7 +360,7 @@ class LlamaCppManager {
     let helpText = cached;
     if (!helpText) {
       try {
-        const out = spawnSync(this.binaryPath, ["--help"], { encoding: "utf8", timeout: 2500 });
+        const out = spawnSync(this.binaryPath, ["--help"], { encoding: "utf8", timeout: 2500, windowsHide: true });
         helpText = `${out.stdout || ""}\n${out.stderr || ""}`;
         this._helpCache.set(this.binaryPath, helpText);
       } catch {

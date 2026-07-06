@@ -194,7 +194,7 @@ async function recordVoice(args: ParsedArgs): Promise<Buffer> {
 
 function runProcess(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"] });
+    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
     let stderr = "";
     child.stderr?.on("data", (chunk) => {
       stderr += String(chunk);

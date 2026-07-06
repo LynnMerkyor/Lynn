@@ -165,7 +165,7 @@ export function createBashTool(cwd = process.cwd(), options: { operations?: { ex
 
 async function runCommand(cmd: string, args: string[], cwd: string): Promise<string> {
   return await new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += String(chunk); });
@@ -180,7 +180,7 @@ async function runCommand(cmd: string, args: string[], cwd: string): Promise<str
 
 async function runShell(command: string, cwd: string): Promise<string> {
   return await new Promise((resolve, reject) => {
-    const child = spawn(command, { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += String(chunk); });

@@ -77,6 +77,7 @@ export async function bashTool(ctx: ToolRunContext, command: string): Promise<Cl
       cwd: ctx.cwd,
       shell: true,
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
     let stdout = "";
     let stderr = "";

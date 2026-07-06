@@ -189,6 +189,7 @@ function runNpmGlobalInstall(target: string): Promise<number> {
     const child = spawn(npmBin, ["install", "-g", "--force", target], {
       stdio: "inherit",
       env: process.env,
+      windowsHide: true,
     });
     child.once("error", reject);
     child.once("close", (code) => resolve(code ?? 1));

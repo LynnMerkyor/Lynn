@@ -320,6 +320,7 @@ export function createFsRoute(engine: FsRouteEngine): Hono {
           cwd: fileDir,
           encoding: "utf-8",
           stdio: ["pipe", "pipe", "pipe"],
+          windowsHide: true,
         }).trim();
       } catch {
         return c.json({
@@ -342,6 +343,7 @@ export function createFsRoute(engine: FsRouteEngine): Hono {
           cwd: gitRoot,
           encoding: "utf-8",
           stdio: ["pipe", "pipe", "pipe"],
+          windowsHide: true,
         });
         isTracked = true;
       } catch {
@@ -352,7 +354,7 @@ export function createFsRoute(engine: FsRouteEngine): Hono {
         diffOutput = execFileSync(
           "git",
           ["--no-pager", "diff", "HEAD", "--", relPath],
-          { cwd: gitRoot, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
+          { cwd: gitRoot, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
         );
       } else {
         // 新文件（HEAD 里还没有）— 对比空文件
@@ -360,7 +362,7 @@ export function createFsRoute(engine: FsRouteEngine): Hono {
           diffOutput = execFileSync(
             "git",
             ["--no-pager", "diff", "--no-index", "/dev/null", filePath],
-            { cwd: gitRoot, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
+            { cwd: gitRoot, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
           );
         } catch (err2) {
           // git diff --no-index 有改动时退出码为 1，需要 catch 才能拿到输出
@@ -398,7 +400,7 @@ export function createFsRoute(engine: FsRouteEngine): Hono {
         const headContent = execFileSync(
           "git",
           ["--no-pager", "show", `HEAD:${relPath}`],
-          { cwd: gitRoot, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
+          { cwd: gitRoot, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
         );
         if (editRollbackStore?.finalize && editRollbackStore?.setPending) {
           const tmpId = `external-${crypto.randomBytes(8).toString("hex")}`;

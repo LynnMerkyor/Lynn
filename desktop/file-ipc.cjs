@@ -259,7 +259,7 @@ wrapIpcHandler("open-skill-viewer", (event, data) => {
             `Expand-Archive -Path '${data.skillPath.replace(/'/g, "''")}' -DestinationPath '${tmpDir.replace(/'/g, "''")}' -Force`,
           ], { stdio: "ignore", windowsHide: true });
         } else {
-          execFileSync("unzip", ["-o", "-q", data.skillPath, "-d", tmpDir]);
+          execFileSync("unzip", ["-o", "-q", data.skillPath, "-d", tmpDir], { windowsHide: true });
         }
 
         let skillDir = null;

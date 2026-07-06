@@ -66,6 +66,7 @@ async function startBrain(args: ParsedArgs, brainUrl: string): Promise<number> {
     detached: true,
     stdio: ["ignore", out, out],
     env: { ...process.env },
+    windowsHide: true,
   });
   child.unref();
   fs.writeFileSync(path.join(home, "brain-v2.pid"), `${child.pid}\n`, "utf8");

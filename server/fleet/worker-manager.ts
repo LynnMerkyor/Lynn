@@ -177,6 +177,7 @@ export function spawnWorker(opts: SpawnWorkerOptions, onEvent: (e: FleetWorkerEv
     cwd: opts.cwd,
     env: opts.env ?? process.env,
     stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
   });
   const parse = createLineParser(opts.workerId);
   let sawWorkerTerminalEvent = false;

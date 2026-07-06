@@ -26,6 +26,7 @@ export async function applyPatchTool(ctx: ToolRunContext, patch: string): Promis
     const child = spawn("git", ["apply", "--whitespace=nowarn", "-"], {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     });
     let stdout = "";
     let stderr = "";

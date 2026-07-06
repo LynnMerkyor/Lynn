@@ -13,6 +13,6 @@ export function extractZip(zipPath: string, destDir: string): void {
       `Expand-Archive -Path '${zipPath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`,
     ], { stdio: "ignore", windowsHide: true });
   } else {
-    execFileSync("unzip", ["-o", "-q", zipPath, "-d", destDir]);
+    execFileSync("unzip", ["-o", "-q", zipPath, "-d", destDir], { windowsHide: true });
   }
 }

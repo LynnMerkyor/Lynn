@@ -1038,7 +1038,7 @@ export function createLocalQwen35Route(engine: LocalQwen35RouteEngine): Hono {
     };
     job = runningJob;
 
-    const child = spawn("python3", args, { cwd: fromRoot(), stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("python3", args, { cwd: fromRoot(), stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     let stdout = "";
     let stderr = "";
     const append = (chunk: string) => {

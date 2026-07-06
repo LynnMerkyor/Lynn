@@ -211,6 +211,7 @@ export function startLocalQwen35Setup({
     cwd: repoRoot(),
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env },
+    windowsHide: true,
   });
   let stdout = '';
   let stderr = '';

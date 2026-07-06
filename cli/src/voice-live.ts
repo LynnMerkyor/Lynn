@@ -103,7 +103,7 @@ function playAudioFile(file: string): Promise<void> {
 
 function runPlaybackProcess(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"] });
+    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
     let stderr = "";
     child.stderr?.on("data", (chunk) => {
       stderr += String(chunk);
@@ -221,7 +221,7 @@ function spawnRecorder(): ChildProcess {
     "-f",
     "s16le",
     "pipe:1",
-  ], { stdio: ["ignore", "pipe", "pipe"] });
+  ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
 }
 
 function stopRecorder(child: ChildProcess): void {

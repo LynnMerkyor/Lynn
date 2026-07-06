@@ -678,7 +678,7 @@ export function createDeskRoute(engine: DeskRouteEngine, hub: DeskRouteHub): Hon
       // macOS: 隐藏 .agents 目录（chflags hidden）
       if (process.platform === "darwin") {
         const agentsDir = path.join(cwd, ".agents");
-        try { execFileSync("chflags", ["hidden", agentsDir]); } catch { /* chflags is cosmetic */ }
+        try { execFileSync("chflags", ["hidden", agentsDir], { windowsHide: true }); } catch { /* chflags is cosmetic */ }
       }
 
       if (stat.isDirectory()) {
@@ -696,7 +696,7 @@ export function createDeskRoute(engine: DeskRouteEngine, hub: DeskRouteHub): Hon
         // 先解压到临时目录确认内容
         const tmpDir = path.join(skillsDir, `_tmp_${Date.now()}`);
         fs.mkdirSync(tmpDir, { recursive: true });
-        execFileSync("unzip", ["-o", "-q", sourcePath, "-d", tmpDir]);
+        execFileSync("unzip", ["-o", "-q", sourcePath, "-d", tmpDir], { windowsHide: true });
 
         // 检查解压结果：如果只有一个子目录，用那个；否则用文件名
         const entries = fs.readdirSync(tmpDir).filter(e => !e.startsWith("."));

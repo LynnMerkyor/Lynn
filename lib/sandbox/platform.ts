@@ -16,11 +16,11 @@ export function detectPlatform(): SandboxPlatform {
 export function checkAvailability(platform: SandboxPlatform): boolean {
   try {
     if (platform === "seatbelt") {
-      execFileSync("which", ["sandbox-exec"], { stdio: "ignore" });
+      execFileSync("which", ["sandbox-exec"], { stdio: "ignore", windowsHide: true });
       return true;
     }
     if (platform === "bwrap") {
-      execFileSync("which", ["bwrap"], { stdio: "ignore" });
+      execFileSync("which", ["bwrap"], { stdio: "ignore", windowsHide: true });
       return true;
     }
   } catch {

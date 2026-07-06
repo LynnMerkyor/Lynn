@@ -152,6 +152,7 @@ class McpStdioConnection extends McpConnectionBase<McpStdioServerConfig> {
           cwd: this.cwd,
           env: { ...filteredParentEnv, ...(this.env as NodeJS.ProcessEnv) },
           stdio: ["pipe", "pipe", "pipe"],
+          windowsHide: true,
         });
 
         this._process.stdout.on("data", (chunk) => this._onData(chunk));

@@ -171,6 +171,7 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 - **修复上一题路径/ComfyUI 任务污染**:上一轮 ComfyUI、main.tex 或其它文件任务不会继续污染下一轮普通追问;回归测试已覆盖“先问 ComfyUI、再读 main.tex”的串题场景。
 - **大文件读取更稳**:用户点名的大文件只做可控 preview,避免一次性把巨大 LaTeX/代码文件塞进模型上下文导致卡顿或截断。
 - **Windows 路径更兼容**:`D:\...`、`D:/...` 和 `%20` 编码路径都按本地文件处理,不会误判成 URL 或协议说明。
+- **Windows CMD 弹窗热修**:GUI、CLI、Agent 工具、MCP、本地模型、语音和 worker 后台子进程统一设置 `windowsHide`;release static gate 已加入生产代码与主进程 bundle 扫描,漏掉即阻断发布。
 - **设置页入口更稳**:从聊天窗/本地模型提示跳到“模型服务”设置时,不再偶发落回“关于”页;安装态门禁已覆盖设置页供应商列表和模型删除回归。
 - **门禁覆盖**:本次客户端包纳入 Agent regression 32/32、CLI200、GUI100、typecheck 和发版 preflight;日常生活、政务/法律、医疗、教育、旅行、招聘、办公、行业运营、代码和小说写作场景已进入同一套回归门禁,CLI/GUI 同核回归不再只靠人工体验。
 - **保留 v0.85.5 体验改动**:右侧“会话进度”、27B 端侧默认推荐、低配不主动弹本地模型引导、隐藏推理短答兜底继续保留。

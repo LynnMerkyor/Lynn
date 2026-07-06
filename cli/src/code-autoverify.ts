@@ -74,7 +74,7 @@ export function runAutoVerify(plan: AutoVerifyPlan, cwd: string): Promise<AutoVe
     let settled = false;
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32" });
+      child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32", windowsHide: true });
     } catch (error) {
       resolve({ ran: false, ok: true, label: plan.label, output: `auto-verify could not start: ${error instanceof Error ? error.message : String(error)}` });
       return;

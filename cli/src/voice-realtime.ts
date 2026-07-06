@@ -174,7 +174,7 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
     try { afplayProc?.kill("SIGTERM"); } catch { /* noop */ }
     playbackActive = true;
     phase = "speaking";
-    afplayProc = spawn(playCmd, playArgs(file), { stdio: "ignore" });
+    afplayProc = spawn(playCmd, playArgs(file), { stdio: "ignore", windowsHide: true });
     afplayProc.once("exit", () => {
       try { fs.unlinkSync(file); } catch { /* noop */ }
       afplayProc = null;
@@ -201,7 +201,7 @@ export async function runRealtimeVoice(args: ParsedArgs, options: { json?: boole
       "-hide_banner", "-loglevel", "error", "-nostdin", ...micInputArgs(),
       ...micFilterArgs(),
       "-ac", "1", "-ar", String(SAMPLE_RATE), "-sample_fmt", "s16", "-f", "s16le", "pipe:1",
-    ], { stdio: ["ignore", "pipe", "pipe"] });
+    ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     let pending = Buffer.alloc(0);
     mic.stdout?.on("data", (chunk: Buffer) => {
       pending = pending.length ? Buffer.concat([pending, chunk]) : Buffer.from(chunk);

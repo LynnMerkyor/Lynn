@@ -108,6 +108,160 @@ function makeCheck(id, severity, ok, message, detail = "") {
   return { id, severity, ok, message, detail };
 }
 
+const CHILD_PROCESS_SCAN_DIRS = ["core", "lib", "server", "desktop", "cli/src", "brain-v2-mirror"];
+const CHILD_PROCESS_METHODS = new Set(["spawn", "spawnSync", "exec", "execFile", "execFileSync"]);
+
+function shouldSkipChildProcessScan(rel) {
+  return rel.includes("/node_modules/")
+    || rel.includes("/dist/")
+    || rel.includes("/dist-renderer/")
+    || rel.includes("/__tests__/")
+    || rel.includes("/scripts/")
+    || rel.includes("/tool-exec/")
+    || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(rel)
+    || !/\.[cm]?[jt]s$/.test(rel);
+}
+
+function parseChildProcessBindings(text) {
+  const bindings = new Set();
+  const addSpecifiers = (raw) => {
+    for (const part of String(raw || "").split(",")) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      const importAlias = trimmed.match(/^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/);
+      const requireAlias = trimmed.match(/^([A-Za-z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)$/);
+      const original = (importAlias?.[1] || requireAlias?.[1] || trimmed.split(/\s+/)[0] || "").trim();
+      const local = (importAlias?.[2] || requireAlias?.[2] || original).trim();
+      if (CHILD_PROCESS_METHODS.has(original)) bindings.add(local);
+    }
+  };
+
+  const importRe = /import\s*\{([^}]+)\}\s*from\s*["'](?:node:)?child_process["']/g;
+  let match;
+  while ((match = importRe.exec(text)) !== null) addSpecifiers(match[1]);
+
+  const requireRe = /(?:const|let|var)\s*\{([^}]+)\}\s*=\s*require\(["']child_process["']\)/g;
+  while ((match = requireRe.exec(text)) !== null) addSpecifiers(match[1]);
+
+  return bindings;
+}
+
+function findMatchingParen(text, openIndex) {
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let i = openIndex; i < text.length; i += 1) {
+    const ch = text[i];
+    const next = text[i + 1] || "";
+
+    if (lineComment) {
+      if (ch === "\n") lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (ch === "*" && next === "/") {
+        blockComment = false;
+        i += 1;
+      }
+      continue;
+    }
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === quote) {
+        quote = "";
+      }
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      lineComment = true;
+      i += 1;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      blockComment = true;
+      i += 1;
+      continue;
+    }
+    if (ch === "'" || ch === "\"" || ch === "`") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "(") depth += 1;
+    else if (ch === ")") {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function lineForOffset(text, offset) {
+  return text.slice(0, Math.max(0, offset)).split(/\r?\n/).length;
+}
+
+async function collectWindowsChildProcessViolations() {
+  const files = [];
+  const walk = async (dir) => {
+    let entries = [];
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      const rel = path.relative(ROOT, full).replace(/\\/g, "/");
+      if (shouldSkipChildProcessScan(rel)) {
+        if (entry.isDirectory() && !rel.includes("/dist/") && !rel.includes("/node_modules/")) {
+          // A skipped directory should remain skipped; this branch only keeps extension filters from
+          // accidentally stopping recursion when the path itself has no extension.
+        } else {
+          continue;
+        }
+      }
+      if (entry.isDirectory()) {
+        if (!shouldSkipChildProcessScan(`${rel}/placeholder.ts`)) await walk(full);
+      } else if (!shouldSkipChildProcessScan(rel)) {
+        files.push({ full, rel });
+      }
+    }
+  };
+
+  for (const dir of CHILD_PROCESS_SCAN_DIRS) await walk(path.join(ROOT, dir));
+
+  const violations = [];
+  for (const file of files) {
+    const text = await readTextIfExists(file.full);
+    if (!/(?:node:)?child_process/.test(text)) continue;
+    const bindings = parseChildProcessBindings(text);
+    const callPatterns = [...bindings].map((name) => ({ label: name, re: new RegExp(`(?<![\\w$.])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\(`, "g") }));
+    for (const method of CHILD_PROCESS_METHODS) {
+      callPatterns.push({
+        label: `require("child_process").${method}`,
+        re: new RegExp(`require\\(["']child_process["']\\)\\.${method}\\s*\\(`, "g"),
+      });
+    }
+    for (const { label, re } of callPatterns) {
+      let match;
+      while ((match = re.exec(text)) !== null) {
+        const open = match.index + match[0].length - 1;
+        const close = findMatchingParen(text, open);
+        const callText = close >= 0 ? text.slice(match.index, close + 1) : text.slice(match.index, match.index + 500);
+        if (!callText.includes("windowsHide")) {
+          violations.push(`${file.rel}:${lineForOffset(text, match.index)} ${label} missing windowsHide`);
+        }
+      }
+    }
+  }
+  return [...new Set(violations)].sort();
+}
+
 function findSemverRefs(text) {
   return [...new Set(String(text || "").match(/\b\d+\.\d+\.\d+\b/g) || [])].sort();
 }
@@ -218,6 +372,14 @@ async function runStaticChecks({ level }) {
       && gateCliTaskText.includes("输入超过 10 个汉字")),
     "release uses live >10-Chinese-character CLI tasks, including default-route narrative, instead of IME-only simulation",
     `${pkg.scripts?.["gate:cli-task"] || ""}\n${gateCliTaskText.slice(0, 500)}`,
+  ));
+  const childProcessViolations = await collectWindowsChildProcessViolations();
+  checks.push(makeCheck(
+    "static-windows-child-process-hidden",
+    "blocker",
+    childProcessViolations.length === 0,
+    "production child_process calls explicitly set windowsHide so Windows desktop/CLI never flashes CMD windows",
+    childProcessViolations.slice(0, 100).join("\n"),
   ));
   checks.push(makeCheck(
     "static-full-release-gate-includes-long-runs",

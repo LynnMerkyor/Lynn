@@ -67,6 +67,7 @@ function runGit(args: string[], cwd: string): string {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 1200,
+    windowsHide: true,
   }).trim();
 }
 

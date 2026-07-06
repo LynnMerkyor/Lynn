@@ -109,7 +109,7 @@ function detectSystemNode(opts = {}) {
 
 function probeNodeVersion(nodePath) {
   try {
-    const r = spawnSync(nodePath, ["--version"], { encoding: "utf8", timeout: 1500 });
+    const r = spawnSync(nodePath, ["--version"], { encoding: "utf8", timeout: 1500, windowsHide: true });
     return String((r && r.stdout) || "").trim() || null;
   } catch {
     return null;
