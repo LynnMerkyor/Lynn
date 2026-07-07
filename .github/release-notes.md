@@ -36,7 +36,11 @@
 - `npm test -- tests/llamacpp-profiles.test.js desktop/src/react/settings/tabs/providers/local-qwen-provider.test.ts tests/migrate-providers.test.js` 通过。
 - `npm test -- desktop/__tests__/ProviderDetail.helpers.test.ts` 通过。
 - `node --check` 通过：`desktop/llamacpp-profiles.cjs`、`desktop/local-model-controller.cjs`、`desktop/llamacpp-manager.cjs`、`desktop/model-downloader.cjs`、`scripts/verify-release-remotes.mjs`。
-- 正式发布前仍需跑完整 `release:preflight` / 打包 / 公证 / 安装态门禁 / 三远端同步校验。
+- `gate:cli-100` 通过：100/100。
+- macOS arm64 / x64 DMG 已完成应用公证、最终 DMG 公证、staple 和 Gatekeeper 校验。
+- Windows x64 NSIS 安装包已生成并签名；packaged server / packaged CLI smoke 通过。
+- 镜像站 0.85.7 资产公网 URL 已验证，远端 CLI tarball sha256 与本地一致，`test:cli-install:remote` 通过。
+- `release:verify-remotes` 通过：`LynnMerkyor/Lynn`、`MerkyorLynn/Lynn`、Gitee `merkyor/Lynn` 的 `main` 和 `v0.85.7` 已同步；两个 GitHub 仓库 CI 均通过。
 
 ---
 

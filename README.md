@@ -191,7 +191,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 - **Windows 路径更兼容**:`D:\...`、`D:/...` 和 `%20` 编码路径都按本地文件处理,不会误判成 URL 或协议说明。
 - **Windows CMD 弹窗热修**:GUI、CLI、Agent 工具、MCP、本地模型、语音和 worker 后台子进程统一设置 `windowsHide`;release static gate 已加入生产代码与主进程 bundle 扫描,漏掉即阻断发布。
 - **设置页入口更稳**:从聊天窗/本地模型提示跳到“模型服务”设置时,不再偶发落回“关于”页;安装态门禁已覆盖设置页供应商列表和模型删除回归。
-- **门禁覆盖**:本次客户端包纳入 Agent regression 32/32、CLI200、GUI100、typecheck 和发版 preflight;日常生活、政务/法律、医疗、教育、旅行、招聘、办公、行业运营、代码和小说写作场景已进入同一套回归门禁,CLI/GUI 同核回归不再只靠人工体验。
+- **门禁覆盖**:本次客户端包按发布指令完成 CLI100、packaged server / CLI smoke、远端 CLI 安装烟测、macOS 公证/Gatekeeper、三远端同步和 GitHub CI;日常生活、政务/法律、医疗、教育、旅行、招聘、办公、行业运营、代码和小说写作场景已进入同一套回归集,CLI/GUI 同核回归不再只靠人工体验。
 - **保留 v0.85.5 体验改动**:右侧“会话进度”、27B 端侧默认推荐、低配不主动弹本地模型引导、隐藏推理短答兜底继续保留。
 
 ```bash
