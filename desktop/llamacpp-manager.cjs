@@ -6,8 +6,9 @@
  * 背景:
  *   5/20 战略 pivot 后 Lynn 客户端默认本地推理底层 = llama.cpp。
  *   Mac Q4_K_M GGUF / Linux CUDA Q4_K_M / Win x64 CUDA Q4_K_M 全平台 ship。
- *   2026-06-27 更新: 默认 ship 模型切到 Qwen3.6-27B DSV4Pro Thinking
- *     Distill GGUF Q5_K_M imatrix + native MTP (19.5GB, 24GB+ 推荐)。
+ *   2026-07-07 更新: 默认 ship 模型切到 Qwen3.6-27B DSV4Pro
+ *     GLM52-SFT-GPT55-RL Coding GGUF Q4 imatrix MTP (4 split shards,
+ *     19.6GB total, 24GB+ 推荐)。
  *   9B / 4B 保留为低配降级档。
  *
  * 本模块策略:
@@ -44,11 +45,11 @@ const net = require("net");
 // ─────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = Object.freeze({
-  // 默认 ship 模型 — Qwen3.6-27B DSV4Pro Thinking Distill Q5_K_M imatrix MTP。
+  // 默认 ship 模型 — Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL Coding Q4 imatrix MTP。
   // 降级路径: 9B / 4B 仍可手动选,但不再作为首推。
-  modelId: "qwen36-27b-dsv4pro-distill-q5km-imatrix",
-  modelFileName: "Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf",
-  modelExpectedSize: 19_535_700_320,
+  modelId: "qwen36-27b-dsv4pro-coding-q4-mtp",
+  modelFileName: "Q4_LynnStyle/Q4-imatrix-MTP-00001-of-00004.gguf",
+  modelExpectedSize: 19_575_379_360,
   // Product default: one comfortable 32K local slot. llama.cpp splits context
   // across parallel slots, so keep -np/--parallel at 1 for the local-first UX.
   serverArgs: [
@@ -56,7 +57,7 @@ const DEFAULT_CONFIG = Object.freeze({
     "--threads", "4",
     "--parallel", "1",
     "--n-gpu-layers", "999",
-    "-a", "qwen36-27b-dsv4pro-distill-q5km-imatrix",
+    "-a", "qwen36-27b-dsv4pro-coding-q4-mtp",
     "--jinja",
     "--spec-type", "draft-mtp",
     "--spec-draft-n-max", "3",
@@ -153,8 +154,11 @@ function legacyModelPathCandidates(homeDir, modelId, fileName, lynnHome = defaul
       path.join(homeDir, "Models", "Lynn", "Qwen3.5-9B", "q4_k_m", fileName),
     );
   }
-  if (modelId === "qwen36-27b-dsv4pro-distill-q5km-imatrix") {
+  if (modelId === "qwen36-27b-dsv4pro-coding-q4-mtp" || modelId === "qwen36-27b-dsv4pro-distill-q5km-imatrix") {
     candidates.push(
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF", "Q4_LynnStyle", "Q4-imatrix-MTP-00001-of-00004.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF", "q4_lynnstyle", "Q4-imatrix-MTP-00001-of-00004.gguf"),
+      path.join(homeDir, "Models", "Lynn", "Qwen3.6-27B", "q4_lynnstyle", "Q4-imatrix-MTP-00001-of-00004.gguf"),
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF", "Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf"),
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF", "q5_k_m", fileName),
       path.join(homeDir, "Models", "Lynn", "Qwen3.6-27B", "q5_k_m", fileName),

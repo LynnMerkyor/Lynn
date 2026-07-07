@@ -7,10 +7,10 @@
  */
 
 export const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-export const LOCAL_QWEN_PROVIDER_LABEL = '本地 Qwen3.6-27B Distill';
-export const LOCAL_QWEN_DEFAULT_MODEL_ID = 'qwen36-27b-dsv4pro-distill-q5km-imatrix';
-export const LOCAL_QWEN_DEFAULT_MODEL_FILE = 'Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf';
-export const LOCAL_QWEN_DEFAULT_EXPECTED_SIZE = 19_535_700_320;
+export const LOCAL_QWEN_PROVIDER_LABEL = '本地 Qwen3.6-27B Coding';
+export const LOCAL_QWEN_DEFAULT_MODEL_ID = 'qwen36-27b-dsv4pro-coding-q4-mtp';
+export const LOCAL_QWEN_DEFAULT_MODEL_FILE = 'Q4-imatrix-MTP-00001-of-00004.gguf';
+export const LOCAL_QWEN_DEFAULT_EXPECTED_SIZE = 19_575_379_360;
 export const LOCAL_QWEN_COMPAT_PROVIDER_IDS = new Set([
   LOCAL_QWEN_PROVIDER_ID,
   'local-qwen35-4b-q4km',
@@ -22,8 +22,8 @@ export function isLocalQwenProviderId(id?: string | null) {
 }
 
 export function isDefaultQwen35MtpFileName(fileName: string) {
-  return /^Qwen3\.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix\.gguf$/i.test(fileName)
-    || /qwen3\.?6-?27b.*dsv4pro.*distill.*mtp.*q5_?k_?m.*\.gguf$/i.test(fileName);
+  return /^Q4-imatrix-MTP-0000[1-4]-of-00004\.gguf$/i.test(fileName)
+    || /qwen3\.?6-?27b.*dsv4pro.*coding.*q4.*mtp.*\.gguf$/i.test(fileName);
 }
 
 export function formatLocalTps(value: number | null | undefined) {
@@ -63,7 +63,7 @@ export const LOCAL_QWEN35_9B_DOWNGRADE: LocalUpgradeOption = {
   label: 'Qwen3.5-9B Q4_K_M imatrix MTP (低配降级)',
   profile: '16~24GB 显存/统一内存可选 · 比 27B 更轻',
   metrics: ['5.78GB / 5.38GiB', '32K 上下文', 'MTP 加速', '低配降级'],
-  reason: '给跑不动 27B Q5 的设备保留；质量不再作为 Lynn 本地首推。',
+  reason: '给跑不动 27B Q4 的设备保留；质量不再作为 Lynn 本地首推。',
   modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP',
   download_label: '下载到本机',
   file_name: 'Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf',
@@ -74,14 +74,14 @@ export const LOCAL_QWEN36_35B_UPGRADE: LocalUpgradeOption = {
   label: 'Qwen3.6-35B-A3B DSV4Pro Thinking Distill MTP Q5_K_M imatrix',
   profile: '32GB 显存/统一内存+ 可选 · 更高配本地编排器',
   metrics: ['25.3 GB Q5_K_M imatrix', 'MTP 原生头', 'GPQA-Diamond 80.3%', '端到端编排 26.6s'],
-  reason: '32GB+ 机器可选 35B-A3B Q5_K_M；MoE + MTP 单流速度更好，但文件和 KV cache 都更重。默认仍首推 27B Q5。',
+  reason: '32GB+ 机器可选 35B-A3B Q5_K_M；MoE + MTP 单流速度更好，但文件和 KV cache 都更重。默认仍首推 27B Q4。',
   modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF',
   download_label: '下载到本机',
   file_name: 'Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf',
 };
 
 export function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], memoryGib?: number | null) {
-  // 默认卡即 27B Q5;可选区按硬件分级展示 9B/4B 降级 / 35B 高端档。
+  // 默认卡即 27B Q4;可选区按硬件分级展示 9B/4B 降级 / 35B 高端档。
   // 2026-06-27: 接 hardware.total_memory_gib 做 memory-adaptive 显示 —
   //   - memoryGib > 32:藏 4B 降级,保留 9B 与 35B
   //   - memoryGib < 24:藏 35B 高端,展示 9B/4B

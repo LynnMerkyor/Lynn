@@ -53,14 +53,14 @@ export const QUICK_START_PROVIDER = {
 /**
  * Quick-local track wires the user straight into the server-side local Qwen
  * provider. The provider id and endpoint name stay legacy-compatible, while the
- * default downloadable model is now Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP.
+ * default downloadable model is now Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP.
  * 9B / 4B remain manual low-config downgrades from Settings.
  */
 export const QUICK_LOCAL_PROVIDER = {
   providerName: 'local-qwen35-9b-q4km-imatrix',
   providerUrl: 'http://127.0.0.1:18099/v1',
   providerApi: 'openai-completions',
-  defaultModelId: 'qwen36-27b-dsv4pro-distill-q5km-imatrix',
+  defaultModelId: 'qwen36-27b-dsv4pro-coding-q4-mtp',
 } as const;
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [

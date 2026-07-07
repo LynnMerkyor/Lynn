@@ -1,5 +1,5 @@
 export const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-export const LOCAL_QWEN35_MODEL_ID = 'qwen36-27b-dsv4pro-distill-q5km-imatrix';
+export const LOCAL_QWEN35_MODEL_ID = 'qwen36-27b-dsv4pro-coding-q4-mtp';
 export const LOCAL_QWEN_DISPLAY_NAME = '本地 Qwen3.6-27B';
 export const LOCAL_QWEN_SHORT_NAME = 'Qwen3.6-27B';
 export const LOCAL_QWEN35_ENDPOINT = 'http://127.0.0.1:18099/v1';

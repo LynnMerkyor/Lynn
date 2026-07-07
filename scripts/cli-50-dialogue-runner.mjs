@@ -525,7 +525,7 @@ function hasDgxSparkPseudoEvidence(text) {
 function hasInternalToolLabelVisible(text) {
   const raw = String(text || "");
   return /数据来源\/判断依据/.test(raw)
-    || /(?:^|\n)\s*-\s*工具：/.test(raw)
+    || /(?:^|\n)\s*-\s*工具：\s*(?:research_prefetch|stock_market|weather|sports_score|live_news|web_search|web_fetch|browser)\b/i.test(raw)
     || /工具：(?:research_prefetch|stock_market|weather|sports_score|live_news|web_search|web_fetch)/.test(raw);
 }
 

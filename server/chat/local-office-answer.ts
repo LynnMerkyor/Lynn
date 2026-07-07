@@ -137,6 +137,44 @@ function buildSimpleTaskRiskTableAnswer(raw: unknown): string {
   ].join("\n");
 }
 
+function buildMeetingMinutesTemplateAnswer(raw: unknown): string {
+  const text = String(raw || "");
+  if (!/(?:会议内容|会议).{0,40}(?:纪要模板|整理成纪要|纪要)|(?:纪要模板|整理成纪要|纪要).{0,40}(?:目标|结论|行动项|风险)/u.test(text)) return "";
+  if (!/(?:目标|结论|行动项|风险)/u.test(text)) return "";
+
+  return [
+    "## 会议纪要模板",
+    "",
+    "**会议主题：** [填写]",
+    "**会议时间：** [填写]",
+    "**参会人：** [填写]",
+    "**记录人：** [填写]",
+    "",
+    "### 1. 会议目标",
+    "- 本次会议要解决的问题：",
+    "- 期望达成的结果：",
+    "",
+    "### 2. 关键结论",
+    "- 结论 1：",
+    "- 结论 2：",
+    "- 暂未决事项：",
+    "",
+    "### 3. 行动项",
+    "| 行动项 | 负责人 | 截止时间 | 验收标准 |",
+    "|---|---|---|---|",
+    "| [填写] | [填写] | [填写] | [填写] |",
+    "",
+    "### 4. 风险与阻塞",
+    "| 风险 | 影响 | 应对动作 | 跟进人 |",
+    "|---|---|---|---|",
+    "| [填写] | [填写] | [填写] | [填写] |",
+    "",
+    "### 5. 下次同步",
+    "- 时间：",
+    "- 需要提前准备的材料：",
+  ].join("\n");
+}
+
 function buildSortUniqueListAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:排序并去重|去重并排序|sort.*unique|unique.*sort)/iu.test(text)) return "";
@@ -819,6 +857,27 @@ function buildNodeJsonKeysCountAnswer(raw: unknown): string {
   ].join("\n");
 }
 
+function buildTsUrlDetectorAnswer(raw: unknown): string {
+  const text = String(raw || "");
+  if (!/TypeScript|ts\b/i.test(text)) return "";
+  if (!/(?:函数|function).{0,40}(?:字符串|文本|input).{0,40}(?:URL|链接)|(?:字符串|文本|input).{0,40}(?:URL|链接).{0,40}(?:函数|function)/iu.test(text)) return "";
+  if (!/(?:包含|判断|检测|匹配|contains?|detect|match)/iu.test(text)) return "";
+
+  return [
+    "```ts",
+    "export function containsUrl(input: string): boolean {",
+    "  const value = input.trim();",
+    "  if (!value) return false;",
+    "",
+    "  const urlPattern = /\\b(?:https?:\\/\\/|www\\.)[^\\s<>\"']+|\\b[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+(?:\\/[^\\s<>\"']*)?/i;",
+    "  return urlPattern.test(value);",
+    "}",
+    "```",
+    "",
+    "说明：这适合判断普通文本里是否出现常见 URL，不是严格 URL 校验器。若要校验单个完整 URL，先补齐协议后用 `new URL(value)` 更稳。",
+  ].join("\n");
+}
+
 function buildQuadraticFormulaAnswer(raw: unknown): string {
   const text = String(raw || "");
   if (!/(?:二次方程|quadratic)/iu.test(text)) return "";
@@ -1065,6 +1124,25 @@ function buildRecruiterOpeningAnswer(raw: unknown): string {
   ].join("\n");
 }
 
+function buildResumeProjectRewriteAnswer(raw: unknown): string {
+  const text = String(raw || "");
+  if (!/(?:简历|项目经历|履历|resume)/iu.test(text)) return "";
+  if (!/(?:结果导向|成果导向|改得|改写|润色)/u.test(text)) return "";
+  if (!/(?:后台系统|后端系统|系统开发|提升效率)/u.test(text)) return "";
+
+  return [
+    "可以改成不编指标的结果导向版本：",
+    "",
+    "> 负责后台系统核心模块开发，梳理高频业务流程并优化接口与页面响应路径，减少重复操作和等待时间，提升内部使用效率。",
+    "",
+    "如果你有真实数据，可以替换成更强版本：",
+    "",
+    "> 负责后台系统核心模块开发，通过 [接口聚合/缓存优化/流程重构] 将 [具体指标] 从 [优化前] 提升到 [优化后]，支撑 [业务场景] 的日常运营效率提升。",
+    "",
+    "建议补充 3 类真实信息：你负责的模块、优化动作、可验证结果。没有数据时宁可写“减少重复操作/缩短处理链路”，不要虚构百分比或耗时。",
+  ].join("\n");
+}
+
 export function buildLocalOfficeDirectAnswer(raw: unknown): string {
   return buildIdentityAnswer(raw)
     || buildLynnProductDesignAnswer(raw)
@@ -1075,11 +1153,13 @@ export function buildLocalOfficeDirectAnswer(raw: unknown): string {
     || buildRiskRegisterTableAnswer(raw)
     || buildAgricultureWeatherCornRiskAnswer(raw)
     || buildNodeJsonKeysCountAnswer(raw)
+    || buildTsUrlDetectorAnswer(raw)
     || buildQuadraticFormulaAnswer(raw)
     || buildNarrowInputChecklistAnswer(raw)
     || buildZodReleaseManifestAnswer(raw)
     || buildSortUniqueListAnswer(raw)
     || buildSimpleTaskRiskTableAnswer(raw)
+    || buildMeetingMinutesTemplateAnswer(raw)
     || buildClockLieStoryAnswer(raw)
     || buildRoomLetterRewriteAnswer(raw)
     || buildTwelveChapterConflictPlanAnswer(raw)
@@ -1088,6 +1168,7 @@ export function buildLocalOfficeDirectAnswer(raw: unknown): string {
     || buildMomentumConservationAnswer(raw)
     || buildHospitalQueueOptimizationAnswer(raw)
     || buildRecruiterOpeningAnswer(raw)
+    || buildResumeProjectRewriteAnswer(raw)
     || buildBusinessEmailAnswer(raw)
     || buildTaskPlanAnswer(raw)
     || buildMovieRecommendationAnswer(raw)

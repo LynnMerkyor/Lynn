@@ -1,10 +1,10 @@
 /**
  * LocalModelDownloadStep.tsx — Lynn default local model setup.
  *
- * This step intentionally uses the same server-side /api/local-qwen35-9b/*
- * lifecycle as Settings and chat routing. Keeping onboarding on the same
- * provider id avoids the old split where onboarding saved "llamacpp" while
- * the app routed through the local Qwen provider.
+ * This step keeps the legacy local provider id for routing compatibility, but
+ * the real setup path is Electron main's llama.cpp downloader. The old
+ * /api/local-qwen35-9b/setup Python bootstrap remains a non-desktop fallback
+ * only; clean installs must not require python3.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -189,6 +189,37 @@ export function LocalModelDownloadStep({
     setSetupStarted(true);
     setError(null);
     try {
+      const managerStart = await window.platform?.llamacppStartDownload?.({
+        modelId: QUICK_LOCAL_PROVIDER.defaultModelId,
+        startAfterDownload: true,
+      });
+      if (managerStart) {
+        if (managerStart.ok === false) {
+          throw new Error(managerStart.reason || 'llamacpp_manager_start_failed');
+        }
+        setStatus((prev) => ({
+          ...(prev || { ok: true }),
+          ok: prev?.ok ?? true,
+          runtime: {
+            ...(prev?.runtime || {}),
+            base_url: prev?.runtime?.base_url || QUICK_LOCAL_PROVIDER.providerUrl,
+            endpoint_loading: true,
+            process_alive: true,
+          },
+          job: {
+            status: 'running',
+            progress: {
+              phase: managerStart.alreadyRunning ? '本地模型已在准备中' : '正在下载并启动本地模型',
+              percent: null,
+              message: managerStart.fileCount && managerStart.fileCount > 1
+                ? `正在准备 ${managerStart.fileCount} 个 GGUF 分片`
+                : '正在准备 GGUF 文件',
+            },
+          },
+        }));
+        window.setTimeout(() => void refreshStatus(), 900);
+        return;
+      }
       const res = await onboardingFetch('/api/local-qwen35-9b/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

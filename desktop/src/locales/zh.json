@@ -1297,7 +1297,7 @@
       "advancedDesc": "如果你已经有 provider / model 偏好，\n现在就把连接、模型和主题一起配好。",
       "advancedAction": "进入 Advanced Setup",
       "localTitle": "本地优先(离线)",
-      "localDesc": "下载 19.5GB 的 Lynn 默认模型(Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP)，\n完全离线运行，不上传任何对话。低配机器可之后在设置页选 9B/4B 降级。",
+      "localDesc": "下载 19.6GB 的 Lynn 默认模型(Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP)，\n完全离线运行，不上传任何对话。低配机器可之后在设置页选 9B/4B 降级。",
       "localAction": "下载本地模型"
     },
     "name": {
@@ -1387,8 +1387,8 @@
     },
     "localModel": {
       "title": "下载 Lynn 默认本地模型",
-      "subtitle": "Lynn 默认模型 Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP · 19.5GB · 32K 上下文 · 24GB+ 显存/统一内存推荐。\n完全离线，不需要任何 API Key，不上传任何对话。低配机器可在设置页手动选择 9B/4B 降级。",
-      "specsLine": "19.5GB · Q5_K_M imatrix MTP · 32K 上下文 · 完全离线",
+      "subtitle": "Lynn 默认模型 Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP · 19.6GB · 32K 上下文 · 24GB+ 显存/统一内存推荐。\n完全离线，不需要任何 API Key，不上传任何对话。低配机器可在设置页手动选择 9B/4B 降级。",
+      "specsLine": "19.6GB · Q4 imatrix MTP · 32K 上下文 · 完全离线",
       "needsBinary": "缺少 llama.cpp 推理引擎，请先安装：~/.lynn/llamacpp/bin/llama-server",
       "needsBinaryHint": "请按文档安装 llama.cpp 后重试。",
       "alreadyHave": "本地模型已就绪",

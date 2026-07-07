@@ -306,6 +306,7 @@ export interface PlatformApi {
     detail?: string;
     modelId?: string;
     target?: string;
+    fileCount?: number;
     parallelSegments?: number;
     availableModelIds?: string[];
   }>;

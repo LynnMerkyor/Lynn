@@ -20,6 +20,10 @@ const SANITIZER_CARRY_KEY = "sanitizerCarry";
 // tag name + attrs is well under 100 chars; 512 is a generous ceiling that still lets a stray
 // run-on fragment flush instead of holding forever.
 const SANITIZER_CARRY_MAX = 512;
+const VISIBLE_STRUCTURAL_TAG_NAMES = ["plan", "steps", "answer", "final", "response", "solution", "outline", "template"] as const;
+const VISIBLE_STRUCTURAL_TAG_RE = /<\/?(?:plan|steps|answer|final|response|solution|outline|template)>/giu;
+const VISIBLE_STRUCTURAL_LABEL_RE = /(^|\n)\s*<[^<>\n]*(?:方案|计划|流程|步骤|回答|思路|分析|总结|plan|steps|answer|final|response|solution|outline|template)[^<>\n]*>\s*/giu;
+const VISIBLE_SNAKE_STRUCTURAL_TAG_RE = /<\/?[a-z][a-z0-9_-]*_(?:checklist|plan|steps|template|outline|summary|answer|flow|process|list)[a-z0-9_-]*>/giu;
 
 function readCarry(ss: unknown): string {
   if (ss && typeof ss === "object" && SANITIZER_CARRY_KEY in ss) {
@@ -53,6 +57,36 @@ function findUnclosedPipeNumStart(text: string): number {
   return lastUnclosed;
 }
 
+function findUnresolvedVisibleStructuralTagStart(text: string): number {
+  const start = text.lastIndexOf("<");
+  if (start < 0) return -1;
+  const tail = text.slice(start);
+  if (tail.includes(">")) return -1;
+  const lower = tail.toLowerCase();
+  return VISIBLE_STRUCTURAL_TAG_NAMES.some((name) => `<${name}`.startsWith(lower) || `</${name}`.startsWith(lower))
+    || /^<\/?[a-z][a-z0-9_-]*$/iu.test(tail) && tail.includes("_")
+    ? start
+    : -1;
+}
+
+function stripVisibleStructuralTags(text: string): string {
+  if (!text) return text;
+  const hasTag = VISIBLE_STRUCTURAL_TAG_RE.test(text);
+  VISIBLE_STRUCTURAL_TAG_RE.lastIndex = 0;
+  const hasLabel = VISIBLE_STRUCTURAL_LABEL_RE.test(text);
+  VISIBLE_STRUCTURAL_LABEL_RE.lastIndex = 0;
+  const hasSnakeTag = VISIBLE_SNAKE_STRUCTURAL_TAG_RE.test(text);
+  VISIBLE_SNAKE_STRUCTURAL_TAG_RE.lastIndex = 0;
+  if (!hasTag && !hasLabel && !hasSnakeTag) return text;
+  VISIBLE_STRUCTURAL_TAG_RE.lastIndex = 0;
+  VISIBLE_STRUCTURAL_LABEL_RE.lastIndex = 0;
+  VISIBLE_SNAKE_STRUCTURAL_TAG_RE.lastIndex = 0;
+  return text
+    .replace(VISIBLE_STRUCTURAL_TAG_RE, "")
+    .replace(VISIBLE_SNAKE_STRUCTURAL_TAG_RE, "")
+    .replace(VISIBLE_STRUCTURAL_LABEL_RE, "$1");
+}
+
 /**
  * Split `combined` into [emitNow, carryForward] at the last unresolved pseudo-tool opener.
  *
@@ -65,7 +99,8 @@ function findUnclosedPipeNumStart(text: string): number {
 function splitAtUnresolvedOpener(combined: string): { emit: string; carry: string } {
   const tagStart = findUnresolvedPseudoToolOpen(combined);
   const pipeStart = findUnclosedPipeNumStart(combined);
-  const cut = Math.max(tagStart, pipeStart);
+  const structuralTagStart = findUnresolvedVisibleStructuralTagStart(combined);
+  const cut = Math.max(tagStart, pipeStart, structuralTagStart);
   if (cut <= 0) {
     // cut === 0 means the buffer STARTS with an opener — carry everything.
     // cut === -1 means no opener — carry nothing.
@@ -102,11 +137,18 @@ export function stripStreamingPseudoToolBlocks(
     !carry &&
     incoming &&
     !containsPseudoToolSimulation(incoming) &&
+    !VISIBLE_STRUCTURAL_TAG_RE.test(incoming) &&
+    !VISIBLE_STRUCTURAL_LABEL_RE.test(incoming) &&
+    !VISIBLE_SNAKE_STRUCTURAL_TAG_RE.test(incoming) &&
     findUnresolvedPseudoToolOpen(incoming) === -1 &&
-    findUnclosedPipeNumStart(incoming) === -1
+    findUnclosedPipeNumStart(incoming) === -1 &&
+    findUnresolvedVisibleStructuralTagStart(incoming) === -1
   ) {
     return { text: incoming, suppressed: false };
   }
+  VISIBLE_STRUCTURAL_TAG_RE.lastIndex = 0;
+  VISIBLE_STRUCTURAL_LABEL_RE.lastIndex = 0;
+  VISIBLE_SNAKE_STRUCTURAL_TAG_RE.lastIndex = 0;
 
   const combined = carry + incoming;
   const { emit: toProcess, carry: toCarry } = splitAtUnresolvedOpener(combined);
@@ -118,6 +160,9 @@ export function stripStreamingPseudoToolBlocks(
     suppressed = stripped !== toProcess;
     emitText = stripped;
   }
+  const visibleStripped = stripVisibleStructuralTags(emitText);
+  suppressed = suppressed || visibleStripped !== emitText;
+  emitText = visibleStripped;
 
   let nextCarry = toCarry;
   // Hard cap: never let carry grow without bound under adversarial input. Keep the tail, which
@@ -157,7 +202,8 @@ export function flushStreamingPseudoToolBlocks(ss: unknown): StreamSanitizerResu
 
   // No unresolved opener → the carry is closed/ordinary text. Run the normal strip in case it
   // contains a now-complete block, then emit whatever survives.
-  const stripped = containsPseudoToolSimulation(carry) ? stripPseudoToolCallMarkup(carry) : carry;
+  const strippedPseudo = containsPseudoToolSimulation(carry) ? stripPseudoToolCallMarkup(carry) : carry;
+  const stripped = stripVisibleStructuralTags(strippedPseudo);
   if (!stripped.trim()) {
     return { text: "", suppressed: true };
   }

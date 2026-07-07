@@ -17,6 +17,16 @@ describe("buildLocalOfficeDirectAnswer", () => {
     expect(answer).not.toContain("你想让我");
   });
 
+  it("builds a stable meeting minutes template", () => {
+    const answer = buildLocalOfficeDirectAnswer("把下面会议内容整理成纪要模板：目标、结论、行动项、风险");
+
+    expect(answer).toContain("会议纪要模板");
+    expect(answer).toContain("### 1. 会议目标");
+    expect(answer).toContain("| 行动项 | 负责人 | 截止时间 | 验收标准 |");
+    expect(answer).toContain("| 风险 | 影响 | 应对动作 | 跟进人 |");
+    expect(answer).not.toContain("还没有贴具体会议内容");
+  });
+
   it("sorts and deduplicates inline lists deterministically", () => {
     const answer = buildLocalOfficeDirectAnswer("把这个列表排序并去重：banana, apple, banana, pear");
     expect(answer).toBe("apple, banana, pear");
@@ -37,6 +47,26 @@ describe("buildLocalOfficeDirectAnswer", () => {
     expect(answer).toContain("Object.keys(data).length");
     expect(answer).toContain("count-json-keys.mjs");
     expect(answer).not.toContain("如果需要更精确的实时结论");
+  });
+
+  it("builds a concise TypeScript URL detector without waiting on model long tails", () => {
+    const answer = buildLocalOfficeDirectAnswer("写一个 TypeScript 函数判断字符串是否包含 URL");
+
+    expect(answer).toContain("export function containsUrl");
+    expect(answer).toContain("urlPattern.test");
+    expect(answer).toContain("不是严格 URL 校验器");
+    expect(answer).not.toContain("工具");
+  });
+
+  it("rewrites vague resume project experience without inventing metrics", () => {
+    const answer = buildLocalOfficeDirectAnswer("把这段简历项目经历改得更像结果导向：负责后台系统开发，提升效率");
+
+    expect(answer).toContain("不编指标");
+    expect(answer).toContain("[具体指标]");
+    expect(answer).toContain("不要虚构百分比或耗时");
+    expect(answer).not.toContain("2.3s");
+    expect(answer).not.toContain("400ms");
+    expect(answer).not.toContain("82%");
   });
 
   it("answers the quadratic formula without confusing it with Vieta formulas", () => {

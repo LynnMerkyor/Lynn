@@ -80,7 +80,7 @@ export function LocalQwenStatusStack(props: LocalQwenStatusStackProps) {
                   <strong>本地 Qwen3.6-27B</strong>
                   <span>{props.endpointOccupied
                     ? '当前端口由降级/兼容端点占用，默认 27B 尚未启动'
-                    : 'Q5_K_M imatrix · MTP 加速 · 端侧默认推荐'}</span>
+                    : 'Q4 imatrix · MTP 加速 · 端侧默认推荐'}</span>
                 </div>
                 <button type="button" onClick={() => props.onSetPanelOpen(false)} aria-label="收起本地模型状态">×</button>
               </div>
@@ -141,7 +141,7 @@ export function LocalQwenStatusStack(props: LocalQwenStatusStackProps) {
               <span>
                 {props.hasModel && props.hasRuntime
                   ? '模型和 llama.cpp 已就绪，点击后启动本地离线端点。'
-                  : 'Qwen3.6-27B Q5_K_M imatrix MTP · 19.5GB · 32K 上下文；点击后准备并启动，当前模型保留。'}
+                  : 'Qwen3.6-27B Q4 imatrix MTP · 19.6GB · 32K 上下文；点击后准备并启动，当前模型保留。'}
               </span>
             </div>
           </div>

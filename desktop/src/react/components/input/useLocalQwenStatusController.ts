@@ -81,7 +81,7 @@ export function useLocalQwenStatusController({
         ? `${LOCAL_QWEN_DISPLAY_NAME} 正在加载`
         : `${LOCAL_QWEN_DISPLAY_NAME} 正在连接`;
   const warmupCopy = endpointOccupied
-    ? '9B/4B 只作为低配降级/兼容模型，不再作为默认引导；停止该端点后可启动默认 27B Q5 MTP。'
+    ? '9B/4B 只作为低配降级/兼容模型，不再作为默认引导；停止该端点后可启动默认 27B Q4 MTP。'
     : running
     ? current
       ? (coldStartLikely

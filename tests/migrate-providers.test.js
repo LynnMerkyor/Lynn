@@ -165,20 +165,20 @@ describe("migrateLocalQwenDefaultTo27B", () => {
       api: "openai-completions",
       auth_type: "none",
     });
-    expect(added.providers["local-qwen35-9b-q4km-imatrix"].models[0].id).toBe("qwen36-27b-dsv4pro-distill-q5km-imatrix");
+    expect(added.providers["local-qwen35-9b-q4km-imatrix"].models[0].id).toBe("qwen36-27b-dsv4pro-coding-q4-mtp");
 
     const config = readYaml(path.join(agentsDir, "lynn", "config.yaml"));
     expect(config.api.provider).toBe("local-qwen35-9b-q4km-imatrix");
-    expect(config.models.chat).toBe("qwen36-27b-dsv4pro-distill-q5km-imatrix");
+    expect(config.models.chat).toBe("qwen36-27b-dsv4pro-coding-q4-mtp");
     expect(config.models.utility).toMatchObject({
-      id: "qwen36-27b-dsv4pro-distill-q5km-imatrix",
+      id: "qwen36-27b-dsv4pro-coding-q4-mtp",
       provider: "local-qwen35-9b-q4km-imatrix",
     });
     expect(config.models.utility_large).toEqual({
       id: "deepseek-chat",
       provider: "deepseek",
     });
-    expect(readJson(path.join(lynnHome, "user", "preferences.json")).local_qwen_default_27b_q5_mtp_default_v1).toBe(true);
+    expect(readJson(path.join(lynnHome, "user", "preferences.json")).local_qwen_default_27b_q4_mtp_default_v1).toBe(true);
   });
 });
 

@@ -83,7 +83,12 @@ export function shouldDisableToolsForTurn(promptText: unknown): boolean {
     && !/(?:查一下|查询|搜索|检索|最新|实时|今天|现在|指南|官方|来源|链接|论文|文献|药价|医院号源|挂号)/iu.test(text);
   if (medicalAdviceRequest) return true;
 
-  const contentPlanningRequest = /(?:帮我|给我|写|设计|整理|安排|做|列|拟).{0,60}(?:计划|排期|行程|清单|模板|邮件|JD|职位描述|评分表|rubric|大纲|章节规划|采购清单|风险登记表|OKR|话术|纪要|周报|投诉)/iu.test(text)
+  const legalProcessAdviceRequest = /(?:租房|押金|房东|劳动合同|试用期|辞退|裁员|赔偿|快递损坏|投诉|协商|证据|材料|谈判).{0,120}(?:协商|证据|材料|步骤|清单|模板|话术|准备|整理|投诉|问题清单|收集)|(?:协商|证据|材料|步骤|清单|模板|话术|准备|整理|投诉|问题清单|收集).{0,120}(?:租房|押金|房东|劳动合同|试用期|辞退|裁员|赔偿|快递损坏)/iu.test(text)
+    && !explicitToolAsk
+    && !/(?:查一下|查询|搜索|检索|最新|实时|今天|现在|政策|法规|条例|法条|判例|来源|链接|官方|当地|城市|地区|202\d)/iu.test(text);
+  if (legalProcessAdviceRequest) return true;
+
+  const contentPlanningRequest = /(?:帮我|给我|写|设计|整理|安排|做|列|拟).{0,60}(?:计划|排期|行程|清单|模板|邮件|JD|职位描述|评分表|rubric|大纲|章节规划|采购清单|风险登记表|OKR|话术|纪要|周报|投诉|步骤)/iu.test(text)
     && !FILE_CREATION_REQUEST_RE.test(text)
     && !/(?:查一下|查询|搜索|检索|最新|实时|今天|明天|现在|天气|政策|签证|行情|价格|来源|链接)/iu.test(text);
   if (contentPlanningRequest) return true;

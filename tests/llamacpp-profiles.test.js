@@ -21,7 +21,7 @@ describe("llama.cpp model profile boundary", () => {
     });
   });
 
-  it("defaults empty requests to the recommended 27B Q5 profile", () => {
+  it("defaults empty requests to the recommended 27B Coding Q4 profile", () => {
     expect(resolveLlamacppDownloadProfile()).toMatchObject({
       known: true,
       canonicalModelId: DEFAULT_MODEL_ID,
@@ -44,7 +44,7 @@ describe("llama.cpp model profile boundary", () => {
     expect(ids).toEqual([
       "qwen35-4b-q4km",
       "qwen35-9b-q4km-imatrix",
-      "qwen36-27b-dsv4pro-distill-q5km-imatrix",
+      "qwen36-27b-dsv4pro-coding-q4-mtp",
       "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix",
     ]);
   });
@@ -79,7 +79,7 @@ describe("llama.cpp model profile boundary", () => {
       lastError: "network-error",
       reason: "retrying",
       modelId: DEFAULT_MODEL_ID,
-      fileName: "Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf",
+      fileName: "Q4_LynnStyle/Q4-imatrix-MTP-00001-of-00004.gguf",
     });
     expect(decorated).not.toHaveProperty("injected");
     expect(decorateDownloadState(profile, { state: "surprise" })).toMatchObject({ state: "idle" });

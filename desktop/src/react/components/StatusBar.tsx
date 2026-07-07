@@ -10,7 +10,7 @@ import styles from './StatusBar.module.css';
 declare function t(key: string, vars?: Record<string, string | number>): string;
 
 const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN_MODEL_ID = 'qwen36-27b-dsv4pro-distill-q5km-imatrix';
+const LOCAL_QWEN_MODEL_ID = 'qwen36-27b-dsv4pro-coding-q4-mtp';
 
 type LocalQwenStatus = {
   runtime?: {

@@ -3,6 +3,13 @@
 > 从「改版本号」到「公网 URL 验证」的一条龙顺序。本文是**索引型 SOP**:每步给命令和坑位,
 > 细节以被引文档为准,**不要在别处复制本流程**(会漂移)。
 >
+> ⛔ **2026-07-07 起,每次发新版/同版本热修都必须同步四个正式出口**:
+> `github-lynnmerkyor`(`LynnMerkyor/Lynn`)、
+> `origin`(`MerkyorLynn/Lynn`)、
+> `gitee`(`merkyor/Lynn`)、
+> 以及腾讯镜像下载站 `download.merkyorlynn.com`。
+> 缺任意一个出口,都不能向用户宣布“已发布/已覆盖线上”。
+>
 > 引用地图:
 > - 门禁分层与阻断规则 → [`docs/RELEASE-REGRESSION-GATES.md`](../RELEASE-REGRESSION-GATES.md)
 > - 镜像站路径/上传/验证 → [`docs/ops/download-site-deploy-map.md`](download-site-deploy-map.md)
@@ -130,9 +137,10 @@ npm run release:manifest
 
 验证公网(不是验证服务器文件):对 6 个资产 URL + 2 个 yml 全部 `curl -fsSIL` 200,见 deploy-map 命令块。
 
-## 7. GitHub Release
+## 7. GitHub Release(两个仓库都要发)
 
-3 个资产(Apple-Silicon.dmg / Intel.dmg / Windows-Setup.exe)+ CLI tarball。
+3 个资产(Apple-Silicon.dmg / Intel.dmg / Windows-Setup.exe)+ CLI tarball。`LynnMerkyor/Lynn`
+和 `MerkyorLynn/Lynn` 都是正式 GitHub 出口,Release body、tag、资产和版本说明必须保持一致。
 
 ⛔ **Release body 顶部必须先放“国内镜像站下载（推荐）”区块**。GitHub Assets 只能作为备用下载,
 不能让国内用户先点 GitHub。缺这个区块 = Release 不合格,必须补完再发布。
@@ -158,9 +166,13 @@ npm run release:manifest
 
 其后再贴发版说明正文和 [安装片段](v080-cli-install-release-snippet.md)(记得片段里 tarball 版本已在第 1 步更新)。
 
-## 8. Gitee Release + 双远端同步
+- `LynnMerkyor/Lynn`: `https://github.com/LynnMerkyor/Lynn/releases/tag/v<version>`
+- `MerkyorLynn/Lynn`: `https://github.com/MerkyorLynn/Lynn/releases/tag/v<version>`
+- 两个 GitHub Release 的镜像下载区块、CLI 安装命令、资产名和正文必须一致；只允许仓库链接不同。
 
-GitHub 和 Gitee 都是正式发版记录,不能只更新一边。GitHub Release 承担全球 release 资产页,
+## 8. Gitee Release + 三远端同步
+
+两个 GitHub 仓库和 Gitee 都是正式发版记录,不能只更新任意一边。GitHub Release 承担全球 release 资产页,
 Gitee Release 承担国内代码/版本记录；二进制下载默认仍走腾讯镜像站。
 
 ```bash
@@ -169,16 +181,20 @@ VERSION="$(node -p "require('./package.json').version")"
 git push github-lynnmerkyor main
 git push github-lynnmerkyor "v${VERSION}"
 
+git push origin main
+git push origin "v${VERSION}"
+
 git push gitee main
 git push gitee "v${VERSION}"
 
 npm run release:verify-remotes
 ```
 
+- ⛔ **两个 GitHub 仓库必须一起更新**:`github-lynnmerkyor` 是老公开仓,`origin` 是新公开仓/恢复仓；任何一个落后都会让用户看到旧 README、旧 Release 或旧安装包。
 - ⛔ **Gitee push 失败 = 发版未完成**,不能只在 GitHub Release 发完就向用户宣布“已全量发布”。
 - Gitee Release 页面必须创建/更新 `v<version>` 记录,正文与 GitHub Release 保持同一份版本说明,顶部同样优先放腾讯镜像下载区块。
 - 如果 Gitee UI/API 暂时不能自动创建 Release,至少必须完成 `main` + `v<version>` tag 同步,并在交付说明里写清“Gitee Release 页面待人工补正文”。这不是通过项,只是阻断原因记录。
-- `npm run release:verify-remotes` 会校验 `github-lynnmerkyor` 与 `gitee` 的 `main` 和 `v<package.version>` tag 是否都指向本地应有提交；失败时先修远端同步,不要继续交付。
+- `npm run release:verify-remotes` 会校验 `github-lynnmerkyor`、`origin` 与 `gitee` 的 `main` 和 `v<package.version>` tag 是否都指向本地应有提交；失败时先修远端同步,不要继续交付。
 
 ## 9. 装后验证(发布 ≠ 完成)
 
@@ -193,7 +209,8 @@ npm run test:release:live      # 连本机已启动的打包版 Lynn
 ⛔ **6 条直链一次性全给,不要问**:GitHub 3(arm/intel/win)+ 腾讯镜像 3(同三个)。
 测试链接同样两边都给(镜像规则管的是站点默认,不管对用户的交付)。交付里还要给:
 
-- GitHub Release: `https://github.com/LynnMerkyor/Lynn/releases/tag/v<version>`
+- GitHub Release(old): `https://github.com/LynnMerkyor/Lynn/releases/tag/v<version>`
+- GitHub Release(new): `https://github.com/MerkyorLynn/Lynn/releases/tag/v<version>`
 - Gitee Release: `https://gitee.com/merkyor/Lynn/releases/tag/v<version>`
 - `npm run release:verify-remotes` 的通过结果。
 
@@ -210,6 +227,7 @@ npm run test:release:live      # 连本机已启动的打包版 Lynn
 | 只 rsync 不 sed 静态页 | 用户看到旧版本号 | 第 6 步两步制 + 12 处替换口诀 |
 | manifest/站点指 GitHub 直链 | 国内用户下不动 | static gate 强制 + 第 5 步 ⛔ |
 | GitHub Release 没有国内镜像区块 | 用户默认点 GitHub Assets,国内下载慢/失败 | 第 7 步 ⛔ 模板 |
+| 只同步一个 GitHub 仓库 | 用户从另一个仓看到旧 README/旧 Release | 第 7/8 步 + `release:verify-remotes` 默认三远端 |
 | dmg 不改名直接发 | 命名与历史版式不一致 | 第 4 步改名规则 |
 | 平台缺各自 server bundle | 装上打不开 | `dist`/`dist:win` 内置 build:server,别绕过脚本 |
 | PAT 缺 workflow scope | push 被拒 | 第 0 步检查 `.github/workflows` 改动 |

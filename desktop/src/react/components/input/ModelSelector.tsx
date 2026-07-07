@@ -26,7 +26,7 @@ interface SelectorModel {
 }
 
 const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN35_MODEL_ID = 'qwen36-27b-dsv4pro-distill-q5km-imatrix';
+const LOCAL_QWEN35_MODEL_ID = 'qwen36-27b-dsv4pro-coding-q4-mtp';
 
 function formatProviderLabel(provider?: string): string {
   if (!provider) return '';
@@ -167,9 +167,9 @@ export function ModelSelector({
       ? styles['model-pill-status-dot-loading']
       : styles['model-pill-status-dot-offline'];
   const localQwenTitle = localQwenRunning
-    ? '本地 Qwen3.6-27B 正在运行 · Q5_K_M imatrix MTP'
+    ? '本地 Qwen3.6-27B 正在运行 · Q4 imatrix MTP'
     : localQwenLoading
-      ? '本地 Qwen3.6-27B 正在启动 · Q5_K_M imatrix MTP'
+      ? '本地 Qwen3.6-27B 正在启动 · Q4 imatrix MTP'
       : '本地 Qwen3.6-27B 已选择，尚未启动';
   const localQwenInlineState = localQwenRunning
     ? null

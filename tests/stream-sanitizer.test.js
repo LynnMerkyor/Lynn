@@ -115,6 +115,49 @@ describe("stream sanitizer · cross-chunk carry buffer", () => {
     expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
   });
 
+  it("strips visible planning tags without touching prose", () => {
+    const ss = {};
+    const result = stripStreamingPseudoToolBlocks(ss, "<plan>第一步：先备份。\n</plan>第二步：执行。");
+
+    expect(result).toEqual({
+      text: "第一步：先备份。\n第二步：执行。",
+      suppressed: true,
+    });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
+  it("strips visible angle-bracket structure labels", () => {
+    const ss = {};
+    const result = stripStreamingPseudoToolBlocks(ss, "<方案：30分钟手机存储整理流程> **原则：先备份再删除。**");
+
+    expect(result).toEqual({
+      text: "**原则：先备份再删除。**",
+      suppressed: true,
+    });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
+  it("strips visible template and snake-case structure tags", () => {
+    const ss = {};
+    const result = stripStreamingPseudoToolBlocks(ss, "<template>主题：延期说明</template>\n<move_checklist>提前预约搬家公司。");
+
+    expect(result).toEqual({
+      text: "主题：延期说明\n提前预约搬家公司。",
+      suppressed: true,
+    });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
+  it("withholds split visible planning tags across chunks", () => {
+    const ss = {};
+    const r1 = stripStreamingPseudoToolBlocks(ss, "正文\n<st");
+    expect(r1).toEqual({ text: "正文\n", suppressed: false });
+
+    const r2 = stripStreamingPseudoToolBlocks(ss, "eps>第一步</steps> 结束。");
+    expect(r2).toEqual({ text: "第一步 结束。", suppressed: true });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
   it("flush emits ordinary trailing prose held in the carry", () => {
     const ss = {};
     // A trailing "<" with nothing after it is withheld as a candidate opener. At turn end it

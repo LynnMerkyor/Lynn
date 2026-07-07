@@ -4,7 +4,7 @@
  * Local Qwen3.6-27B state is sourced from the server-side /api/local-qwen35-9b/*
  * route (legacy endpoint name kept for backward compat) so this chip,
  * Settings, onboarding, and chat routing share the same provider id and
- * setup lifecycle. 2026-06-27: default model is 27B Q5 MTP; 9B/4B are downgrade-only.
+ * setup lifecycle. 2026-07-07: default model is 27B Q4 MTP; 9B/4B are downgrade-only.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -15,7 +15,7 @@ import { loadModels } from '../utils/ui-helpers';
 import { BRAIN_PROVIDER_ID, BRAIN_DEFAULT_MODEL_ID } from '../../../../shared/brain-provider.js';
 
 const LOCAL_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_MODEL_ID = 'qwen36-27b-dsv4pro-distill-q5km-imatrix';
+const LOCAL_MODEL_ID = 'qwen36-27b-dsv4pro-coding-q4-mtp';
 
 type LocalStatus = {
   ok?: boolean;
@@ -203,14 +203,38 @@ export function ProviderStatusBadge() {
         return;
       }
       if (!isLocalReady(latest)) {
-        const res = await hanaFetch('/api/local-qwen35-9b/setup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ authorized: true, variant: 'imatrix', start: true }),
+        const managerStart = await window.platform?.llamacppStartDownload?.({
+          modelId: LOCAL_MODEL_ID,
+          startAfterDownload: true,
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || data?.ok === false) throw new Error(data?.message || data?.error || 'setup_failed');
-        setLocalStatus((prev) => ({ ...(prev || {}), job: data.job }));
+        if (managerStart) {
+          if (managerStart.ok === false) {
+            throw new Error(managerStart.reason || 'llamacpp_manager_start_failed');
+          }
+          setLocalStatus((prev) => ({
+            ...(prev || { ok: true }),
+            ok: prev?.ok ?? true,
+            job: {
+              status: 'running',
+              progress: {
+                phase: managerStart.alreadyRunning ? '本地模型已在准备中' : '正在准备本地模型',
+                percent: null,
+                message: managerStart.fileCount && managerStart.fileCount > 1
+                  ? `正在准备 ${managerStart.fileCount} 个 GGUF 分片`
+                  : '正在准备 GGUF 文件',
+              },
+            },
+          }));
+        } else {
+          const res = await hanaFetch('/api/local-qwen35-9b/setup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ authorized: true, variant: 'imatrix', start: true }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data?.ok === false) throw new Error(data?.message || data?.error || 'setup_failed');
+          setLocalStatus((prev) => ({ ...(prev || {}), job: data.job }));
+        }
       }
       window.setTimeout(() => void refreshLocal(), 1000);
       await switchToProvider(LOCAL_PROVIDER_ID);

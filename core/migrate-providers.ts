@@ -326,8 +326,8 @@ export function migrateToProvidersYaml(lynnHome: string, agentsDir: string, log:
 
 // ── Local Qwen 默认模型迁移 ───────────────────────────────────────────────────
 
-const LOCAL_QWEN_27B_Q5_MTP_DEFAULT_FLAG = "local_qwen_default_27b_q5_mtp_default_v1";
-// 2026-06-27: 默认本地模型升级到 Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP。
+const LOCAL_QWEN_27B_Q4_MTP_DEFAULT_FLAG = "local_qwen_default_27b_q4_mtp_default_v1";
+// 2026-07-07: 默认本地模型升级到 Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP。
 // 9B / 4B 只保留为低配降级档。
 const OLD_LOCAL_QWEN_PROVIDER = "local-qwen3-4b-thinking-2507-q4km-imatrix";
 const OLD_LOCAL_QWEN_MODEL = "qwen3-4b-thinking-2507-q4km-imatrix";
@@ -335,7 +335,7 @@ const LOCAL_QWEN_4B_PROVIDER = "local-qwen35-4b-q4km";
 const LOCAL_QWEN_4B_MODEL = "qwen35-4b-q4km";
 const LOCAL_QWEN_9B_MODEL = "qwen35-9b-q4km-imatrix";
 const NEW_LOCAL_QWEN_PROVIDER = "local-qwen35-9b-q4km-imatrix";
-const NEW_LOCAL_QWEN_MODEL = "qwen36-27b-dsv4pro-distill-q5km-imatrix";
+const NEW_LOCAL_QWEN_MODEL = "qwen36-27b-dsv4pro-coding-q4-mtp";
 
 function _localQwen27BProviderSeed(oldProvider: Partial<ProviderConfig> = {}): ProviderConfig {
   return {
@@ -346,7 +346,7 @@ function _localQwen27BProviderSeed(oldProvider: Partial<ProviderConfig> = {}): P
     models: [
       {
         id: NEW_LOCAL_QWEN_MODEL,
-        name: "Qwen3.6-27B DSV4Pro Distill Q5_K_M imatrix MTP",
+        name: "Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP",
         context: 32768,
         maxOutput: 32768,
       },
@@ -577,7 +577,7 @@ export function repairRetiredModelReferences(lynnHome: string, agentsDir: string
 }
 
 /**
- * V0.85.4 → 2026-06-27 切换默认本地模型到 Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP。
+ * V0.85.7 → 2026-07-07 切换默认本地模型到 Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP。
  *
  * 9B / 4B 只保留为低配降级选项。旧 4B/9B 或缺失 provider 的配置都会 seed 到 27B。
  */
@@ -605,7 +605,7 @@ export function migrateLocalQwenDefaultTo27B(lynnHome: string, agentsDir: string
   }
 
   const prefs = _readPrefs(prefsPath);
-  if (prefs[LOCAL_QWEN_27B_Q5_MTP_DEFAULT_FLAG]) return;
+  if (prefs[LOCAL_QWEN_27B_Q4_MTP_DEFAULT_FLAG]) return;
 
   let changedAgents = 0;
   for (const ac of _collectAgentConfigs(agentsDir)) {
@@ -640,7 +640,7 @@ export function migrateLocalQwenDefaultTo27B(lynnHome: string, agentsDir: string
     }
   }
 
-  prefs[LOCAL_QWEN_27B_Q5_MTP_DEFAULT_FLAG] = true;
+  prefs[LOCAL_QWEN_27B_Q4_MTP_DEFAULT_FLAG] = true;
   atomicWriteJSON(prefsPath, prefs);
   if (changedAgents > 0) {
     log(`[migrate-providers] migrated ${changedAgents} agent local Qwen default(s) → Qwen3.6-27B`);

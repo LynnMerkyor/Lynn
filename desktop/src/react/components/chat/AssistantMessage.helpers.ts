@@ -63,7 +63,8 @@ export function parseMessageModelRef(raw?: string | null): { id: string; provide
   if (lower === 'qwen35-9b-q4km-imatrix') {
     return { provider: 'local-qwen35-9b-q4km-imatrix', id: value };
   }
-  if (lower === 'qwen36-27b-dsv4pro-distill-q5km-imatrix') {
+  if (lower === 'qwen36-27b-dsv4pro-coding-q4-mtp'
+    || lower === 'qwen36-27b-dsv4pro-distill-q5km-imatrix') {
     return { provider: 'local-qwen35-9b-q4km-imatrix', id: value };
   }
   return { id: value };

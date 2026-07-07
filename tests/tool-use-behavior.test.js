@@ -110,6 +110,36 @@ describe("tool-use behavior resolver", () => {
     expect(shouldDisableToolsForTurn(prompt)).toBe(true);
   });
 
+  it("keeps stable legal negotiation and evidence planning prompts tool-free", () => {
+    for (const prompt of [
+      "租房押金被房东拖着不退，帮我写一个协商和证据整理步骤",
+      "劳动合同试用期被突然辞退，我应该先收集什么材料？不要当正式法律意见",
+      "快递损坏商家和快递互相推责，帮我整理投诉材料清单和沟通话术",
+    ]) {
+      const decision = resolveInitialToolUseBehavior(prompt, {
+        modelInfo: { isBrain: true },
+      });
+
+      expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);
+      expect(decision.disableTools).toBe(true);
+      expect(decision.toolName).toBeUndefined();
+      expect(shouldDisableToolsForTurn(prompt)).toBe(true);
+    }
+  });
+
+  it("keeps current law and policy lookup prompts tool-eligible", () => {
+    for (const prompt of [
+      "查一下深圳 2026 年社保缴费政策有没有最新变化，给来源和不确定点",
+      "个人所得税专项附加扣除最新规则有哪些需要注意？请查来源",
+    ]) {
+      const decision = resolveInitialToolUseBehavior(prompt, {
+        modelInfo: { isBrain: false },
+      });
+
+      expect(decision.disableTools).toBe(false);
+    }
+  });
+
   it("keeps ordinary planning and drafting prompts tool-free unless a file is requested", () => {
     for (const prompt of [
       "考研复习还剩 120 天，帮我做一个三阶段排期",

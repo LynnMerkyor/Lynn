@@ -11,16 +11,16 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://github.com/LynnMerkyor/Lynn/releases)
-[![HuggingFace Models](https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d)](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding)
-[![ModelScope Models](https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff)](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding)
+[![HuggingFace Models](https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d)](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
+[![ModelScope Models](https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff)](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
 
 ---
 
 ## Ecosystem Links
 
-- **Source and app**: [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases) · [download mirror](https://download.merkyorlynn.com/download.html)
+- **Source and app**: [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn) · [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases) · [download mirror](https://download.merkyorlynn.com/download.html)
 - **Models and GGUF mirrors**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
-- **Recommended edge model**: [ModelScope 27B Coding SFT/RL main repo](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding) · [ModelScope 27B LynnStyle GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF) · [HuggingFace 27B Coding SFT/RL](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding)
+- **Recommended edge model**: [ModelScope 27B Coding Q4 MTP GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF) · [HuggingFace 27B Coding Q4 MTP GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
 
 ---
 
@@ -41,7 +41,7 @@ Same harness, thinking-on, vs the base A3B:
 
 Distilled and base have **identical single-stream TPS** (~224 tok/s on R6000) — the orchestration speedup comes from **fewer tokens to a decision** (we distilled the *thinking style*, not raw speed). Hard tasks (e.g. concurrency) are still backstopped by **harness objective verification + a DS-V4 Flash escape hatch**.
 
-📦 **Default edge model**: [`Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding`](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding); **GGUF mirror**: [ModelScope](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF) · [HuggingFace](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
+📦 **Default edge model**: [`Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF`](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF); **HuggingFace mirror**: [nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
 
 ### ② Engine route: we chose the fastest edge framework — llama.cpp — and give back
 
@@ -72,9 +72,9 @@ NVFP4's real payoff is **batched throughput**. Same R6000, `VLLM_MOE_FORCE_MARLI
 - [#44672](https://github.com/vllm-project/vllm/pull/44672) ModelOpt W4A16 NVFP4 Marlin path docs
 - [#44673](https://github.com/vllm-project/vllm/pull/44673) speculative decoding correctness gate
 
-## 🔭 V0.80 Origin: CLI Workers, V0.85.6 Local File Fixes + Session Progress
+## 🔭 V0.80 Origin: CLI Workers, V0.85.7 Edge Model Chain Update
 
-V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.6 the GUI no longer surfaces the Fleet command deck, and the right rail has moved from an internal-feeling work map toward **chat + Session Progress + files + sync / acceptance**. This release also fixes explicit local-file reads and `file://` meta-question regressions, while parallel worker power stays in the CLI for terminals, CI, and other agents.
+V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.7 the GUI no longer surfaces the Fleet command deck, and the right rail has moved from an internal-feeling work map toward **chat + Session Progress + files + sync / acceptance**. This release moves the default edge-model path to the public 27B Coding Q4 MTP GGUF and fixes the local-model setup path that could report `python3_not_found`, while parallel worker power stays in the CLI for terminals, CI, and other agents.
 
 This is not Lynn stepping away from code. It is the opposite:code tasks, research tasks, and business tasks should share the same orchestration layer.
 
@@ -84,7 +84,7 @@ This is not Lynn stepping away from code. It is the opposite:code tasks, researc
 - **Acceptance flow**: worker output returns to GUI diffs, evidence, test gates, and release flow for review.
 - **`@lynn/cli`**: the CLI package supports `Lynn -p`, `Lynn code`, `Lynn agents`, and `Lynn worker run`, usable directly in terminals and callable by other agents.
 
-Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.6 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
+Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.7 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
 
 ### CLI Quick Install
 
@@ -95,12 +95,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.6.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.7.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.85.6
+Lynn --version  # should print 0.85.7
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -126,7 +126,25 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details open>
-<summary><strong>Lynn v0.85.6</strong> · 2026-06-28 · local file-read fix + release gate coverage <em>(latest)</em></summary>
+<summary><strong>Lynn v0.85.7</strong> · 2026-07-07 · 27B Coding Q4 MTP default edge model <em>(latest)</em></summary>
+
+**v0.85.7 edge-model and release-flow update**:
+- **Default local edge model is now public 27B Coding Q4 MTP**: Settings recommends the `Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF` Q4 imatrix MTP four-shard GGUF, about 19.6GB.
+- **Model links fixed**: README, release notes, download pages, and app model entry points now link to the public ModelScope / HuggingFace GGUF mirrors.
+- **Low-config devices stay quiet**: underpowered machines no longer get a proactive 27B install prompt; 9B / 4B remain explicit downgrade choices in Settings.
+- **Fixes local-model `python3_not_found`**: desktop setup uses the Electron main-process downloader first, so missing Python no longer blocks Settings → Models → load local model.
+- **Release discipline tightened**: every new release or hotfix must sync `LynnMerkyor/Lynn`, `MerkyorLynn/Lynn`, Gitee `merkyor/Lynn`, and the Tencent download mirror; `release:verify-remotes` now checks all three code remotes by default.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.7.tgz"
+```
+
+[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.7)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.85.6</strong> · 2026-06-28 · local file-read fix + release gate coverage</summary>
 
 **v0.85.6 client fix and release coverage**:
 - **Fixes IJV6WH explicit absolute file reads**: when the user asks Lynn to read `/Users/.../main.tex`, Lynn reads that file instead of falling back to the current workspace or reporting an empty directory.
@@ -809,16 +827,16 @@ Memory and skill distillation work together: the more you use Lynn, the more acc
 
 ## Local models — hardware ladder
 
-Lynn now recommends **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding LynnStyle Dense** as the default edge model: Q5 for 32GB, Q4 for 24GB, Q3 for 16GB, and Q2 as an 8GB experimental tier. Low-config machines do not get a proactive local-model install prompt; 9B / 4B remain explicit downgrade choices in Settings, while 35B-A3B remains a legacy option. Local GGUF still starts only after the user enables it:
+Lynn now recommends **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding Q4 imatrix MTP** as the default edge model: about 19.6GB for 24GB+ VRAM / unified-memory machines. Low-config machines do not get a proactive local-model install prompt; 9B / 4B remain explicit downgrade choices in Settings, while 35B-A3B remains a legacy option. Local GGUF still starts only after the user enables it:
 
 | Tier | Model | Size | Recommended hardware | Context | Capability signal |
 |------|-------|:----:|---------------------|:-------:|-------------------|
-| **Recommended** | **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding Q5 LynnStyle Dense** | pending Q5 gate | **32GB VRAM/unified memory+** | 32K target | **Default recommendation** · Q8 gate MMLU 92.4% · LBC100 78/100 · Coding100 88/100 · GPQA full run in progress |
+| **Recommended** | **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding Q4 imatrix MTP** | 19.6 GB | **24GB VRAM/unified memory+** | 32K | **Default recommendation** · Coding100 82/100 · LBC100 71/100 · four-shard GGUF · MTP startup |
 | Downgrade | Qwen3.5-9B Q4_K_M imatrix MTP | 5.38 GB | 16~24GB optional | 32K | Low-config explicit downgrade · tool-call gate 14/15 · MTP acceleration |
 | Low-config downgrade | Qwen3.5-4B Q4_K_M imatrix (Lynn) | 2.6 GB | 8~16GB optional | 32K | **Q4_K_M imatrix** · MMLU thinking-off 73.00% · GPQA thinking-off 16.67% · thinking-on may think for a long time and return no visible answer |
 | Legacy option | Qwen3.6-35B-A3B DSV4Pro Distill Q5_K_M imatrix MTP | 25.3 GB | 32GB VRAM/unified memory+ | 32K | Legacy 35B orchestrator path kept for existing users and comparison tests |
 
-> The default recommendation is now the **Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding** LynnStyle Dense ladder: Q5 for 32GB, Q4 for 24GB, Q3 for 16GB, and Q2 as an 8GB experimental tier. 9B / 4B are downgrade lanes only; 35B-A3B is kept as a legacy option.
+> The default recommendation is now the **Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF** Q4 imatrix MTP tier. 9B / 4B are downgrade lanes only; 35B-A3B is kept as a legacy option.
 
 | Universal | Details |
 |---|---|
@@ -828,17 +846,17 @@ Lynn now recommends **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding LynnStyle De
 
 ### Downloads and mirrors
 
-**Recommended 27B** (choose Q5/Q4/Q3/Q2 by hardware):
-- 🇨🇳 **ModelScope main repo**: [Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding) (BF16 + `gguf/` subdirectory)
+**Recommended 27B Q4 MTP**:
 - 🇨🇳 **ModelScope GGUF mirror**: [Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
-- 🤗 **Hugging Face**: [nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding) / [GGUF mirror](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
+- 🤗 **HuggingFace GGUF mirror**: [nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
+- Default files: `Q4_LynnStyle/Q4-imatrix-MTP-00001-of-00004.gguf` through `00004`, about **19.6 GB** total.
 
 **Low-config 9B / 4B and high-end 35B** (explicit hardware choices):
 - 9B: [Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.5-9B-GGUF-imatrix) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`, **5.38 GB**) — low-config downgrade
 - 4B: [Merkyor/Qwen3.5-4B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix) (`Qwen3.5-4B-Q4_K_M-imatrix.gguf`, **2.6 GB**) — lower-config downgrade; thinking-off recommended
 - 35B legacy: [Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) (`Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf`, **25.3 GB**) — legacy orchestrator path for existing users and comparison tests
 
-In the app: **Settings → Models → Local Qwen3.6-27B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background; the new default recommendation points to the 27B Coding SFT/RL LynnStyle Dense GGUF ladder. The chat input shows local model status, and you can stop the runtime anytime to release memory. On low-config hardware Lynn does not proactively show the 27B install guide; the Models page still supports manual 9B / 4B downgrade choices, 35B legacy selection, or importing any llama.cpp-compatible GGUF you already have.
+In the app: **Settings → Models → Local Qwen3.6-27B → Authorize, install, and start**. Lynn handles download, verification, startup, and model registration in the background; the new default recommendation points to the public 27B Coding Q4 MTP four-shard GGUF. The chat input shows local model status, and you can stop the runtime anytime to release memory. On low-config hardware Lynn does not proactively show the 27B install guide; the Models page still supports manual 9B / 4B downgrade choices, 35B legacy selection, or importing any llama.cpp-compatible GGUF you already have.
 
 ## Install and Go
 
@@ -964,11 +982,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases). The V0.85.6 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases). The V0.85.7 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
 **Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases).
 
-> **Windows SmartScreen notice:** The v0.85.6 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.85.7 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
@@ -977,7 +995,7 @@ Linux builds are planned.
 Two paths on first launch:
 
 - **Quick Start**: Enter your name → set permissions → jump right in. A built-in default model works out of the box — no API key required.
-- **Local model**: Settings → Models → Local Qwen3.6-27B. 24GB+ machines get the 27B Q5_K_M MTP recommendation; 32GB+ can choose 35B-A3B Q5_K_M; low-config machines can manually choose 9B / 4B downgrades. Lynn stays quiet when hardware is below the 27B recommendation threshold, and every local GGUF starts only after the user explicitly enables it.
+- **Local model**: Settings → Models → Local Qwen3.6-27B. 24GB+ machines get the 27B Coding Q4 imatrix MTP four-shard GGUF recommendation; low-config machines can manually choose 9B / 4B downgrades, and 35B-A3B remains a legacy option. Lynn stays quiet when hardware is below the 27B recommendation threshold, and every local GGUF starts only after the user explicitly enables it.
 - **Advanced Setup**: Enter your name → connect your own provider (API key + base URL) → choose a **chat model** and a **utility model** → pick a theme → set permissions → enter.
 
 Lynn uses the OpenAI-compatible protocol, so any provider that supports it will work (OpenAI, DeepSeek, Qwen, local models via Ollama, SiliconFlow, etc.). Some providers (e.g. MiniMax) also support OAuth login. All model settings can be adjusted later in Settings.

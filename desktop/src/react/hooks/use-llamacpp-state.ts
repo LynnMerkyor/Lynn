@@ -177,7 +177,7 @@ export function useLlamacppState(): LlamaCppStateSnapshot {
 
   const startDownload = useCallback(async (payload?: { modelId?: string; startAfterDownload?: boolean }): Promise<{ ok: boolean; alreadyRunning?: boolean; reason?: string; detail?: string }> => {
     const platform = (window as unknown as {
-      platform?: { llamacppStartDownload?: (payload?: { modelId?: string; startAfterDownload?: boolean }) => Promise<{ ok: boolean; alreadyRunning?: boolean; reason?: string; detail?: string }> }
+      platform?: { llamacppStartDownload?: (payload?: { modelId?: string; startAfterDownload?: boolean }) => Promise<{ ok: boolean; alreadyRunning?: boolean; reason?: string; detail?: string; fileCount?: number; parallelSegments?: number }> }
     }).platform;
     try {
       const result = await platform?.llamacppStartDownload?.(payload);

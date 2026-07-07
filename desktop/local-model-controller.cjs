@@ -82,6 +82,21 @@ function validateLocalModelId(modelId) {
   return { ok: true, modelId };
 }
 
+function requiredDownloadFilesForProfile(profile) {
+  const files = Array.isArray(profile.files) && profile.files.length > 0
+    ? profile.files
+    : [profile];
+  return files.map((file, index) => ({
+    fileName: file.fileName || profile.fileName,
+    expectedSize: file.expectedSize || profile.expectedSize,
+    expectedSha256: file.expectedSha256 || (files.length === 1 ? profile.expectedSha256 : ""),
+    sources: Array.isArray(file.sources) && file.sources.length > 0 ? file.sources : profile.sources,
+    parallelSegments: file.parallelSegments || profile.parallelSegments,
+    fileIndex: index + 1,
+    fileCount: files.length,
+  }));
+}
+
 function parseGgufModelPathPayload(payload, key = "modelPath") {
   const rawPath = typeof payload === "string" ? payload : payload?.[key];
   if (typeof rawPath !== "string" || !rawPath.trim()) return ipcError("missing-model-path");
@@ -237,7 +252,7 @@ wrapIpcHandler(LOCAL_MODEL_IPC.startDownload, async (event, payload = {}) => {
   const profile = resolvedProfile.profile;
   if (activeModelDownloader && (lastModelDownloadState.state === "downloading"
       || lastModelDownloadState.state === "verifying")) {
-    const runningModelId = lastModelDownloadState.modelId || "qwen36-27b-dsv4pro-distill-q5km-imatrix";
+    const runningModelId = lastModelDownloadState.modelId || "qwen36-27b-dsv4pro-coding-q4-mtp";
     const payload = {
       alreadyRunning: true,
       modelId: runningModelId,
@@ -247,24 +262,26 @@ wrapIpcHandler(LOCAL_MODEL_IPC.startDownload, async (event, payload = {}) => {
       ? ipcOk(payload)
       : ipcError("another-download-running", payload);
   }
-  const target = path.join(lynnHome, "models", profile.fileName);
+  const files = requiredDownloadFilesForProfile(profile);
+  const firstTarget = path.join(lynnHome, "models", files[0].fileName);
+  const totalExpectedSize = files.reduce((sum, file) => sum + Number(file.expectedSize || 0), 0);
 
   // #5: disk-space precheck — refuse to start if free space < expectedSize × 1.1 (account for .part + final)
-  if (profile.expectedSize && profile.expectedSize > 0) {
+  if (totalExpectedSize > 0) {
     try {
-      const modelsDir = path.dirname(target);
+      const modelsDir = path.dirname(firstTarget);
       try { fs.mkdirSync(modelsDir, { recursive: true }); } catch {}
       const stat = (fs.statfsSync || fs.statfs)?.(modelsDir);
       if (stat) {
         const free = Number(stat.bavail) * Number(stat.bsize);
-        const need = Number(profile.expectedSize) * 1.1;
+        const need = totalExpectedSize * 1.1;
         if (Number.isFinite(free) && free < need) {
           const freeGB = (free / 1024 / 1024 / 1024).toFixed(2);
           const needGB = (need / 1024 / 1024 / 1024).toFixed(2);
           return ipcError("insufficient-disk-space", {
             detail: `Need ~${needGB} GB free in ${modelsDir}, have ${freeGB} GB. Free up space and retry.`,
             modelId: profile.modelId,
-            target,
+            target: firstTarget,
           });
         }
       }
@@ -274,44 +291,8 @@ wrapIpcHandler(LOCAL_MODEL_IPC.startDownload, async (event, payload = {}) => {
     }
   }
 
-  let downloader;
-  try {
-    downloader = new ModelDownloader({
-      target,
-      fileName: profile.fileName,
-      expectedSize: profile.expectedSize,
-      expectedSha256: profile.expectedSha256,
-      sources: profile.sources,
-      parallelSegments: profile.parallelSegments,
-    });
-  } catch (err) {
-    return ipcError("download-boundary-invalid", {
-      detail: String(err?.message || err),
-      modelId: profile.modelId,
-      target,
-    });
-  }
-  activeModelDownloader = downloader;
-  downloader.on("progress", (s) => {
-    lastModelDownloadState = decorateDownloadState(profile, s);
-    broadcastToAllWindows(LOCAL_MODEL_IPC.downloadProgress, lastModelDownloadState);
-  });
-  downloader.on("state", (s) => {
-    lastModelDownloadState = decorateDownloadState(profile, s);
-    broadcastToAllWindows(LOCAL_MODEL_IPC.downloadState, lastModelDownloadState);
-  });
-  downloader.on("log", (level, msg) => {
-    if (level === "error") console.error(msg);
-    else if (level === "warn") console.warn(msg);
-    else console.log(msg);
-  });
-  // fire-and-forget; resolve completion drives llamacpp restart
-  downloader.start().then((result) => {
-    if (result?.ok) {
-      const doneState = decorateDownloadState(profile, { ...downloader.getState(), state: "done", target });
-      lastModelDownloadState = doneState;
-      broadcastToAllWindows(LOCAL_MODEL_IPC.downloadState, doneState);
-      if (parsedPayload.startAfterDownload || profile.autoStart) {
+  const startDownloadedModelIfNeeded = () => {
+    if (parsedPayload.startAfterDownload || profile.autoStart) {
         // Explicit local model startup — bounce llamacpp so it picks the model up.
         // #18: 1500ms conservative wait (was 600ms) + port-busy probe before spawn.
         // Manager.stop() SIGTERMs the child but only SIGKILLs after 5s;
@@ -327,14 +308,80 @@ wrapIpcHandler(LOCAL_MODEL_IPC.startDownload, async (event, payload = {}) => {
           setTimeout(() => { if (settled) return; settled = true; probe.destroy(); try { startLlamacpp(); } catch {} }, 800);
         };
         setTimeout(probeAndStart, 1500);
-      }
     }
-    if (activeModelDownloader === downloader) activeModelDownloader = null;
-  }).catch((err) => {
+  };
+
+  const runDownloads = async () => {
+    for (const file of files) {
+      const target = path.join(lynnHome, "models", file.fileName);
+      const fileProfile = { ...profile, fileName: file.fileName };
+      let downloader;
+      try {
+        downloader = new ModelDownloader({
+          target,
+          fileName: path.basename(file.fileName),
+          expectedSize: file.expectedSize,
+          expectedSha256: file.expectedSha256,
+          sources: file.sources,
+          parallelSegments: file.parallelSegments,
+        });
+      } catch (err) {
+        throw new Error(`download-boundary-invalid: ${String(err?.message || err)}`);
+      }
+      activeModelDownloader = downloader;
+      downloader.on("progress", (s) => {
+        lastModelDownloadState = decorateDownloadState(fileProfile, { ...s, fileIndex: file.fileIndex, fileCount: file.fileCount });
+        broadcastToAllWindows(LOCAL_MODEL_IPC.downloadProgress, lastModelDownloadState);
+      });
+      downloader.on("state", (s) => {
+        lastModelDownloadState = decorateDownloadState(fileProfile, { ...s, fileIndex: file.fileIndex, fileCount: file.fileCount });
+        broadcastToAllWindows(LOCAL_MODEL_IPC.downloadState, lastModelDownloadState);
+      });
+      downloader.on("log", (level, msg) => {
+        if (level === "error") console.error(msg);
+        else if (level === "warn") console.warn(msg);
+        else console.log(msg);
+      });
+      // eslint-disable-next-line no-await-in-loop
+      const result = await downloader.start();
+      if (!result?.ok) {
+        throw new Error(result?.reason || "download-failed");
+      }
+      if (activeModelDownloader === downloader) activeModelDownloader = null;
+    }
+    const doneState = decorateDownloadState(profile, {
+      state: "done",
+      target: firstTarget,
+      bytesTransferred: totalExpectedSize,
+      totalBytes: totalExpectedSize,
+      percent: 100,
+      fileIndex: files.length,
+      fileCount: files.length,
+    });
+    lastModelDownloadState = doneState;
+    broadcastToAllWindows(LOCAL_MODEL_IPC.downloadState, doneState);
+    startDownloadedModelIfNeeded();
+  };
+
+  runDownloads().catch((err) => {
     console.warn("[model-downloader] failed:", err?.message || err);
-    if (activeModelDownloader === downloader) activeModelDownloader = null;
+    lastModelDownloadState = decorateDownloadState(profile, {
+      state: "error",
+      lastError: String(err?.message || err),
+      target: firstTarget,
+      totalBytes: totalExpectedSize,
+      fileCount: files.length,
+    });
+    broadcastToAllWindows(LOCAL_MODEL_IPC.downloadState, lastModelDownloadState);
+    activeModelDownloader = null;
   });
-  return ipcOk({ alreadyRunning: false, modelId: profile.modelId, target, parallelSegments: profile.parallelSegments });
+  return ipcOk({
+    alreadyRunning: false,
+    modelId: profile.modelId,
+    target: firstTarget,
+    fileCount: files.length,
+    parallelSegments: profile.parallelSegments,
+  });
 });
 
 wrapIpcHandler(LOCAL_MODEL_IPC.pauseDownload, () => {
@@ -364,6 +411,13 @@ wrapIpcHandler(LOCAL_MODEL_IPC.sources, () => ({
       modelId: profile.modelId,
       label: profile.label,
       fileName: profile.fileName,
+      files: Array.isArray(profile.files)
+        ? profile.files.map((file) => ({
+            fileName: file.fileName,
+            expectedSize: file.expectedSize,
+            sources: file.sources.map((s) => ({ id: s.id, label: s.label })),
+          }))
+        : undefined,
       expectedSize: profile.expectedSize,
       parallelSegments: profile.parallelSegments,
       sources: profile.sources.map((s) => ({ id: s.id, label: s.label })),

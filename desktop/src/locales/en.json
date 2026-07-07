@@ -1278,7 +1278,7 @@
       "advancedDesc": "If you already know your provider and model,\nset up connection, model, and theme in one pass.",
       "advancedAction": "Enter Advanced Setup",
       "localTitle": "Local first (offline)",
-      "localDesc": "Download the 19.5 GB Lynn default model (Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP),\nfully offline — no chats ever uploaded. Low-config machines can choose 9B/4B downgrades later in Settings.",
+      "localDesc": "Download the 19.6 GB Lynn default model (Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP),\nfully offline — no chats ever uploaded. Low-config machines can choose 9B/4B downgrades later in Settings.",
       "localAction": "Download local model"
     },
     "name": {
@@ -1368,8 +1368,8 @@
     },
     "localModel": {
       "title": "Download Lynn's default local model",
-      "subtitle": "Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP · 19.5 GB · 32K context · 24GB+ VRAM/unified memory recommended.\nRuns fully offline — no API key, no data ever leaves your machine. Low-config machines can choose 9B/4B downgrades in Settings.",
-      "specsLine": "19.5 GB · Q5_K_M imatrix MTP · 32K context · fully offline",
+      "subtitle": "Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP · 19.6 GB · 32K context · 24GB+ VRAM/unified memory recommended.\nRuns fully offline — no API key, no data ever leaves your machine. Low-config machines can choose 9B/4B downgrades in Settings.",
+      "specsLine": "19.6 GB · Q4 imatrix MTP · 32K context · fully offline",
       "needsBinary": "llama.cpp inference engine not found at ~/.lynn/llamacpp/bin/llama-server",
       "needsBinaryHint": "Install llama.cpp following the docs and retry.",
       "alreadyHave": "Local model is ready",

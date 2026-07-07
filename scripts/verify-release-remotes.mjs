@@ -11,7 +11,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 function parseArgs(argv) {
   const args = {
     branch: "main",
-    remotes: (process.env.LYNN_RELEASE_REMOTES || "github-lynnmerkyor,gitee")
+    remotes: (process.env.LYNN_RELEASE_REMOTES || "github-lynnmerkyor,origin,gitee")
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean),
@@ -39,17 +39,17 @@ function parseArgs(argv) {
 function printHelp() {
   console.log(`Usage:
   npm run release:verify-remotes
-  node scripts/verify-release-remotes.mjs --tag v0.85.5 --remotes github-lynnmerkyor,gitee
+  node scripts/verify-release-remotes.mjs --tag v0.85.7 --remotes github-lynnmerkyor,origin,gitee
 
 Checks that release remotes expose the current branch head and release tag.
 
 Options:
   --branch NAME       branch to check, default: main
   --tag TAG           tag to check, default: v<package.json version>
-  --remotes A,B       remotes to check, default: github-lynnmerkyor,gitee
+  --remotes A,B       remotes to check, default: github-lynnmerkyor,origin,gitee
 
 Environment:
-  LYNN_RELEASE_REMOTES=github-lynnmerkyor,gitee`);
+  LYNN_RELEASE_REMOTES=github-lynnmerkyor,origin,gitee`);
 }
 
 function git(args, options = {}) {

@@ -41,7 +41,7 @@
       "downloadUrl": "https://download.merkyorlynn.com/download",
       "screenshot": "https://raw.githubusercontent.com/LynnMerkyor/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
       "image": "https://raw.githubusercontent.com/LynnMerkyor/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
-      "softwareVersion": "0.85.6",
+      "softwareVersion": "0.85.7",
       "datePublished": "2026-04-16",
       "fileSize": "180MB",
       "inLanguage": "zh-CN",
@@ -61,7 +61,7 @@
       },
       "featureList": [
         "StepFun 3.7 Flash 默认主链",
-        "本地 Qwen3.5-9B 与 Qwen3.6-35B-A3B 显式可选",
+        "本地 Qwen3.6-27B Coding Q4 MTP 默认推荐,9B/4B 低配降级",
         "六层记忆系统：心跳/心态/工作记忆/用户画像",
         "写作工作台 + Diff 视图 + 对比外部修改",
         "本地工具：edit/write/read/bash/grep/find 全链路",
@@ -105,11 +105,11 @@
       <main>
         <section class="hero">
           <div class="hero-copy">
-            <span class="eyebrow">Lynn 0.85.6</span>
-            <h1>本地文件读取更稳,会话进展更清楚。</h1>
+            <span class="eyebrow">Lynn 0.85.7</span>
+            <h1>默认端侧模型升级到 27B Coding Q4 MTP。</h1>
             <p class="lead">
               Lynn 是一个有心跳、有记忆、会主动行动、还能多 Agent 协作的桌面 AI
-              助手。V0.85.6 修复了绝对路径文件读取、file:// 说明类问题误触发目录读取、上一题文件任务污染下一题等回归；右侧会话进展和 27B Q5_K_M MTP 本地模型推荐继续保留。
+              助手。V0.85.7 将本地端侧默认推荐切到公开可下载的 Qwen3.6-27B Coding GGUF Q4 imatrix MTP；低配机器保留 9B / 4B 降级入口，硬件不足时不主动弹安装引导。
             </p>
             <div class="hero-actions">
               <a class="button button-primary" href="./download.html">下载 Lynn</a>
@@ -233,7 +233,7 @@
           <div class="story-grid">
             <article class="story-card">
               <h3>快速设置</h3>
-              <p>新用户可以直接快速设置，不必先理解复杂的 API Key、供应商和路由配置。需要本地模型时再显式启用 9B。</p>
+              <p>新用户可以直接快速设置，不必先理解复杂的 API Key、供应商和路由配置。需要本地模型时再显式启用 27B Coding Q4 MTP；低配设备可手动选 9B / 4B。</p>
             </article>
             <article class="story-card">
               <h3>更像长期协作者</h3>
@@ -294,6 +294,6 @@
       </footer>
     </div>
 
-    <script src="./app.js?v=0.85.6"></script>
+    <script src="./app.js?v=0.85.7"></script>
   </body>
 </html>

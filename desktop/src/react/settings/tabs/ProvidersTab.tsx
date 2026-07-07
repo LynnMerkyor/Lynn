@@ -133,7 +133,7 @@ const LOCAL_PROVIDER_FALLBACKS: Record<string, ProviderSummary> = {
     base_url: 'http://127.0.0.1:18099/v1',
     api: 'openai-completions',
     api_key: '',
-    models: ['qwen36-27b-dsv4pro-distill-q5km-imatrix'],
+    models: ['qwen36-27b-dsv4pro-coding-q4-mtp'],
     custom_models: [],
     removed_models: [],
     has_credentials: true,

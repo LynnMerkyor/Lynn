@@ -16,9 +16,11 @@ describe("local-qwen id / filename", () => {
     expect(isLocalQwenProviderId("openai")).toBe(false);
     expect(isLocalQwenProviderId(null)).toBe(false);
   });
-  it("isDefaultQwen35MtpFileName matches the canonical 27B Q5 + loose mtp names", () => {
-    expect(isDefaultQwen35MtpFileName("Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf")).toBe(true);
-    expect(isDefaultQwen35MtpFileName("qwen3.6-27b-dsv4pro-distill-mtp-q5km.gguf")).toBe(true);
+  it("isDefaultQwen35MtpFileName matches the canonical 27B Coding Q4 shards only", () => {
+    expect(isDefaultQwen35MtpFileName("Q4-imatrix-MTP-00001-of-00004.gguf")).toBe(true);
+    expect(isDefaultQwen35MtpFileName("Q4-imatrix-MTP-00004-of-00004.gguf")).toBe(true);
+    expect(isDefaultQwen35MtpFileName("Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-Q4-MTP.gguf")).toBe(true);
+    expect(isDefaultQwen35MtpFileName("Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf")).toBe(false);
     expect(isDefaultQwen35MtpFileName("Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf")).toBe(false);
     expect(isDefaultQwen35MtpFileName("other.gguf")).toBe(false);
   });

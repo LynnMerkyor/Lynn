@@ -35,8 +35,13 @@ function hasCodeLikeAnswer(text) {
 
 function isNarrativeWritingPrompt(prompt, category) {
   if (String(category || "") !== "writing") return false;
-  return /(?:写一段|续写|开头|对话|人物小传|改写得更有画面感|悬疑小说)/u.test(prompt)
+  return /(?:写一段|续写|开头|对话|改写得更有画面感|悬疑小说)/u.test(prompt)
     && !/(?:大纲|章节规划|检查清单|世界观设定表)/u.test(prompt);
+}
+
+function isCharacterProfilePrompt(prompt, category) {
+  if (String(category || "") !== "writing") return false;
+  return /(?:人物小传|人物设定|角色小传|角色设定)/u.test(String(prompt || ""));
 }
 
 function isWritingPlanningPrompt(prompt, category) {
@@ -48,6 +53,13 @@ function hasNarrativeProse(text) {
   const raw = normalizedText(text);
   const sentenceMarks = (raw.match(/[。！？]/gu) || []).length;
   return raw.length >= 80 && sentenceMarks >= 3 && !/^(?:[-*]\s*){0,1}(?:可以|我可以|下面是|以下是)/u.test(raw.slice(0, 40));
+}
+
+function hasCharacterProfile(text) {
+  const raw = normalizedText(text);
+  if (raw.length < 120) return false;
+  return /(?:工程师|职业|经历|过去|事故|记忆|缺口|权威|目标|弱点|性格|创伤|秘密|动机|不信任)/u.test(raw)
+    && /(?:。|：|:|；|;|-|\n)/u.test(String(text || ""));
 }
 
 function hasWritingPlan(text) {
@@ -114,6 +126,9 @@ export function additionalDialogueQualityReason({ category, prompt, text, hasToo
   }
   if (isCodeGenerationPrompt(String(prompt || ""), category) && !hasCodeLikeAnswer(rawText)) {
     return "code-generation-question-without-code";
+  }
+  if (isCharacterProfilePrompt(String(prompt || ""), category) && !hasCharacterProfile(rawText)) {
+    return "creative-character-profile-too-thin";
   }
   if (isNarrativeWritingPrompt(String(prompt || ""), category) && !hasNarrativeProse(rawText)) {
     return "creative-writing-question-without-narrative-prose";

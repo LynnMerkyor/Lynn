@@ -28,10 +28,10 @@ import { fromRoot } from "../../shared/lynn-root.js";
 
 const execFileAsync = promisify(execFile);
 const PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
-const MODEL_ID = "qwen36-27b-dsv4pro-distill-q5km-imatrix";
-const MODEL_DISPLAY_NAME = "Qwen3.6-27B DSV4Pro Thinking Distill MTP Q5_K_M imatrix";
-const MODEL_FILE_NAME = "Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf";
-const MODEL_ROOT_NAME = "Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF";
+const MODEL_ID = "qwen36-27b-dsv4pro-coding-q4-mtp";
+const MODEL_DISPLAY_NAME = "Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL Coding Q4 imatrix MTP";
+const MODEL_FILE_NAME = "Q4-imatrix-MTP-00001-of-00004.gguf";
+const MODEL_ROOT_NAME = "Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF";
 const LOCAL_QWEN35_CLOUD_FALLBACK_PROVIDER = process.env.LYNN_LOCAL_QWEN35_FAILURE_FALLBACK_PROVIDER || "step-3.7-flash";
 const LOCAL_QWEN35_RUNTIME_POLICY = Object.freeze({
   role: "explicit_opt_in_local_27b_distill",
@@ -244,17 +244,17 @@ function defaultState(): LocalQwen35State {
   const home = os.homedir();
   return {
     modelRoot: process.env.LYNN_LOCAL_QWEN35_MODEL_ROOT || path.join(home, "Models", "Lynn", MODEL_ROOT_NAME),
-    providerConfig: process.env.LYNN_LOCAL_QWEN35_PROVIDER_CONFIG || path.join(home, ".lynn-engine", "providers", "qwen36-27b-dsv4pro-distill-q5km-imatrix-gguf.json"),
-    pidFile: process.env.LYNN_LOCAL_QWEN35_PID_FILE || path.join(home, ".lynn-engine", "run", "qwen36-27b-dsv4pro-distill-q5km-imatrix.pid"),
-    logFile: process.env.LYNN_LOCAL_QWEN35_LOG_FILE || path.join(home, ".lynn-engine", "logs", "qwen36-27b-dsv4pro-distill-q5km-imatrix.client.log"),
+    providerConfig: process.env.LYNN_LOCAL_QWEN35_PROVIDER_CONFIG || path.join(home, ".lynn-engine", "providers", "qwen36-27b-dsv4pro-coding-q4-mtp-gguf.json"),
+    pidFile: process.env.LYNN_LOCAL_QWEN35_PID_FILE || path.join(home, ".lynn-engine", "run", "qwen36-27b-dsv4pro-coding-q4-mtp.pid"),
+    logFile: process.env.LYNN_LOCAL_QWEN35_LOG_FILE || path.join(home, ".lynn-engine", "logs", "qwen36-27b-dsv4pro-coding-q4-mtp.client.log"),
     host: process.env.LYNN_LOCAL_QWEN35_HOST || "127.0.0.1",
     port: String(process.env.LYNN_LOCAL_QWEN35_PORT || "18099"),
   };
 }
 
 function expectedModelPath(state: LocalQwen35State = defaultState(), _variant = "imatrix"): string {
-  // 2026-06-27: 默认改为 27B DSV4Pro Distill Q5_K_M MTP;9B/4B 仅作为显式 downgrade。
-  return path.join(state.modelRoot, "q5_k_m", MODEL_FILE_NAME);
+  // 2026-07-07: 默认改为 27B Coding GGUF Q4 imatrix MTP split;9B/4B 仅作为显式 downgrade。
+  return path.join(os.homedir(), ".lynn", "models", "Q4_LynnStyle", MODEL_FILE_NAME);
 }
 
 function candidateModelPaths(state: LocalQwen35State = defaultState()): string[] {
@@ -262,12 +262,15 @@ function candidateModelPaths(state: LocalQwen35State = defaultState()): string[]
   return [
     expectedModelPath(state, "imatrix"),
     path.join(state.modelRoot, MODEL_FILE_NAME),
+    path.join(state.modelRoot, "Q4_LynnStyle", MODEL_FILE_NAME),
+    path.join(home, ".lynn", "models", "Q4_LynnStyle", MODEL_FILE_NAME),
     path.join(home, ".lynn", "models", MODEL_FILE_NAME),
-    path.join(home, ".lynn", "models", MODEL_FILE_NAME.toLowerCase()),
-    path.join(home, "Models", "Lynn", MODEL_ROOT_NAME, "q5_k_m", MODEL_FILE_NAME),
+    path.join(home, "Models", "Lynn", MODEL_ROOT_NAME, "Q4_LynnStyle", MODEL_FILE_NAME),
+    path.join(home, "Models", "Lynn", MODEL_ROOT_NAME, "q4_lynnstyle", MODEL_FILE_NAME),
     path.join(home, "Models", "Lynn", MODEL_ROOT_NAME, MODEL_FILE_NAME),
+    path.join(home, "Models", "Lynn", "Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF", "Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf"),
     path.join(home, "Models", "Lynn", "Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF", MODEL_FILE_NAME),
-    path.join(home, "Models", "Lynn", "Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF", "q5_k_m", MODEL_FILE_NAME),
+    path.join(home, "Models", "Lynn", "Qwen3.6-27B-DSV4Pro-Thinking-Distill-GGUF", "q5_k_m", "Qwen3.6-27B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf"),
   ];
 }
 
@@ -362,6 +365,8 @@ async function qwen35ProcessPids(state: LocalQwen35State = defaultState()): Prom
         if (!/llama-server(?:\s|$)/.test(command) && !/llama-server\b/.test(command)) return null;
         const mentionsPort = command.includes(`--port ${state.port}`) || command.includes(`:${state.port}`);
         const mentionsModel = modelPaths.some((candidate) => candidate && command.includes(candidate))
+          || /Q4-imatrix-MTP-00001-of-00004/i.test(command)
+          || /qwen36-27b-dsv4pro-coding-q4-mtp/i.test(command)
           || /Qwen3\.6-27B-DSV4Pro-Distill-MTP-Q5_K_M/i.test(command)
           || /qwen36-27b-dsv4pro-distill-q5km/i.test(command);
         return mentionsPort || mentionsModel ? pid : null;
@@ -587,7 +592,7 @@ function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): JsonRecor
   const totalMemoryGib = os.totalmem() / (1024 ** 3);
   const isMac = process.platform === "darwin";
   const chip = isMac ? os.cpus()?.[0]?.model || "Apple Silicon" : os.cpus()?.[0]?.model || null;
-  // 2026-06-27 默认改为 27B Q5_K_M MTP。24GB+ 推荐;低配下沉到 9B / 4B。
+  // 2026-07-07 默认改为 27B Coding Q4 imatrix MTP。24GB+ 推荐;低配下沉到 9B / 4B。
   const comfortable = totalMemoryGib >= 24;
   const usable = totalMemoryGib >= 24;
   const ctxSize = comfortable ? 32768 : 16384;
@@ -597,6 +602,12 @@ function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): JsonRecor
     ok: true,
     provider_id: PROVIDER_ID,
     model: MODEL_ID,
+    display_name: MODEL_DISPLAY_NAME,
+    expected_file_name: MODEL_FILE_NAME,
+    expected_model_path: expectedModelPath(state),
+    setup_backend: "desktop_llamacpp_manager",
+    python_bootstrap_required: false,
+    local_model_downloader_available: true,
     runtime_policy: LOCAL_QWEN35_RUNTIME_POLICY,
     plan: {
       decision: runtime.endpoint_occupied ? "occupied" : runtime.endpoint_running ? "ready" : runtime.endpoint_loading ? "loading" : "inspect",
@@ -617,15 +628,15 @@ function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): JsonRecor
         total_memory_gib: totalMemoryGib,
         gpus: [],
         recommended_runtime: {
-          name: comfortable ? "local_qwen27b_q5_mtp_32k" : "local_qwen27b_q5_mtp_blocked",
-          label: comfortable ? "Qwen3.6-27B Q5_K_M MTP 默认推荐档" : "本机低于 24GB,建议改用 9B/4B 降级档",
+          name: comfortable ? "local_qwen27b_q4_mtp_32k" : "local_qwen27b_q4_mtp_blocked",
+          label: comfortable ? "Qwen3.6-27B Q4 imatrix MTP 默认推荐档" : "本机低于 24GB,建议改用 9B/4B 降级档",
           ctx_size: ctxSize,
           parallel,
           gpu_layers: isMac ? 999 : 0,
         },
         warnings: [
           ...(runtime.endpoint_occupied
-            ? [`检测到 ${runtime.base_url} 当前运行的是 ${runtime.model_ids?.join(", ") || "非默认模型"} 端点,不会作为默认 27B 使用;停止该端点后可启动默认 Qwen3.6-27B Q5_K_M MTP。`]
+            ? [`检测到 ${runtime.base_url} 当前运行的是 ${runtime.model_ids?.join(", ") || "非默认模型"} 端点,不会作为默认 27B 使用;停止该端点后可启动默认 Qwen3.6-27B Q4 imatrix MTP。`]
             : []),
           ...(comfortable ? [] : [
             "当前内存低于 24GB,不建议默认安装 27B;可继续使用云端模型或在模型页手动选择 9B / 4B 降级档。",
@@ -639,7 +650,7 @@ function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): JsonRecor
             label: "Qwen3.5-9B Q4_K_M imatrix MTP (低配降级)",
             profile: "16~24GB 设备可选 · 比 27B 更轻",
             metrics: ["5.78GB / 5.38GiB", "32K 上下文", "MTP 加速", "低配降级"],
-            reason: "给跑不动 27B Q5 的设备保留;质量不再作为 Lynn 本地首推。",
+            reason: "给跑不动 27B Q4 的设备保留;质量不再作为 Lynn 本地首推。",
             modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP",
             download_label: "下载到本机",
             file_name: "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
@@ -665,7 +676,7 @@ function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): JsonRecor
             label: "Qwen3.6-35B-A3B DSV4Pro Thinking Distill MTP Q5_K_M imatrix",
             profile: "32GB 显存/统一内存+ 可选 · 更高配本地编排器",
             metrics: ["25.3 GB Q5_K_M imatrix", "MTP 原生头", "GPQA-Diamond 80.3%", "端到端编排 26.6s"],
-            reason: "32GB+ 机器可选 35B-A3B Q5_K_M;MoE + MTP 单流速度更好,但文件和 KV cache 都更重。默认仍首推 27B Q5。",
+            reason: "32GB+ 机器可选 35B-A3B Q5_K_M;MoE + MTP 单流速度更好,但文件和 KV cache 都更重。默认仍首推 27B Q4。",
             modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF",
             download_label: "下载到本机",
             file_name: "Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf",
@@ -861,7 +872,7 @@ async function plan(variant = "imatrix"): Promise<JsonRecord> {
 async function registerProvider(engine: LocalQwen35RouteEngine, options: RegisterProviderOptions = {}): Promise<boolean> {
   const state = defaultState();
   engine.providerRegistry.saveProvider(PROVIDER_ID, {
-    display_name: "本地 Qwen3.6-27B Distill",
+    display_name: "本地 Qwen3.6-27B Coding",
     base_url: `http://${state.host}:${state.port}/v1`,
     api: "openai-completions",
     auth_type: "none",
@@ -979,9 +990,7 @@ export function createLocalQwen35Route(engine: LocalQwen35RouteEngine): Hono {
 
   route.get("/local-qwen35-9b/status", async (c) => {
     const runtime = await runtimeDetails();
-    const status = (runtime.endpoint_running || runtime.endpoint_loading || runtime.process_alive)
-      ? fastReadyPlan(runtime)
-      : await plan();
+    const status = fastReadyPlan(runtime);
     const registered = isProviderRegistered(engine);
     const decoratedJob = decorateJob(job);
     const providerState = deriveLocalQwen35ProviderState({
@@ -1008,10 +1017,39 @@ export function createLocalQwen35Route(engine: LocalQwen35RouteEngine): Hono {
       return c.json({ ok: true, already_running: true, job: decorateJob(job), runtime_policy: LOCAL_QWEN35_RUNTIME_POLICY }, 202);
     }
 
+    if (process.env.LYNN_LOCAL_QWEN35_USE_BOOTSTRAP !== "1") {
+      return c.json({
+        ok: false,
+        error: "desktop_downloader_required",
+        message: "默认本地模型安装已迁移到 Lynn 桌面端内置下载器。请使用客户端内的“安装本地模型/启动”按钮。",
+        provider_id: PROVIDER_ID,
+        model: MODEL_ID,
+        setup_backend: "desktop_llamacpp_manager",
+        python_bootstrap_required: false,
+        local_model_downloader_available: true,
+        runtime_policy: LOCAL_QWEN35_RUNTIME_POLICY,
+      }, 409);
+    }
+
     const bootstrap = bootstrapPath();
     const state = defaultState();
     if (!bootstrap) {
       return c.json({ ok: false, error: "bootstrap_not_found", runtime_policy: LOCAL_QWEN35_RUNTIME_POLICY }, 503);
+    }
+    const pyCheck = await ensurePython3();
+    if (!pyCheck.ok) {
+      return c.json({
+        ok: false,
+        error: "desktop_downloader_required",
+        message: "旧版 Python bootstrap 不可用。请使用 Lynn 桌面端内置的本地模型下载器安装并启动本地 Qwen3.6-27B。",
+        detail: "python3 is not required for the current desktop downloader path; this compatibility endpoint only runs for old clients.",
+        provider_id: PROVIDER_ID,
+        model: MODEL_ID,
+        setup_backend: "desktop_llamacpp_manager",
+        python_bootstrap_required: false,
+        local_model_downloader_available: true,
+        runtime_policy: LOCAL_QWEN35_RUNTIME_POLICY,
+      }, 501);
     }
 
     fs.mkdirSync(path.dirname(state.logFile), { recursive: true });
@@ -1083,7 +1121,10 @@ export function createLocalQwen35Route(engine: LocalQwen35RouteEngine): Hono {
   });
 
   route.post("/local-qwen35-9b/register", async (c) => {
-    const status = await plan();
+    const runtime = await runtimeDetails({ force: true });
+    const status = (runtime.endpoint_running || runtime.endpoint_loading || runtime.process_alive)
+      ? fastReadyPlan(runtime)
+      : await plan();
     if (!isReadyPlan(status)) {
       return c.json({
         ok: false,

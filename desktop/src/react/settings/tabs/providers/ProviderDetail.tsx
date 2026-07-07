@@ -229,15 +229,15 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const modelFileName = modelPath ? (modelPath.split(/[\\/]/).pop() || modelPath) : '';
   const legacyModelPath = typeof observed.legacy_gguf === 'string' ? observed.legacy_gguf : '';
   const legacyModelFileName = legacyModelPath ? (legacyModelPath.split(/[\\/]/).pop() || legacyModelPath) : '';
-  // 默认卡只认当前 27B Q5 MTP artifact。旧 9B GGUF 会显示为可升级,不能挡住新版 27B Q5 MTP 下载。
+  // 默认卡只认当前 27B Q4 MTP artifact。旧 9B GGUF 会显示为可升级,不能挡住新版 27B Q4 MTP 下载。
   const hasModel = !!observed.gguf && isDefaultQwen35MtpFileName(modelFileName);
   const needsMtpUpgrade = !hasModel && (observed.needs_model_upgrade === true || !!legacyModelPath);
   const hardwareWarnings = [...new Set([
     ...(endpointForeign
-      ? [`检测到 18099 当前运行的是 ${servedModelIds.join(', ') || '非默认模型端点'}，它不会作为默认 27B 使用；停止后可启动默认 Qwen3.6-27B Q5_K_M MTP。`]
+      ? [`检测到 18099 当前运行的是 ${servedModelIds.join(', ') || '非默认模型端点'}，它不会作为默认 27B 使用；停止后可启动默认 Qwen3.6-27B Q4 imatrix MTP。`]
       : []),
     ...(needsMtpUpgrade
-      ? [`检测到旧版 Qwen3.5-9B GGUF：${legacyModelFileName || '旧文件'}。默认档已升级为 27B Q5 MTP；点击升级会下载新版 27B Q5 MTP 文件，旧文件不会被删除。`]
+      ? [`检测到旧版 Qwen3.5-9B GGUF：${legacyModelFileName || '旧文件'}。默认档已升级为 27B Q4 MTP；点击升级会下载新版 27B Q4 MTP 文件，旧文件不会被删除。`]
       : []),
     ...(hardware.warnings || []),
     ...(hardware.blockers || []),
@@ -327,10 +327,10 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     const profile = runtime.label ? `\n\n推荐配置：${runtime.label}，上下文 ${runtime.ctx_size || 8192}，并发 ${runtime.parallel || 1}` : '';
     const warning = hardwareWarnings.length ? `\n\n注意：${hardwareWarnings.join(' ')}` : '';
     const setupText = hasModel && hasRuntime
-      ? 'Lynn 将按你的确认启动本地 Qwen3.6-27B Q5_K_M MTP 模型服务，并切换为本地模型。启动会占用约 24GB 显存/统一内存。'
+      ? 'Lynn 将按你的确认启动本地 Qwen3.6-27B Q4 imatrix MTP 模型服务，并切换为本地模型。启动会占用约 24GB 显存/统一内存。'
       : needsMtpUpgrade
-        ? 'Lynn 将保留旧版 9B 文件，并下载新版 Qwen3.6-27B Q5_K_M MTP；这是显式启用流程，完成后会启动 MTP 端点。\n\n模型约 19.5GB；旧文件不会被删除，你可以稍后手动清理。启动会占用约 24GB 显存/统一内存。'
-        : 'Lynn 将在本机安装或定位 llama.cpp，下载 Qwen3.6-27B DSV4Pro Distill MTP Q5_K_M imatrix，并启动本地模型服务。\n\n模型约 19.5GB；27B Q5_M 是 Lynn 当前默认推荐端侧模型，原生 MTP 可降低单流等待，thinking-on 收口和代码执行测评优于旧 9B。完成后可离线使用，不需要 API Key，不上传对话。启动会占用约 24GB 显存/统一内存。';
+        ? 'Lynn 将保留旧版 9B 文件，并下载新版 Qwen3.6-27B Q4 imatrix MTP；这是显式启用流程，完成后会启动 MTP 端点。\n\n模型约 19.6GB；旧文件不会被删除，你可以稍后手动清理。启动会占用约 24GB 显存/统一内存。'
+        : 'Lynn 将在本机安装或定位 llama.cpp，下载 Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP，并启动本地模型服务。\n\n模型约 19.6GB；27B Q4 是 Lynn 当前默认推荐端侧模型，原生 MTP 可降低单流等待，coding/agent 回归优于旧 9B。完成后可离线使用，不需要 API Key，不上传对话。启动会占用约 24GB 显存/统一内存。';
     const ok = window.confirm(`${setupText}${profile}${warning}\n\n继续吗？`);
     if (!ok) return;
     if (platform?.llamacppStartDownload) {
@@ -340,7 +340,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           text: hasModel
             ? '正在启动本地 Qwen3.6-27B；如果模型文件已完整，Lynn 会直接校验并拉起本地端点。'
             : needsMtpUpgrade
-              ? '正在升级到本地 Qwen3.6-27B Q5 MTP；旧版文件会保留，新版校验完成后按本次授权启动。'
+              ? '正在升级到本地 Qwen3.6-27B Q4 MTP；旧版文件会保留，新版校验完成后按本次授权启动。'
               : '正在下载本地 Qwen3.6-27B，进度会留在当前页面；下载完成后按本次授权启动本地端点。',
         });
       try {
@@ -355,7 +355,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
             : hasModel
               ? '本地 Qwen3.6-27B 正在启动。'
               : needsMtpUpgrade
-                ? '本地 Qwen3.6-27B Q5 MTP 升级已开始。'
+                ? '本地 Qwen3.6-27B Q4 MTP 升级已开始。'
                 : '本地 Qwen3.6-27B 已开始下载。',
           'info',
         );
@@ -366,7 +366,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
             : hasModel
               ? '启动任务已提交。加载完成后会自动切换为本地模型。'
             : needsMtpUpgrade
-              ? '新版 27B Q5 MTP 下载已启动，校验完成后会自动启动本地端点。'
+              ? '新版 27B Q4 MTP 下载已启动，校验完成后会自动启动本地端点。'
                 : '本地 27B 下载已启动，校验完成后会自动启动本地端点。',
         });
         await onRefresh();
@@ -577,10 +577,10 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     <section className={styles['pv-local-qwen-panel']}>
       <div className={styles['pv-local-qwen-main']}>
         <div>
-          <div className={styles['pv-local-qwen-kicker']}>默认本地 Qwen3.6-27B DSV4Pro Distill Q5_K_M MTP · 24GB+ 推荐</div>
-          <div className={styles['pv-local-qwen-title']}>Qwen3.6-27B DSV4Pro Distill MTP Q5_K_M imatrix</div>
+          <div className={styles['pv-local-qwen-kicker']}>默认本地 Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP · 24GB+ 推荐</div>
+          <div className={styles['pv-local-qwen-title']}>Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP</div>
           <div className={styles['pv-local-qwen-desc']}>
-            19.5GB · 32K 上下文 · Q5_K_M imatrix · 原生 MTP 单流加速 · GPQA-Diamond 81.82% · Coding100 86/100。
+            19.6GB · 32K 上下文 · Q4 imatrix · 原生 MTP 单流加速 · Coding100 82/100 · LBC100 71/100。
             Lynn 会在用户授权后自动准备 llama.cpp、模型文件和本地 OpenAI 端点；完成后可离线使用，
             不需要 API Key，不上传对话。低配设备可在模型页手动选择 9B 或 4B 降级档；Lynn 会提示 4B thinking-on 风险。
           </div>
@@ -605,11 +605,11 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       </div>
 
       <div className={styles['pv-local-qwen-benefits']}>
-        <span>19.5GB</span>
+        <span>19.6GB</span>
         <span>32K 上下文</span>
         <span>MTP 加速</span>
         <span>Lynn imatrix 校准</span>
-        <span>GPQA 81.82%</span>
+        <span>Coding100 82/100</span>
         <span>24GB+ 推荐</span>
         <span>GUI 交互优先</span>
         <span>本地 A3B 单槽</span>
@@ -623,7 +623,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         <span>模型 {hasModel ? '已就绪' : needsMtpUpgrade ? '可升级到 MTP' : '待下载'}</span>
         {modelFileName && <span title={modelPath}>模型文件 {modelFileName}</span>}
         {needsMtpUpgrade && legacyModelFileName && <span title={legacyModelPath}>旧版 9B {legacyModelFileName}</span>}
-        {needsMtpUpgrade && <span>新版 27B Q5 MTP 待下载</span>}
+        {needsMtpUpgrade && <span>新版 27B Q4 MTP 待下载</span>}
         <span>llama.cpp {hasRuntime ? '已找到' : '待安装'}</span>
         {endpointForeign && <span>当前端点 {servedModelIds.join(', ') || '非默认 27B'}</span>}
         {(endpointActive || endpointForeign) && runtimeStats?.pid && <span>PID {runtimeStats.pid}</span>}
@@ -779,7 +779,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           <div className={styles['pv-local-qwen-advanced-panel']}>
             <div>
               <strong>已有 GGUF / 模型目录</strong>
-              <span>默认使用 Qwen3.6-27B Q5_K_M MTP。9B、4B 仅作为低配降级；也可以导入已经下载好的 35B 或其他 GGUF。</span>
+              <span>默认使用 Qwen3.6-27B Q4 imatrix MTP。9B、4B 仅作为低配降级；也可以导入已经下载好的 35B 或其他 GGUF。</span>
               {modelPath && <code className={styles['pv-local-qwen-model-path']}>{modelPath}</code>}
               {needsMtpUpgrade && legacyModelPath && <code className={styles['pv-local-qwen-model-path']}>旧版 9B：{legacyModelPath}</code>}
             </div>
@@ -861,9 +861,9 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
                 : hasModel && hasRuntime
                   ? '启动本地模型'
                   : needsMtpUpgrade
-                    ? '升级到 27B Q5 MTP (19.5 GB)'
+                    ? '升级到 27B Q4 MTP (19.6 GB)'
                   : !hasModel
-                    ? '下载 27B 并启动 (19.5 GB)'
+                    ? '下载 27B 并启动 (19.6 GB)'
                     : '授权安装并启用'}
         </button>
         <button className={styles['pv-verify-connection-btn']} onClick={() => loadStatus(false)} disabled={loading}>
