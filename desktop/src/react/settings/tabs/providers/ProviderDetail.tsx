@@ -244,6 +244,15 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   ])];
   const hasRuntime = !endpointForeign && !!observed.llama_server;
   const defaultDownload = llamaState.download;
+  const managerStatus = llamaState.status;
+  const managerStarting = managerStatus === 'starting' || managerStatus === 'unhealthy';
+  const managerFailed = managerStatus === 'failed' || managerStatus === 'crashed';
+  const managerFailureReason = managerFailed
+    ? [
+        llamaState.reason || 'llama.cpp 启动失败',
+        llamaState.error || null,
+      ].filter(Boolean).join('：')
+    : '';
   const defaultDownloadState = String(defaultDownload.state || '');
   const defaultDownloadForDefault = defaultDownload.modelId === LOCAL_QWEN_DEFAULT_MODEL_ID
     || defaultDownload.fileName === LOCAL_QWEN_DEFAULT_MODEL_FILE;
@@ -299,21 +308,22 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const hardwareLabel = runtime.label || (loading || !status ? '正在检查硬件' : '默认使用云端模型');
   const stateLabel = useMemo(() => {
     if (endpointForeign) return '非默认本地端点运行中';
-    if (jobRunning) return '正在准备';
+    if (managerFailed) return '启动失败';
+    if (jobRunning || managerStarting) return '正在准备';
     if (endpointLoading) return '正在加载';
     if (endpointRunning) return '已运行';
     if (needsMtpUpgrade) return '可升级';
     if (hasModel && hasRuntime) return '可启动';
     return '待安装';
-  }, [endpointForeign, endpointLoading, endpointRunning, hasModel, hasRuntime, jobRunning, needsMtpUpgrade]);
+  }, [endpointForeign, endpointLoading, endpointRunning, hasModel, hasRuntime, jobRunning, managerFailed, managerStarting, needsMtpUpgrade]);
 
   useEffect(() => {
-    if (!jobRunning) return undefined;
+    if (!jobRunning && !managerStarting) return undefined;
     const id = window.setInterval(() => {
       loadStatus(true);
     }, 2000);
     return () => window.clearInterval(id);
-  }, [jobRunning, loadStatus]);
+  }, [jobRunning, loadStatus, managerStarting]);
 
   useEffect(() => {
     if (!endpointRunning && !endpointForeign) return undefined;
@@ -628,7 +638,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         {endpointForeign && <span>当前端点 {servedModelIds.join(', ') || '非默认 27B'}</span>}
         {(endpointActive || endpointForeign) && runtimeStats?.pid && <span>PID {runtimeStats.pid}</span>}
         {endpointForeign && <span>停止后可启用默认 27B</span>}
-        {endpointLoading && <span>模型权重加载中</span>}
+        {(endpointLoading || managerStarting) && <span>模型权重加载中</span>}
+        {managerFailed && <span>llama.cpp 启动失败</span>}
         {endpointRunning && <span>{runtimeTpsLabel ? `当前 ${runtimeTpsLabel}` : '速度等待采样'}</span>}
         {endpointRunning && <span>{runtimeMetricsReady ? `服务累计处理 ${runtimeTokens.toLocaleString()} tokens` : '运行统计同步中'}</span>}
         {endpointRunning && slotLabel && <span>{slotLabel}</span>}
@@ -803,6 +814,11 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       {status?.error && (
         <div className={styles['pv-local-qwen-error']}>{status.error}</div>
       )}
+      {managerFailed && (
+        <div className={styles['pv-local-qwen-error']}>
+          本地 Qwen3.6-27B 启动失败：{managerFailureReason || '请重试，或先切回云端模型。'}
+        </div>
+      )}
       {actionStatus && (
         <div className={`${styles['pv-local-qwen-action-status']} ${styles[`pv-local-qwen-action-status-${actionStatus.kind}`]}`}>
           {actionStatus.text}
@@ -848,13 +864,13 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         <button
           className={`${styles['pv-setup-activate-btn']} ${styles['pv-local-qwen-primary']}`}
           onClick={endpointActive ? () => loadStatus(false) : authorizeAndSetup}
-          disabled={settingUp || jobRunning || hardwareBlocked || endpointLoading || defaultDownloadActive}
+          disabled={settingUp || jobRunning || hardwareBlocked || endpointLoading || managerStarting || defaultDownloadActive}
         >
           {hardwareBlocked
             ? '硬件不建议本地启用'
             : defaultDownloadActive
               ? `下载中 ${defaultDownloadPercent.toFixed(0)}%`
-            : endpointLoading
+            : endpointLoading || managerStarting
               ? '模型加载中'
               : endpointRunning
                 ? '已启用，重新检查'

@@ -28,6 +28,7 @@ import {
   eventError,
   eventTextDelta,
   eventThinkingDelta,
+  extractToolCallsFromContent,
   fallbackInstruction,
   fallbackInstructionWithToolUse,
   fallbackModelCallTimeoutMs,
@@ -776,14 +777,21 @@ export class LynnAgentSession {
             if (Array.isArray(rawToolCalls)) {
               rawToolCalls.forEach((raw, index) => appendToolDelta(toolDeltas, raw, index));
             }
+            const rawFunctionCall = delta.function_call || delta.functionCall;
+            if (rawFunctionCall) {
+              appendToolDelta(toolDeltas, { index: 0, function: rawFunctionCall }, 0);
+            }
           }
         }
       }
-      const toolCalls = finalizeToolCalls(toolDeltas);
       const content = textParts.join("");
+      const toolCalls = finalizeToolCalls(toolDeltas);
+      const parsedContentToolCalls = toolCalls.length || !tools.length
+        ? []
+        : extractToolCallsFromContent(content, tools);
       return {
         assistant: { role: "assistant", content, reasoning_content: reasoningParts.join("") || undefined },
-        toolCalls,
+        toolCalls: toolCalls.length ? toolCalls : parsedContentToolCalls,
         reasoning: reasoningParts.join(""),
         contentDeltas: textParts,
         streamedText: streamTextImmediately,

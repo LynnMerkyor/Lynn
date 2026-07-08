@@ -268,6 +268,7 @@ async function runNativeSessionTrace(input, context) {
       cwd,
       sessionManager,
       model: {
+        ...(input.model || {}),
         id: input.model?.id || "scripted-model",
         provider: input.model?.provider || "scripted-provider",
         api: input.model?.api || "openai-completions",
@@ -431,6 +432,10 @@ function canonicalProviderRequest(request) {
     count: request.count,
     model: body.model || "",
     stream: body.stream === true,
+    toolChoice: body.tool_choice || "",
+    chatTemplateEnableThinking: body.chat_template_kwargs?.enable_thinking,
+    enableThinking: body.enable_thinking,
+    reasoningEffort: body.reasoning_effort || "",
     toolNames: Array.isArray(body.tools)
       ? body.tools.map((tool) => tool?.function?.name || tool?.name || "").filter(Boolean)
       : [],

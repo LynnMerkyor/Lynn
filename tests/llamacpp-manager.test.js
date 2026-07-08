@@ -49,4 +49,60 @@ describe("LlamaCppManager path and spawn safety", () => {
 
     expect(spawnOptions).toMatchObject({ windowsHide: true });
   });
+
+  it("keeps MTP launch flags for the default 27B profile when the binary supports them", () => {
+    const manager = new LlamaCppManager({
+      binaryPath: "/tmp/llama-server",
+      modelPath: "/tmp/model.gguf",
+      fsModule: { existsSync: () => true },
+    });
+    manager.binaryPath = "/tmp/llama-server";
+    manager.binarySupportsFlag = () => true;
+
+    const args = manager.buildServerArgs();
+
+    expect(DEFAULT_CONFIG.modelId).toBe("qwen36-27b-dsv4pro-coding-q4-mtp");
+    expect(DEFAULT_CONFIG.modelFileName).toBe("Q4_LynnStyle/Q4-imatrix-MTP-00001-of-00004.gguf");
+    expect(args).toEqual(expect.arrayContaining([
+      "-a", "qwen36-27b-dsv4pro-coding-q4-mtp",
+      "--spec-type", "draft-mtp",
+      "--spec-draft-n-max", "3",
+    ]));
+  });
+
+  it("drops unsupported optional llama.cpp flags before spawning older binaries", () => {
+    const logs = [];
+    const manager = new LlamaCppManager({
+      binaryPath: "/tmp/llama-server",
+      modelPath: "/tmp/model.gguf",
+      fsModule: { existsSync: () => true },
+      onLog: (level, message) => logs.push({ level, message }),
+      serverArgs: [
+        "--ctx-size", "32768",
+        "--jinja",
+        "--reasoning", "auto",
+        "--reasoning-budget", "-1",
+        "--metrics",
+        "--spec-type", "draft-mtp",
+        "--spec-draft-n-max", "3",
+        "--cache-type-k", "q8_0",
+        "--cache-type-v", "q8_0",
+        "--host", "127.0.0.1",
+      ],
+    });
+    manager.binaryPath = "/tmp/llama-server";
+    manager.binarySupportsFlag = (flag) => flag === "--ctx-size" || flag === "--host";
+
+    const args = manager.buildServerArgs();
+
+    expect(args).toEqual([
+      "--ctx-size", "32768",
+      "--host", "127.0.0.1",
+    ]);
+    expect(args).not.toContain("auto");
+    expect(args).not.toContain("draft-mtp");
+    expect(args).not.toContain("q8_0");
+    expect(logs.map((entry) => entry.message).join("\n")).toContain("does not support --jinja");
+    expect(logs.map((entry) => entry.message).join("\n")).toContain("does not support --cache-type-v");
+  });
 });

@@ -355,10 +355,24 @@ export function chatCompletionsUrl(model: Model): string {
 
 export function thinkingPayload(model: Model, level: ThinkingLevel | undefined): Record<string, unknown> {
   const raw = String(level || "auto").toLowerCase();
-  if (!raw || raw === "none" || raw === "off" || raw === "false" || raw === "disabled") return {};
   const provider = String(model.provider || "").toLowerCase();
   const format = String((model.compat as any)?.thinkingFormat || "");
-  if (format === "qwen" || model.quirks?.includes("enable_thinking")) return { enable_thinking: true };
+  const isLocalQwen = provider.includes("local-qwen");
+  const isQwenThinking = format === "qwen" || model.quirks?.includes("enable_thinking") || isLocalQwen;
+  const disabled = !raw || raw === "none" || raw === "off" || raw === "false" || raw === "disabled";
+  if (disabled) {
+    if (isQwenThinking) {
+      return isLocalQwen
+        ? { chat_template_kwargs: { enable_thinking: false } }
+        : { enable_thinking: false };
+    }
+    return {};
+  }
+  if (isQwenThinking) {
+    return isLocalQwen
+      ? { chat_template_kwargs: { enable_thinking: true } }
+      : { enable_thinking: true };
+  }
   if (format === "zai" || provider.includes("glm") || provider.includes("zai")) {
     return { thinking: { type: raw === "auto" ? "auto" : "enabled" } };
   }
@@ -529,6 +543,153 @@ export function resolveRuntimeToolName(nameOrKey: string, tools: RuntimeTool[]):
   const key = toolNameKey(nameOrKey);
   const match = tools.find((tool) => toolNameKey(tool.name) === key);
   return match?.name || null;
+}
+
+function firstJsonRecord(value: string): Record<string, unknown> | null {
+  const parts = parseConcatenatedJsonObjectParts(value);
+  if (parts?.length) return parts.at(-1) || null;
+  const parsed = safeJsonParse(value);
+  const record = asRecord(parsed);
+  return Object.keys(record).length ? record : null;
+}
+
+function argumentsToString(value: unknown): string {
+  if (typeof value === "string") return value.trim() || "{}";
+  if (value === undefined || value === null) return "{}";
+  return maybeJson(value);
+}
+
+function toolCallFromRecord(record: Record<string, unknown>, tools: RuntimeTool[], index: number): ToolCall | null {
+  let rawName = stringField(record, ["name", "tool", "tool_name", "function", "function_name"]);
+  let rawArguments = record.arguments ?? record.args ?? record.parameters ?? record.params ?? record.input;
+
+  if (!rawName) {
+    const keys = Object.keys(record);
+    if (keys.length === 1 && resolveRuntimeToolName(keys[0], tools)) {
+      rawName = keys[0];
+      rawArguments = record[keys[0]];
+    }
+  }
+
+  const canonicalName = rawName ? resolveRuntimeToolName(rawName, tools) : null;
+  if (!canonicalName) return null;
+
+  return {
+    id: `call_qwen_${index}_${randomUUID().slice(0, 8)}`,
+    type: "function",
+    function: {
+      name: canonicalName,
+      arguments: argumentsToString(rawArguments),
+    },
+  };
+}
+
+function attrValue(attrs: string, names: string[]): string {
+  for (const name of names) {
+    const match = attrs.match(new RegExp(`${name}\\s*=\\s*["']?([^"'\\s>]+)`, "i"));
+    if (match?.[1]) return match[1].trim();
+  }
+  return "";
+}
+
+function stripToolTokenWrappers(value: string): string {
+  return String(value || "")
+    .replace(/<\|tool_calls_section_(?:begin|end)\|>/giu, "\n")
+    .replace(/<\|tool_calls?_(?:section_)?(?:begin|end)\|>/giu, (token) => (
+      /section/iu.test(token) ? "\n" : token
+    ))
+    .replace(/<\|tool_code_(?:begin|end)\|>/giu, "\n");
+}
+
+function parseToolTagCalls(text: string, tools: RuntimeTool[], startIndex: number): ToolCall[] {
+  const calls: ToolCall[] = [];
+  const tagRe = /<tool_call\b([^>]*)>([\s\S]*?)<\/tool_call>/giu;
+  let match: RegExpExecArray | null;
+  while ((match = tagRe.exec(text))) {
+    const attrs = match[1] || "";
+    const body = (match[2] || "").trim();
+    const name = attrValue(attrs, ["name", "tool", "function"]);
+    const record = name
+      ? { name, arguments: firstJsonRecord(body) || body }
+      : firstJsonRecord(body);
+    if (!record) continue;
+    const call = toolCallFromRecord(record, tools, startIndex + calls.length);
+    if (call) calls.push(call);
+  }
+  return calls;
+}
+
+function parseFunctionTagCalls(text: string, tools: RuntimeTool[], startIndex: number): ToolCall[] {
+  const calls: ToolCall[] = [];
+  const fnRe = /<function=([a-z0-9_.:-]+)\s*>([\s\S]*?)<\/function>/giu;
+  let match: RegExpExecArray | null;
+  while ((match = fnRe.exec(text))) {
+    const name = match[1] || "";
+    const body = match[2] || "";
+    const args: Record<string, unknown> = {};
+    const paramRe = /<parameter=([a-z0-9_.:-]+)\s*>([\s\S]*?)<\/parameter>/giu;
+    let paramMatch: RegExpExecArray | null;
+    while ((paramMatch = paramRe.exec(body))) {
+      args[paramMatch[1]] = String(paramMatch[2] || "").trim();
+    }
+    const call = toolCallFromRecord(
+      { name, arguments: Object.keys(args).length ? args : firstJsonRecord(body) || body.trim() },
+      tools,
+      startIndex + calls.length,
+    );
+    if (call) calls.push(call);
+  }
+  return calls;
+}
+
+function parseSpecialTokenCalls(text: string, tools: RuntimeTool[], startIndex: number): ToolCall[] {
+  const calls: ToolCall[] = [];
+  const callRe = /<\|tool_call_(?:start|begin)\|>([\s\S]*?)<\|tool_call_(?:end|stop)\|>/giu;
+  let match: RegExpExecArray | null;
+  while ((match = callRe.exec(text))) {
+    const body = (match[1] || "").trim();
+    const nameMatch = body.match(/<\|tool_call_name(?:_begin)?\|>([\s\S]*?)(?:<\|tool_call_name(?:_end)?\|>)/iu);
+    const argsMatch = body.match(/<\|tool_call_arguments?(?:_begin)?\|>([\s\S]*?)(?:<\|tool_call_arguments?(?:_end)?\|>|$)/iu);
+    let record: Record<string, unknown> | null = null;
+    if (nameMatch?.[1]) {
+      record = {
+        name: nameMatch[1].trim(),
+        arguments: firstJsonRecord(argsMatch?.[1] || "") || (argsMatch?.[1] || "").trim(),
+      };
+    } else {
+      const direct = firstJsonRecord(body);
+      if (direct) {
+        record = direct;
+      } else {
+        const lineMatch = body.match(/^\s*([a-z0-9_.:-]+)\s*\n([\s\S]+)$/iu);
+        if (lineMatch) record = { name: lineMatch[1], arguments: firstJsonRecord(lineMatch[2]) || lineMatch[2].trim() };
+      }
+    }
+    if (!record) continue;
+    const call = toolCallFromRecord(record, tools, startIndex + calls.length);
+    if (call) calls.push(call);
+  }
+  return calls;
+}
+
+export function extractToolCallsFromContent(content: string, tools: RuntimeTool[]): ToolCall[] {
+  if (!tools.length) return [];
+  const text = stripToolTokenWrappers(content);
+  if (!text.trim()) return [];
+
+  const calls = [
+    ...parseToolTagCalls(text, tools, 0),
+  ];
+  calls.push(...parseSpecialTokenCalls(text, tools, calls.length));
+  calls.push(...parseFunctionTagCalls(text, tools, calls.length));
+
+  const seen = new Set<string>();
+  return calls.filter((call) => {
+    const key = `${toolNameKey(call.function.name)}\0${call.function.arguments}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function stringField(record: Record<string, unknown>, keys: string[]): string {

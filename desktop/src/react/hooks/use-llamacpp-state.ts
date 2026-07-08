@@ -46,6 +46,7 @@ export interface ManagerState {
   expectedPath?: string | null;
   modelId?: string | null;
   reason?: string | null;
+  error?: string | null;
   stopped?: boolean;
 }
 
@@ -72,6 +73,7 @@ export interface LlamaCppStateSnapshot {
   binaryPath: string | null;
   modelPath: string | null;
   reason: string | null;
+  error: string | null;
   needsBinary: boolean;
   needsModel: boolean;
   download: DownloadState;
@@ -92,7 +94,7 @@ const DEFAULT_DOWNLOAD: DownloadState = {
 
 function normaliseManager(raw: ManagerState | null | undefined): {
   status: string; healthy: boolean; port: number | null;
-  binaryPath: string | null; modelPath: string | null; reason: string | null;
+  binaryPath: string | null; modelPath: string | null; reason: string | null; error: string | null;
   needsBinary: boolean; needsModel: boolean;
 } {
   const status = String(raw?.status || 'idle');
@@ -104,6 +106,7 @@ function normaliseManager(raw: ManagerState | null | undefined): {
     binaryPath: raw?.binaryPath ?? null,
     modelPath: raw?.modelPath ?? raw?.expectedPath ?? null,
     reason: raw?.reason ?? null,
+    error: raw?.error ?? null,
     needsBinary: status === 'needs-binary',
     needsModel: status === 'needs-model',
   };

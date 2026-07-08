@@ -417,6 +417,115 @@ describe("createLynnAgentSession native runtime", () => {
     expect(serialized).not.toContain("Tool not found");
   });
 
+  it("executes Qwen-style XML tool calls emitted as local 27B assistant content", async () => {
+    const responses = [
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"<tool_call>{\\\"name\\\":\\\"web_search\\\",\\\"arguments\\\":{\\\"query\\\":\\\"深圳今天暴雨预警\\\"}}</tool_call>\"}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"深圳预警信息已整理。\"}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+    ];
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (fetchMock.mock.calls.length === 1) {
+        expect(body.model).toBe("qwen36-27b-dsv4pro-coding-q4-mtp");
+        expect(body.tools.map((tool) => tool.function.name)).toContain("web-search");
+        expect(body.tool_choice).toBe("auto");
+      }
+      return responses.shift();
+    });
+    globalThis.fetch = fetchMock;
+    const execute = vi.fn(async (_id, params) => ({
+      content: [{ type: "text", text: `search:${params.query}` }],
+    }));
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: {
+        id: "qwen36-27b-dsv4pro-coding-q4-mtp",
+        provider: "local-qwen35-9b-q4km-imatrix",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:18099/v1",
+        apiKey: "local",
+        reasoning: true,
+        compat: { thinkingFormat: "qwen" },
+      },
+      customTools: [{
+        name: "web-search",
+        description: "search",
+        parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        execute,
+      }],
+    });
+
+    await session.prompt("查一下深圳今天有没有暴雨预警");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledWith(
+      expect.stringMatching(/^call_qwen_/),
+      { query: "深圳今天暴雨预警" },
+      expect.any(Object),
+    );
+    const serialized = JSON.stringify(manager.buildSessionContext().messages);
+    expect(serialized).toContain("search:深圳今天暴雨预警");
+    expect(serialized).toContain("深圳预警信息已整理。");
+    expect(serialized).not.toContain("<tool_call>");
+  });
+
+  it("executes legacy function_call deltas from OpenAI-compatible local providers", async () => {
+    const responses = [
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"function_call\":{\"name\":\"web_search\",\"arguments\":\"{\\\"query\\\":\\\"深圳天气\\\"}\"}}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+      sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"天气结果已整理。\"}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]),
+    ];
+    const fetchMock = vi.fn(async () => responses.shift());
+    globalThis.fetch = fetchMock;
+    const execute = vi.fn(async (_id, params) => ({
+      content: [{ type: "text", text: `search:${params.query}` }],
+    }));
+    const manager = SessionManager.create(tempDir, tempDir);
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: {
+        id: "local-openai-compatible",
+        provider: "local-qwen35-9b-q4km-imatrix",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:18099/v1",
+        apiKey: "local",
+      },
+      customTools: [{
+        name: "web-search",
+        description: "search",
+        parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+        execute,
+      }],
+    });
+
+    await session.prompt("深圳天气");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledWith(
+      expect.stringMatching(/^call_0_/),
+      { query: "深圳天气" },
+      expect.any(Object),
+    );
+    const serialized = JSON.stringify(manager.buildSessionContext().messages);
+    expect(serialized).toContain("search:深圳天气");
+    expect(serialized).toContain("天气结果已整理。");
+  });
+
   it("normalizes concatenated web_fetch arguments to the final URL object", async () => {
     const responses = [
       sseResponse([

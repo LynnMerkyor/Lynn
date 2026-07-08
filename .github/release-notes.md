@@ -1,56 +1,56 @@
-# Lynn v0.85.7 Release Notes / 发布说明
+# Lynn v0.85.8 Release Notes / 发布说明
 
-> 发布日期: 2026-07-07 · 27B Coding Q4 MTP 默认端侧模型 / 本地模型安装链路修复 / 三远端+镜像发版纪律
+> 发布日期: 2026-07-09 · 本地 27B 启动兼容热修 / Mac manager 稳定性 / CLI 与镜像站同步
 
 ## 国内镜像站下载（推荐）
 
-国内用户请优先使用以下镜像站地址；正式版本记录见 GitHub / Gitee Releases，下载请以镜像站为准。
+国内用户请优先使用镜像站地址；正式版本记录见 GitHub / Gitee Releases，下载以镜像站为准。
 
-- **GitHub Releases (old)**: https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.7
-- **GitHub Releases (new)**: https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.7
-- **Gitee Releases**: https://gitee.com/merkyor/Lynn/releases/tag/v0.85.7
+- **GitHub Releases (old)**: https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.8
+- **GitHub Releases (new)**: https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.8
+- **Gitee Releases**: https://gitee.com/merkyor/Lynn/releases/tag/v0.85.8
 
 - **CLI**:
 
   ```bash
-  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.7.tgz"
+  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.8.tgz"
   ```
 
-- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.7-macOS-arm64.dmg
-- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.7-macOS-x64.dmg
-- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.7-Windows-Setup.exe
+- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.8-macOS-arm64.dmg
+- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.8-macOS-x64.dmg
+- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.8-Windows-Setup.exe
 - **下载页**: https://download.merkyorlynn.com/download.html
 
 ## 中文重点
 
-- **端侧默认模型换成 27B Coding Q4 MTP**: 本地模型推荐改为公开可下载的 `Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF` Q4 imatrix MTP 四分片，默认下载 `Q4_LynnStyle/Q4-imatrix-MTP-00001-of-00004.gguf` 到 `00004`，总量约 19.6GB。
-- **公开模型链接修正**: README、下载页、Release notes 和模型入口不再指向打不开的非 GGUF 页面，ModelScope / HuggingFace 都指向 GGUF 镜像。
-- **低配不主动打扰**: 硬件不足时聊天窗不会主动弹 27B 安装引导；9B / 4B 只保留为设置页里的低配降级选择。
-- **修复 GitHub #75 本地模型 `python3_not_found`**: 桌面端本地模型安装优先走 Electron 主进程 downloader，不再把用户带回旧 Python bootstrap；缺 Python 不再阻断“设置 → 模型 → 加载本地模型”。
-- **下载链路支持四分片校验**: 27B Q4 默认档会按 shard 顺序下载、校验 SHA256、保留已完成分片，并在完成后按用户授权启动 llama.cpp MTP 端点。
-- **发版流程加严**: 每次新版本/同版本热修都必须同步 `LynnMerkyor/Lynn`、`MerkyorLynn/Lynn`、Gitee `merkyor/Lynn` 和腾讯镜像下载站；`release:verify-remotes` 默认校验三个代码远端。
-- **保留 v0.85.6 修复**: 本地绝对路径读取、`file://` 元问题、防串题污染、Windows CMD 弹窗、会话进度右栏和 GUI/CLI 回归门禁继续保留。
+- **修复 GitHub #2 Windows 27B 启动失败**: 部分 Win11 环境中的 llama.cpp 不支持 v0.85.7 固定传入的新版 MTP / reasoning / KV cache 参数，导致模型校验完成后服务立即退出。v0.85.8 会按本机 llama.cpp 实际支持的参数自动降级启动。
+- **本地 27B Qwen 工具调用适配**: 本地 BYOK 27B 如果输出 Qwen XML / special-token / legacy `function_call` 工具格式，Lynn runtime 会转成真实 GUI/CLI 工具执行，再把工具结果回写给模型继续总结，避免“只清洗伪工具文本但没实际执行”。
+- **主聊天和设置页都显示明确失败原因**: 本地 27B 启动失败时不再像“没反应”，会显示 llama.cpp 退出原因和最近 stderr/stdout，便于用户和开发者定位。
+- **Mac 本地模型 manager 稳定性补强**: `--help` 能力探测结果会正确缓存，空输出/异常二进制也不会在一次启动中反复 probe；停止/崩溃状态更清楚。
+- **CLI 同步发版**: CLI 包版本、README、下载页、update manifest、镜像站安装命令统一升级到 v0.85.8，避免用户安装到旧包或看到旧版本提示。
+- **保留 v0.85.7 端侧模型链路**: 默认仍是公开 27B Coding Q4 imatrix MTP；低配设备不主动弹安装引导，9B / 4B 作为显式降级选择保留。
+- **保留 v0.85.6+ 回归修复**: 本地绝对路径读取、`file://` 元问题、防串题污染、Windows CMD 弹窗、会话进度右栏和 Agent regression 门禁继续保留。
 
 ## 已验证
 
-- `npm test -- tests/llamacpp-profiles.test.js desktop/src/react/settings/tabs/providers/local-qwen-provider.test.ts tests/migrate-providers.test.js` 通过。
-- `npm test -- desktop/__tests__/ProviderDetail.helpers.test.ts` 通过。
-- `node --check` 通过：`desktop/llamacpp-profiles.cjs`、`desktop/local-model-controller.cjs`、`desktop/llamacpp-manager.cjs`、`desktop/model-downloader.cjs`、`scripts/verify-release-remotes.mjs`。
-- `gate:cli-100` 通过：100/100。
-- macOS arm64 / x64 DMG 已完成应用公证、最终 DMG 公证、staple 和 Gatekeeper 校验。
-- Windows x64 NSIS 安装包已生成并签名；packaged server / packaged CLI smoke 通过。
-- 镜像站 0.85.7 资产公网 URL 已验证，远端 CLI tarball sha256 与本地一致，`test:cli-install:remote` 通过。
-- `release:verify-remotes` 通过：`LynnMerkyor/Lynn`、`MerkyorLynn/Lynn`、Gitee `merkyor/Lynn` 的 `main` 和 `v0.85.7` 已同步；两个 GitHub 仓库 CI 均通过。
+- `npm test` 通过。
+- `npm run test:agent-regression` 通过。
+- `npm run test:agent-regression:gates:smoke` 通过。
+- `npm run typecheck` 与 `npm run typecheck:runtime` 通过。
+- `npm run build:cli`、`npm run build:main`、`npm run build:renderer`、`npm run build:server:win` 通过。
+- `gate:cli-100` 作为本轮 CLI 体验门禁执行。
+- macOS Apple Silicon / Intel DMG 将完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 校验。
+- Windows x64 NSIS 安装包将生成并签名；CLI tarball 同步镜像站。
 
 ---
 
-> Release date: 2026-07-07 · 27B Coding Q4 MTP default edge model / local-model setup fix / three-remote + mirror release discipline
+> Release date: 2026-07-09 · local 27B startup compatibility hotfix / Mac manager hardening / CLI and mirror sync
 
 ## English highlights
 
-- **Switches the default local edge model to 27B Coding Q4 MTP**: Lynn now recommends the public `Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF` Q4 imatrix MTP split GGUF by default, about 19.6GB across four shards.
-- **Fixes public model links**: README, release notes, download pages, and model entry points now link to the public GGUF mirrors instead of unavailable non-GGUF pages.
-- **Keeps low-config machines quiet**: Lynn no longer proactively prompts underpowered devices to install 27B; 9B / 4B remain explicit downgrade choices in Settings.
-- **Fixes GitHub #75 `python3_not_found`**: desktop local-model setup now uses the Electron main-process downloader first, so missing Python no longer blocks Settings → Models → load local model.
-- **Supports four-shard download and verification**: the 27B Q4 default downloads each shard, verifies SHA256, preserves completed shards, and starts the llama.cpp MTP endpoint only after user authorization.
-- **Hardens release discipline**: every release or same-version hotfix must update both GitHub repos, Gitee, and the Tencent download mirror; `release:verify-remotes` checks all three code remotes by default.
+- **Fixes GitHub #2 Windows 27B startup failure**: some Win11 environments have a llama.cpp binary that does not support the v0.85.7 MTP / reasoning / KV-cache flags. Lynn now strips unsupported optional flags based on the local binary's actual `--help` output.
+- **Adapts local 27B Qwen tool calls**: Qwen XML / special-token / legacy `function_call` output is converted into real Lynn tool execution before final synthesis, so the local model works as an agent instead of a chat-only fallback.
+- **Makes local-model failures visible**: both chat and Settings now surface the llama.cpp failure reason plus recent child stdout/stderr instead of looking idle.
+- **Hardens the Mac local-model manager**: llama.cpp capability probing is cached reliably, including empty or failed help output, avoiding repeated probes during a single launch.
+- **Ships CLI as part of the same release**: CLI package version, README, download page, update manifest, and mirror install command all move to v0.85.8.
+- **Keeps the v0.85.7 edge-model chain**: the public 27B Coding Q4 imatrix MTP model remains the default local recommendation; 9B / 4B stay as explicit downgrade choices.

@@ -161,6 +161,16 @@ describe('Local Qwen provider UX guards', () => {
     expect(route).toContain('旧版 Python bootstrap 不可用');
   });
 
+  it('surfaces llama.cpp launch failures from the main chat local-model controller', () => {
+    const controller = read('desktop/src/react/components/input/useLocalQwenStatusController.ts');
+    const types = read('desktop/src/react/types.ts');
+    expect(types).toContain('onLlamacppState?');
+    expect(controller).toContain('onLlamacppState');
+    expect(controller).toContain("managerStatus !== 'failed' && managerStatus !== 'crashed'");
+    expect(controller).toContain('local-qwen-start-failed');
+    expect(controller).toContain('setOptimisticStarting(false)');
+  });
+
   it('keeps external bridge owner replies on Brain when foreground chat uses a local model', () => {
     const bridge = read('core/bridge-session-manager.ts');
     expect(bridge).toContain('BRAIN_DEFAULT_MODEL_ID');

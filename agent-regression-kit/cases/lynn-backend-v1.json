@@ -502,6 +502,59 @@
       ]
     },
     {
+      "id": "local-qwen35.xml-tool-roundtrip",
+      "title": "Local Qwen 27B XML tool calls execute real Lynn tools before final synthesis",
+      "level": "release",
+      "tags": ["trace", "tools", "local-model", "qwen", "runtime"],
+      "operation": "native_session_trace",
+      "input": {
+        "prompt": "查一下深圳今天有没有暴雨预警。",
+        "model": {
+          "id": "qwen36-27b-dsv4pro-coding-q4-mtp",
+          "provider": "local-qwen35-9b-q4km-imatrix",
+          "reasoning": true,
+          "compat": { "thinkingFormat": "qwen" }
+        },
+        "customTools": [
+          {
+            "name": "web-search",
+            "description": "fixture search tool",
+            "parameters": {
+              "type": "object",
+              "properties": { "query": { "type": "string" } },
+              "required": ["query"]
+            },
+            "resultText": "深圳今天有暴雨黄色预警，强降雨集中在午后。"
+          }
+        ],
+        "providerScript": [
+          {
+            "content": "<tool_call>{\"name\":\"web_search\",\"arguments\":{\"query\":\"深圳 今天 暴雨预警\"}}</tool_call>"
+          },
+          {
+            "content": "深圳今天有暴雨预警，建议带伞并避开午后强降雨时段。"
+          }
+        ]
+      },
+      "assertions": [
+        { "path": "provider.requestCount", "equals": 2 },
+        { "path": "provider.requests[0].model", "equals": "qwen36-27b-dsv4pro-coding-q4-mtp" },
+        { "path": "provider.requests[0].toolNames", "contains": "web-search" },
+        { "path": "provider.requests[0].toolChoice", "equals": "auto" },
+        { "path": "provider.requests[0].chatTemplateEnableThinking", "equals": true },
+        { "path": "eventTypes", "contains": "tool_execution_start" },
+        { "path": "eventTypes", "contains": "tool_execution_end" },
+        { "path": "toolStarts[0].toolName", "equals": "web-search" },
+        { "path": "toolEnds[0].resultText", "contains": "暴雨黄色预警" },
+        { "path": "provider.requests[1].lastToolText", "contains": "暴雨黄色预警" },
+        { "path": "diagnostics.toolStartCount", "equals": 1 },
+        { "path": "diagnostics.toolEndCount", "equals": 1 },
+        { "path": "finalText", "contains": "建议带伞" },
+        { "path": "finalText", "notContains": "<tool_call" },
+        { "path": "messagesJson", "notContains": "<tool_call" }
+      ]
+    },
+    {
       "id": "trace.reasoning-only-empty-answer",
       "title": "Reasoning-only model output is converted into a visible empty-answer fallback",
       "level": "release",

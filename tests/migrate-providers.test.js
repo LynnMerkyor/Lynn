@@ -166,6 +166,10 @@ describe("migrateLocalQwenDefaultTo27B", () => {
       auth_type: "none",
     });
     expect(added.providers["local-qwen35-9b-q4km-imatrix"].models[0].id).toBe("qwen36-27b-dsv4pro-coding-q4-mtp");
+    expect(added.providers["local-qwen35-9b-q4km-imatrix"].models[0]).toMatchObject({
+      reasoning: true,
+      quirks: ["enable_thinking"],
+    });
 
     const config = readYaml(path.join(agentsDir, "lynn", "config.yaml"));
     expect(config.api.provider).toBe("local-qwen35-9b-q4km-imatrix");

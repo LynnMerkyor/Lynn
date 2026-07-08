@@ -196,6 +196,29 @@ function legacyModelPathCandidates(homeDir, modelId, fileName, lynnHome = defaul
   return [...new Set(candidates)];
 }
 
+function removeBareFlag(args, flag) {
+  return args.filter((arg) => arg !== flag);
+}
+
+function removeFlagsWithValues(args, flags) {
+  const flagSet = new Set(flags);
+  const out = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (flagSet.has(args[i])) {
+      i += 1;
+      continue;
+    }
+    out.push(args[i]);
+  }
+  return out;
+}
+
+function compactChildOutput(value, max = 4000) {
+  const text = String(value || "").replace(/\0/g, "").trim();
+  if (!text) return "";
+  return text.length > max ? text.slice(-max) : text;
+}
+
 // ─────────────────────────────────────────────────────────────
 // LlamaCppManager
 // ─────────────────────────────────────────────────────────────
@@ -230,6 +253,7 @@ class LlamaCppManager {
     // path overrides (env vars for dev / custom install)
     this.binaryOverride = opts.binaryPath || process.env.LYNN_LLAMACPP_BIN || null;
     this.modelOverride = opts.modelPath || process.env.LYNN_LLAMACPP_MODEL || null;
+    this.lastChildOutput = "";
   }
 
   emitState(patch) {
@@ -347,7 +371,12 @@ class LlamaCppManager {
     if (this.stopped) return;
     if (this.consecutiveCrashes >= this.config.maxConsecutiveCrashes) {
       this.onLog("error", `[llamacpp] consecutive crashes ${this.consecutiveCrashes} ≥ max ${this.config.maxConsecutiveCrashes}, giving up`);
-      this.emitState({ status: "failed", reason: "too-many-crashes" });
+      this.emitState({
+        status: "failed",
+        healthy: false,
+        reason: "too-many-crashes",
+        error: this.lastChildOutput || null,
+      });
       return;
     }
     setTimeout(() => {
@@ -360,14 +389,17 @@ class LlamaCppManager {
   binarySupportsFlag(flag) {
     // #34: cache --help output per-binary-path to avoid 50-200ms spawn on every server start
     if (!this._helpCache) this._helpCache = new Map();
-    const cached = this._helpCache.get(this.binaryPath);
-    let helpText = cached;
-    if (!helpText) {
+    const cacheKey = this.binaryPath || "";
+    let helpText = "";
+    if (this._helpCache.has(cacheKey)) {
+      helpText = this._helpCache.get(cacheKey) || "";
+    } else {
       try {
-        const out = spawnSync(this.binaryPath, ["--help"], { encoding: "utf8", timeout: 2500, windowsHide: true });
+        const out = spawnSync(cacheKey, ["--help"], { encoding: "utf8", timeout: 2500, windowsHide: true });
         helpText = `${out.stdout || ""}\n${out.stderr || ""}`;
-        this._helpCache.set(this.binaryPath, helpText);
+        this._helpCache.set(cacheKey, helpText);
       } catch {
+        this._helpCache.set(cacheKey, "");
         return false;
       }
     }
@@ -378,29 +410,32 @@ class LlamaCppManager {
     const args = [...this.config.serverArgs];
     let next = args;
     if (next.includes("--metrics") && !this.binarySupportsFlag("--metrics")) {
-      next = next.filter((arg) => arg !== "--metrics");
+      this.onLog("warn", "[llamacpp] binary does not support --metrics; launching without metrics");
+      next = removeBareFlag(next, "--metrics");
+    }
+    if (next.includes("--jinja") && !this.binarySupportsFlag("--jinja")) {
+      this.onLog("warn", "[llamacpp] binary does not support --jinja; launching without explicit chat-template flag");
+      next = removeBareFlag(next, "--jinja");
+    }
+    if (next.includes("--reasoning") && !this.binarySupportsFlag("--reasoning")) {
+      this.onLog("warn", "[llamacpp] binary does not support --reasoning; launching without reasoning flag");
+      next = removeFlagsWithValues(next, ["--reasoning"]);
     }
     if (next.includes("--reasoning-budget") && !this.binarySupportsFlag("--reasoning-budget")) {
-      const out = [];
-      for (let i = 0; i < next.length; i += 1) {
-        if (next[i] === "--reasoning-budget") {
-          i += 1;
-          continue;
-        }
-        out.push(next[i]);
-      }
-      next = out;
+      this.onLog("warn", "[llamacpp] binary does not support --reasoning-budget; launching without reasoning budget");
+      next = removeFlagsWithValues(next, ["--reasoning-budget"]);
     }
     if (next.includes("--spec-type") && !this.binarySupportsFlag("--spec-type")) {
-      const out = [];
-      for (let i = 0; i < next.length; i += 1) {
-        if (next[i] === "--spec-type" || next[i] === "--spec-draft-n-max") {
-          i += 1;
-          continue;
-        }
-        out.push(next[i]);
-      }
-      next = out;
+      this.onLog("warn", "[llamacpp] binary does not support --spec-type; launching without MTP draft decoding");
+      next = removeFlagsWithValues(next, ["--spec-type", "--spec-draft-n-max"]);
+    }
+    if (next.includes("--cache-type-k") && !this.binarySupportsFlag("--cache-type-k")) {
+      this.onLog("warn", "[llamacpp] binary does not support --cache-type-k; launching with default K cache");
+      next = removeFlagsWithValues(next, ["--cache-type-k"]);
+    }
+    if (next.includes("--cache-type-v") && !this.binarySupportsFlag("--cache-type-v")) {
+      this.onLog("warn", "[llamacpp] binary does not support --cache-type-v; launching with default V cache");
+      next = removeFlagsWithValues(next, ["--cache-type-v"]);
     }
     return next;
   }
@@ -426,6 +461,7 @@ class LlamaCppManager {
       "--port", String(port),
     ];
 
+    this.lastChildOutput = "";
     this.onLog("info", `[llamacpp] spawn ${this.binaryPath} ${args.join(" ")}`);
     this.emitState({ status: "starting", port, args });
 
@@ -447,19 +483,32 @@ class LlamaCppManager {
     if (this.child.stdout) {
       this.child.stdout.on("data", (buf) => {
         const s = buf.toString().trim();
+        this.lastChildOutput = compactChildOutput(`${this.lastChildOutput}\n${s}`);
         if (s) this.onLog("info", `[llamacpp:stdout] ${s.split("\n").slice(-2).join(" | ")}`);
       });
     }
     if (this.child.stderr) {
       this.child.stderr.on("data", (buf) => {
         const s = buf.toString().trim();
+        this.lastChildOutput = compactChildOutput(`${this.lastChildOutput}\n${s}`);
         if (s) this.onLog("info", `[llamacpp:stderr] ${s.split("\n").slice(-2).join(" | ")}`);
       });
     }
     this.child.on("exit", (code, sig) => {
       this.onLog("warn", `[llamacpp] child exited code=${code} sig=${sig}`);
       this.child = null;
-      this.emitState({ status: "crashed", exitCode: code, exitSignal: sig });
+      if (this.stopped) {
+        this.emitState({ status: "stopped", healthy: false });
+        return;
+      }
+      this.emitState({
+        status: "crashed",
+        healthy: false,
+        reason: "child-exited",
+        error: this.lastChildOutput || null,
+        exitCode: code,
+        exitSignal: sig,
+      });
       this.consecutiveCrashes += 1;
       if (!this.stopped) this.scheduleRestart();
     });
@@ -486,7 +535,12 @@ class LlamaCppManager {
       }
     }
     this.onLog("error", `[llamacpp] startup timeout ${this.config.startupTimeoutMs}ms`);
-    this.emitState({ status: "failed", reason: "startup-timeout" });
+    this.emitState({
+      status: "failed",
+      healthy: false,
+      reason: "startup-timeout",
+      error: this.lastChildOutput || null,
+    });
     try { this.child?.kill("SIGTERM"); } catch {}
     this.child = null;
   }

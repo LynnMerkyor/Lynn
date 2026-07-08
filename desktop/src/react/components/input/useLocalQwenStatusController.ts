@@ -31,6 +31,20 @@ interface UseLocalQwenStatusControllerArgs {
   setInlineNotice: (value: string | null) => void;
 }
 
+type LlamacppManagerEvent = {
+  status?: string;
+  reason?: string | null;
+  error?: string | null;
+  detail?: string | null;
+};
+
+function formatLlamacppFailure(state: LlamacppManagerEvent) {
+  const reason = String(state.reason || '').trim();
+  const detail = String(state.error || state.detail || '').trim();
+  const summary = [reason, detail].filter(Boolean).join('：');
+  return summary || 'llama.cpp 启动后退出';
+}
+
 export function useLocalQwenStatusController({
   models,
   currentModelInfo,
@@ -228,6 +242,56 @@ export function useLocalQwenStatusController({
     const id = window.setInterval(refresh, intervalMs);
     return () => window.clearInterval(id);
   }, [active, refresh]);
+
+  useEffect(() => {
+    const off = window.platform?.onLlamacppState?.((state) => {
+      const managerStatus = String(state?.status || '');
+      if (managerStatus !== 'failed' && managerStatus !== 'crashed') return;
+      if (!optimisticStarting && !current && !active) return;
+
+      const reason = formatLlamacppFailure(state || {});
+      setOptimisticStarting(false);
+      setStatus(prev => ({
+        ...(prev || { ok: true }),
+        ok: prev?.ok ?? true,
+        runtime: {
+          ...(prev?.runtime || {}),
+          base_url: prev?.runtime?.base_url || LOCAL_QWEN35_ENDPOINT,
+          endpoint_running: false,
+          endpoint_loading: false,
+          process_alive: false,
+        },
+        plan: {
+          ...(prev?.plan || {}),
+          base_url: prev?.plan?.base_url || LOCAL_QWEN35_ENDPOINT,
+          observed: {
+            ...(prev?.plan?.observed || {}),
+            endpoint_running: false,
+            endpoint_loading: false,
+          },
+          plan: prev?.plan?.plan
+            ? {
+                ...prev.plan.plan,
+                observed: {
+                  ...(prev.plan.plan.observed || {}),
+                  endpoint_running: false,
+                  endpoint_loading: false,
+                },
+              }
+            : prev?.plan?.plan,
+        },
+      }));
+      setDismissed(false);
+      setInlineNotice(null);
+      setInlineError(`${LOCAL_QWEN_DISPLAY_NAME} 启动失败：${reason}`);
+      showSidebarToast(`启动${LOCAL_QWEN_DISPLAY_NAME}失败：${reason}`, 7000, 'error', 'local-qwen-start-failed');
+    });
+    return () => {
+      try { off?.(); } catch {
+        // ignore unsubscribe failures
+      }
+    };
+  }, [active, current, optimisticStarting, setInlineError, setInlineNotice]);
 
   useEffect(() => {
     const id = window.setTimeout(() => setPromptReady(true), LOCAL_QWEN_PROMPT_DELAY_MS);

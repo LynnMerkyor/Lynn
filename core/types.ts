@@ -54,6 +54,7 @@ export interface ProviderModelEntry {
   maxOutput?: number;
   vision?: boolean;
   reasoning?: boolean;
+  quirks?: string[];
 }
 
 export type ProviderModelConfig = ModelId | ProviderModelEntry;

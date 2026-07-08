@@ -8,6 +8,26 @@
       "vision": true
     }
   },
+  "local-qwen35-9b-q4km-imatrix": {
+    "qwen36-27b-dsv4pro-coding-q4-mtp": {
+      "name": "Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP",
+      "context": 32768,
+      "maxOutput": 32768,
+      "reasoning": true,
+      "quirks": [
+        "enable_thinking"
+      ]
+    },
+    "qwen35-9b-q4km-imatrix": {
+      "name": "Qwen3.5-9B Q4_K_M imatrix MTP",
+      "context": 32768,
+      "maxOutput": 8192,
+      "reasoning": true,
+      "quirks": [
+        "enable_thinking"
+      ]
+    }
+  },
   "mimo": {
     "mimo-v2.5-pro": {
       "name": "MiMo V2.5 Pro",

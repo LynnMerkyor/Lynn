@@ -349,6 +349,8 @@ function _localQwen27BProviderSeed(oldProvider: Partial<ProviderConfig> = {}): P
         name: "Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP",
         context: 32768,
         maxOutput: 32768,
+        reasoning: true,
+        quirks: ["enable_thinking"],
       },
     ],
   };

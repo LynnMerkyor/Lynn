@@ -298,6 +298,7 @@ export interface PlatformApi {
   llamacppOpenModelDir?(targetPath?: string | null): Promise<{ ok: boolean; path?: string; revealedPath?: string; error?: string | null }>;
   llamacppStartCustomModel?(modelPath: string): Promise<{ ok: boolean; modelId?: string; modelPath?: string; reason?: string; detail?: string }>;
   llamacppStop?(): Promise<{ ok: boolean; reason?: string }>;
+  onLlamacppState?(callback: (state: { status?: string; healthy?: boolean; reason?: string | null; error?: string | null; detail?: string | null }) => void): () => void;
   llamacppStartDownload?(payload?: { modelId?: string; startAfterDownload?: boolean }): Promise<{
     ok: boolean;
     alreadyRunning?: boolean;

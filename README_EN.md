@@ -72,9 +72,9 @@ NVFP4's real payoff is **batched throughput**. Same R6000, `VLLM_MOE_FORCE_MARLI
 - [#44672](https://github.com/vllm-project/vllm/pull/44672) ModelOpt W4A16 NVFP4 Marlin path docs
 - [#44673](https://github.com/vllm-project/vllm/pull/44673) speculative decoding correctness gate
 
-## 🔭 V0.80 Origin: CLI Workers, V0.85.7 Edge Model Chain Update
+## 🔭 V0.80 Origin: CLI Workers, V0.85.8 Edge Model Hotfix
 
-V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.7 the GUI no longer surfaces the Fleet command deck, and the right rail has moved from an internal-feeling work map toward **chat + Session Progress + files + sync / acceptance**. This release moves the default edge-model path to the public 27B Coding Q4 MTP GGUF and fixes the local-model setup path that could report `python3_not_found`, while parallel worker power stays in the CLI for terminals, CI, and other agents.
+V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. It started as an exploration of multi-CLI orchestration; in V0.85.8 the GUI no longer surfaces the Fleet command deck, and the right rail has moved from an internal-feeling work map toward **chat + Session Progress + files + sync / acceptance**. This hotfix keeps the public 27B Coding Q4 MTP GGUF as the default edge model and fixes Windows local-27B startup failures where the model verifies successfully but llama.cpp exits immediately, while parallel worker power stays in the CLI for terminals, CI, and other agents.
 
 This is not Lynn stepping away from code. It is the opposite:code tasks, research tasks, and business tasks should share the same orchestration layer.
 
@@ -84,7 +84,7 @@ This is not Lynn stepping away from code. It is the opposite:code tasks, researc
 - **Acceptance flow**: worker output returns to GUI diffs, evidence, test gates, and release flow for review.
 - **`@lynn/cli`**: the CLI package supports `Lynn -p`, `Lynn code`, `Lynn agents`, and `Lynn worker run`, usable directly in terminals and callable by other agents.
 
-Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.7 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
+Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.8 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
 
 ### CLI Quick Install
 
@@ -95,12 +95,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.7.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.8.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.85.7
+Lynn --version  # should print 0.85.8
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -126,7 +126,25 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details open>
-<summary><strong>Lynn v0.85.7</strong> · 2026-07-07 · 27B Coding Q4 MTP default edge model <em>(latest)</em></summary>
+<summary><strong>Lynn v0.85.8</strong> · 2026-07-09 · Windows local-27B startup hotfix <em>(latest)</em></summary>
+
+**v0.85.8 local-model hotfix**:
+- **Fixes GitHub #2 Windows 27B startup failure**: some Win11 environments ship a llama.cpp binary that does not support the v0.85.7 MTP / reasoning / KV-cache flags, so the model verified and then the server exited. Lynn now strips unsupported optional flags based on the local binary's actual help output.
+- **Main chat no longer looks like "nothing happened"**: the chat input listens for llama.cpp failed/crashed events, clears the optimistic starting state, and shows a visible error with a Settings handoff.
+- **Settings shows the real failure reason**: the local-model panel now surfaces `child-exited`, startup timeouts, and recent child process output.
+- **Confirms #75 `python3_not_found` is covered by the current path**: desktop setup continues to use the Electron main-process downloader / manager, so clean installs do not require Python.
+- **Keeps the v0.85.7 edge-model chain**: the default local model remains the public 27B Coding Q4 imatrix MTP; low-config devices are not proactively prompted, and 9B / 4B remain explicit downgrade choices.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.8.tgz"
+```
+
+[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.8)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.85.7</strong> · 2026-07-07 · 27B Coding Q4 MTP default edge model</summary>
 
 **v0.85.7 edge-model and release-flow update**:
 - **Default local edge model is now public 27B Coding Q4 MTP**: Settings recommends the `Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF` Q4 imatrix MTP four-shard GGUF, about 19.6GB.
@@ -982,11 +1000,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases). The V0.85.7 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases). The V0.85.8 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
 **Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases).
 
-> **Windows SmartScreen notice:** The v0.85.7 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.85.8 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 
