@@ -2,7 +2,7 @@
  * DeskSection — 右侧会话进展 / 文件侧栏
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../stores';
 import { ContextMenu } from './ContextMenu';
 import { DESK_SORT_KEY, type SortMode, type CtxMenuState } from './desk/desk-types';
@@ -22,7 +22,6 @@ export function DeskSection() {
   const deskBasePath = useStore(state => state.deskBasePath);
   const deskView = useStore(state => state.deskView);
   const setDeskView = useStore(state => state.setDeskView);
-  const sessions = useStore(state => state.sessions);
   const patrolStatus = useStore(state => state.deskPatrolStatus);
 
   const serverPort = useStore(state => state.serverPort);
@@ -41,13 +40,29 @@ export function DeskSection() {
   }, []);
 
   const deskGalleryOpen = useStore(state => state.deskGalleryOpen);
-  const t = window.t ?? ((key: string) => key);
+  const translate = window.t;
   const tt = useCallback((key: string, fallback: string) => {
-    const value = t(key);
+    const value = translate?.(key);
     return !value || value === key ? fallback : value;
-  }, [t]);
+  }, [translate]);
+  const patrolRefreshTimers = useRef<number[]>([]);
   const hasWorkspace = !!deskBasePath;
   const showFileSurface = hasWorkspace && deskFiles.length > 0;
+
+  useEffect(() => () => {
+    for (const timer of patrolRefreshTimers.current) window.clearTimeout(timer);
+    patrolRefreshTimers.current = [];
+  }, []);
+
+  const schedulePatrolRefresh = useCallback((delayMs: number) => {
+    const timer = window.setTimeout(() => {
+      patrolRefreshTimers.current = patrolRefreshTimers.current.filter((id) => id !== timer);
+      void loadSessions();
+      void loadDeskPatrolStatus();
+    }, delayMs);
+    patrolRefreshTimers.current.push(timer);
+  }, []);
+
   useEffect(() => {
     if (!serverPort) return;
     void loadDeskPatrolStatus();
@@ -70,12 +85,12 @@ export function DeskSection() {
     try {
       await triggerDeskHeartbeat();
       await loadSessions();
-      window.setTimeout(() => { void loadSessions(); void loadDeskPatrolStatus(); }, 2500);
-      window.setTimeout(() => { void loadSessions(); void loadDeskPatrolStatus(); }, 8000);
+      schedulePatrolRefresh(2500);
+      schedulePatrolRefresh(8000);
     } finally {
       setPatrolBusy(false);
     }
-  }, [patrolBusy]);
+  }, [patrolBusy, schedulePatrolRefresh]);
 
   return (
     <>

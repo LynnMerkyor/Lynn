@@ -282,8 +282,9 @@
 }
 
 .mapCanvasWrap {
-    flex: 1;
-    min-height: 0;
+    flex: 0 1 auto;
+    min-height: 120px;
+    max-height: min(42vh, 360px);
     border: 1px solid var(--overlay-light);
     border-radius: 10px;
     background: color-mix(in srgb, var(--bg-card) 88%, var(--bg));
@@ -291,8 +292,8 @@
 }
 
 .mapEmpty {
-    height: 100%;
     min-height: 120px;
+    padding: 24px 12px;
     display: flex;
     align-items: center;
     justify-content: center;

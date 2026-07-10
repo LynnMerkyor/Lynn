@@ -115,8 +115,22 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const dmgs = process.argv.slice(2)
+const requestedDmgs = process.argv.slice(2).filter((file) => file.endsWith(".dmg"));
+const requestedVersions = new Set(
+  requestedDmgs
+    .map((file) => path.basename(file).match(/^Lynn-(\d+\.\d+\.\d+)-macOS-/)?.[1])
+    .filter(Boolean),
+);
+const siblingDmgs = fs
+  .readdirSync(path.join(process.cwd(), "dist"))
   .filter((file) => file.endsWith(".dmg"))
+  .filter((file) => {
+    const version = file.match(/^Lynn-(\d+\.\d+\.\d+)-macOS-/)?.[1];
+    return version && requestedVersions.has(version);
+  })
+  .map((file) => path.join("dist", file));
+
+const dmgs = [...new Set([...requestedDmgs, ...siblingDmgs])]
   .map((file) => {
     const bytes = fs.readFileSync(file);
     return {

@@ -205,7 +205,7 @@ export function SessionMapView() {
         counts.done > 0 ? tt('desk.progress.doneCount', `${counts.done} 已完成`, { count: counts.done }) : '',
       ].filter(Boolean).join(' · ');
 
-  const renderCard = (sess: Session) => {
+  const renderCard = (sess: Session, listItem = false) => {
     const state = deriveState(sess);
     const isSel = selectedPath === sess.path;
     const unread = unreadCount(sess);
@@ -224,6 +224,7 @@ export function SessionMapView() {
         key={sess.path}
         className={`${s.mapCard} ${isSel ? s.mapCardSel : ''}`}
         data-session-card={sess.path}
+        role={listItem ? 'listitem' : undefined}
       >
         <button
           type="button"
@@ -354,7 +355,7 @@ export function SessionMapView() {
       {attentionItems.length > 0 && (
         <div className={s.mapSection}>
           <div className={s.mapSectionHead}>{tt('desk.progress.needsAttention', '需要处理')}</div>
-          {attentionItems.map(renderCard)}
+          {attentionItems.map((sess) => renderCard(sess))}
         </div>
       )}
 
@@ -362,9 +363,9 @@ export function SessionMapView() {
         {recentItems.length === 0 ? (
           <div className={s.mapEmpty}>{tt('desk.progress.noOtherSessions', '暂无其他会话')}</div>
         ) : (
-          <div className={s.mapBoard} aria-label={tt('desk.progress.recentSessions', '最近会话')}>
-            <div className={s.mapBoardTitle}>{tt('desk.progress.recentSessions', '最近会话')}</div>
-            {recentItems.map(renderCard)}
+          <div className={s.mapBoard} role="list" aria-label={tt('desk.progress.recentSessions', '最近会话')}>
+            <div className={s.mapBoardTitle} role="presentation">{tt('desk.progress.recentSessions', '最近会话')}</div>
+            {recentItems.map((sess) => renderCard(sess, true))}
           </div>
         )}
       </div>

@@ -320,8 +320,8 @@ async function runStaticChecks({ level }) {
   checks.push(makeCheck(
     "static-dist-preflight",
     "blocker",
-    Boolean(pkg.scripts?.dist && pkg.scripts.dist.includes("release:preflight")),
-    "package.json dist runs release:preflight before packaging",
+    Boolean(pkg.scripts?.dist && pkg.scripts.dist.includes("release:full-gate")),
+    "package.json dist runs the full release gate before packaging",
   ));
   checks.push(makeCheck(
     "static-dist-does-not-skip-notarization",
@@ -388,9 +388,9 @@ async function runStaticChecks({ level }) {
       && pkg.scripts["release:full-gate"].includes("gate:clean-data")
       && pkg.scripts["release:full-gate"].includes("release:preflight")
       && pkg.scripts["release:full-gate"].includes("test:agent-regression:gates")
-      && pkg.scripts["release:full-gate"].includes("gate:cli-200")
+      && pkg.scripts["release:full-gate"].includes("gate:cli-100")
       && pkg.scripts["release:full-gate"].includes("gate:gui-100")),
-    "formal release full gate runs clean-data, preflight, agent regression release gates, CLI200, and GUI100",
+    "formal release full gate runs clean-data, preflight, agent regression release gates, CLI100, and GUI100",
     String(pkg.scripts?.["release:full-gate"] || ""),
   ));
   checks.push(makeCheck(

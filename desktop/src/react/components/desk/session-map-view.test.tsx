@@ -108,6 +108,17 @@ describe('SessionMapView hierarchy', () => {
     expect(container.textContent).not.toContain('打开会话');
   });
 
+  it('keeps the recent-session surface semantic and compact when it has no history', async () => {
+    mocks.state.sessions = [mocks.state.sessions[0]];
+
+    await act(async () => {
+      root.render(<SessionMapView />);
+    });
+
+    expect(container.querySelector('[role="list"]')).toBeNull();
+    expect(container.textContent).toContain('暂无其他会话');
+  });
+
   it('expands a non-current session in place with a keyboard-focusable control', async () => {
     await act(async () => {
       root.render(<SessionMapView />);

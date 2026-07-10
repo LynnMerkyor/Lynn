@@ -63,6 +63,7 @@ import { buildEvidenceSafetyAnswer } from "../../shared/evidence-safety-answer.j
 import {
   filterDeliverableToolsForTurn,
   hasExplicitDeliverableIntent,
+  shouldRecoverIncompleteVisibleAnswer,
 } from "./turn-tool-policy.js";
 import type {
   AgentSessionEvent,
@@ -620,7 +621,23 @@ export class LynnAgentSession {
         const result = await this.callModel(messages);
         result.toolCalls = result.toolCalls.filter(isExecutableToolCall);
         if (!result.toolCalls.length) {
-          const content = contentToText(result.assistant.content);
+          let content = contentToText(result.assistant.content);
+          let recoveredIncompleteAnswer = false;
+          if (shouldRecoverIncompleteVisibleAnswer(latestUserQuestion(messages), content, result.reasoning.length)) {
+            const continuation = await this.callModel([
+              ...messages,
+              roleMessage("assistant", content),
+              roleMessage("user", "上一个可见回答在中途结束了。请从中断处继续完成，不要重新开头，不要调用工具，直接输出剩余正文。"),
+            ], {
+              tools: [],
+              streamText: result.streamedText,
+            });
+            const extra = contentToText(continuation.assistant.content);
+            if (extra.trim()) {
+              content = `${content}${extra}`;
+              recoveredIncompleteAnswer = true;
+            }
+          }
           if (!content.trim()) {
             const handled = await this.finishWithFallback(messages, "empty_response", this.model);
             if (handled) return;
@@ -648,7 +665,9 @@ export class LynnAgentSession {
           }
           this.finishAssistantAnswer(content, result.reasoning, {
             streamedText: result.streamedText,
-            contentDeltas: result.contentDeltas,
+            contentDeltas: result.streamedText
+              ? undefined
+              : recoveredIncompleteAnswer ? [content] : result.contentDeltas,
           });
           return;
         }
