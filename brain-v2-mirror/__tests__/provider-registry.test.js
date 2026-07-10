@@ -54,7 +54,7 @@ describe('provider registry', () => {
     expect(tokenPlan.endpoint).toBe('https://token-plan-cn.xiaomimimo.com/v1');
     expect(String(tokenPlan.model)).toBe('mimo-v2.5-pro');
     expect(tokenPlan.apiKey).toBe(process.env.MIMO_TOKEN_PLAN_KEY || '');
-    expect(tokenPlan.timeout_ms).toBe(30_000);
+    expect(tokenPlan.timeout_ms).toBe(15_000);
     expect(tokenPlan.capability.tools).toBe(true);
   });
 
@@ -67,7 +67,7 @@ describe('provider registry', () => {
     try {
       const isolated = await import('../provider-registry.js?invalid-mimo-timeouts');
       expect(isolated.getProvider('mimo-ultraspeed').timeout_ms).toBe(30_000);
-      expect(isolated.getProvider('mimo-token-plan-pro').timeout_ms).toBe(30_000);
+      expect(isolated.getProvider('mimo-token-plan-pro').timeout_ms).toBe(15_000);
     } finally {
       if (savedUltraspeed === undefined) delete process.env.MIMO_ULTRASPEED_TIMEOUT_MS;
       else process.env.MIMO_ULTRASPEED_TIMEOUT_MS = savedUltraspeed;
@@ -87,6 +87,7 @@ describe('provider registry', () => {
     expect(step.default_thinking).toBe(false);
     expect(step.default_reasoning_effort).toBe('low');
     expect(step.max_tokens).toBe(49_152);
+    expect(step.timeout_ms).toBe(35_000);
     expect(step.thinking_control).toBeUndefined();
     expect(step.capability).toMatchObject({
       vision: true,
@@ -96,6 +97,14 @@ describe('provider registry', () => {
       thinking: true,
       native_search: false,
     });
+  });
+
+  it('bounds the production text fallback chain so one candidate cannot consume the whole turn', () => {
+    expect(getProvider('deepseek-chat').timeout_ms).toBe(25_000);
+    expect(getProvider('mimo-token-plan-pro').timeout_ms).toBe(15_000);
+    expect(getProvider('apex-spark-i-balanced').timeout_ms).toBe(8_000);
+    expect(getProvider('deepseek-pro').timeout_ms).toBe(10_000);
+    expect(getProvider('glm-5-turbo').timeout_ms).toBe(12_000);
   });
 
   it('keeps Qwen chat-template thinking control scoped to Spark only', () => {

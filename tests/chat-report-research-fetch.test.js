@@ -5,6 +5,7 @@ import {
   fetchForKind,
   withTimeout,
 } from "../server/chat/report-research-fetch.js";
+import { buildDirectResearchAnswer } from "../server/chat/report-research-answer.js";
 
 describe("report research fetch module", () => {
   it("supports wrapper-injected realtime tools for isolated fetch tests", async () => {
@@ -45,5 +46,22 @@ describe("report research fetch module", () => {
     await expect(withTimeout(new Promise(() => {}), 1, "test_tool"))
       .rejects
       .toThrow("test_tool timeout after 1ms");
+  });
+
+  it("checks the real Lynn download page before reporting reachability", async () => {
+    const webFetch = vi.fn().mockResolvedValue({ text: "<!doctype html><title>Lynn 下载</title>" });
+    const prompt = "download.merkyorlynn.com 的下载页能打开吗？只总结状态";
+
+    const context = await fetchForKind("public_data", null, {
+      userPrompt: prompt,
+      toolWrappers: { webFetch },
+    });
+    const answer = buildDirectResearchAnswer("public_data", context, prompt);
+
+    expect(webFetch).toHaveBeenCalledWith("https://download.merkyorlynn.com/download.html", 1600);
+    expect(context).toContain("状态: reachable");
+    expect(answer).toContain("可以打开：https://download.merkyorlynn.com/download.html。本轮已成功读取页面正文。");
+    expect(answer).toContain("参考来源：gitee.com、download.merkyorlynn.com");
+    expect(answer).not.toContain("应显示");
   });
 });

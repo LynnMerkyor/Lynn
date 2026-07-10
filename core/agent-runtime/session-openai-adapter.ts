@@ -82,6 +82,12 @@ export function defaultModelCallTimeoutMs(): number {
   return positiveEnvInt("LYNN_MODEL_CALL_TIMEOUT_MS", 45_000);
 }
 
+export function brainModelCallTimeoutMs(): number {
+  const sharedOverride = process.env.LYNN_MODEL_CALL_TIMEOUT_MS;
+  const fallback = sharedOverride ? defaultModelCallTimeoutMs() : 115_000;
+  return positiveEnvInt("LYNN_BRAIN_MODEL_CALL_TIMEOUT_MS", fallback);
+}
+
 export function fallbackModelCallTimeoutMs(): number {
   return positiveEnvInt("LYNN_FALLBACK_MODEL_CALL_TIMEOUT_MS", 30_000);
 }

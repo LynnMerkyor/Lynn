@@ -93,6 +93,8 @@ afterEach(() => {
   delete process.env.BRAIN_V2_LOCAL_PROBE_4XX_COOLDOWN_MS;
   delete process.env.BRAIN_V2_LOCAL_PROBE_5XX_COOLDOWN_MS;
   delete process.env.BRAIN_V2_LOCAL_PROBE_FAIL_COOLDOWN_MS;
+  delete process.env.BRAIN_V2_LAST_CHANCE_RECOVERY;
+  delete process.env.BRAIN_V2_LAST_CHANCE_TIMEOUT_MS;
 });
 
 function makeTwoToolThenContentAdapter(capturedRounds) {
@@ -645,6 +647,33 @@ describe('Router', () => {
     expect(chunks.some((c) => c.type === 'content' && /最终答案/.test(c.delta))).toBe(true);
   });
 
+  it('hands off a buffered half-sentence after long reasoning instead of closing the turn', async () => {
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      if (provider.id === 'p-step') {
+        yield { type: 'reasoning', delta: '先规划人物背景、记忆缺口、行为矛盾和故事线。'.repeat(12) };
+        yield { type: 'content', delta: '陈默，34岁，前结构工程师，现靠' };
+        yield { type: 'finish', reason: 'stop' };
+        return;
+      }
+      yield { type: 'content', delta: '陈默，34岁，前结构工程师。一次事故让他的记忆出现缺口，因此他只相信可验证的证据。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: '写一个人物小传' }],
+      tools: [{ type: 'function', function: { name: 'read_file' } }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'p-spark', iterations: 2 });
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).not.toContain('现靠');
+    expect(visible).toContain('只相信可验证的证据');
+    expect(mockState.unhealthy).not.toContainEqual(expect.objectContaining({ id: 'p-step', reason: 'incomplete_visible' }));
+  });
+
   it('falls through on a plain empty stop without reasoning', async () => {
     mockState.adapterFn = async function* ({ provider }) {
       mockState.adapterCalls.push(provider.id);
@@ -685,8 +714,37 @@ describe('Router', () => {
     expect(result.ok).toBe(true);
     expect(result.providerId).toBe('p-spark');
     expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
-    expect(mockState.unhealthy.some((entry) => entry.id === 'p-step' && entry.reason.includes('timeout'))).toBe(true);
+    expect(mockState.unhealthy).toContainEqual(expect.objectContaining({
+      id: 'p-step',
+      reason: expect.stringContaining('timeout'),
+      cooldownMs: 5_000,
+    }));
     expect(chunks.some((c) => c.type === 'content' && c.delta === 'fallback answer')).toBe(true);
+  });
+
+  it('makes one bounded no-tool recovery probe when every provider times out', async () => {
+    const attempts = new Map();
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      const count = (attempts.get(provider.id) || 0) + 1;
+      attempts.set(provider.id, count);
+      if (provider.id === 'p-step' && count === 2) {
+        yield { type: 'content', delta: 'recovered answer' };
+        yield { type: 'finish', reason: 'stop' };
+        return;
+      }
+      throw new Error('timeout');
+    };
+    const chunks = [];
+
+    const result = await run({
+      messages: [{ role: 'user', content: '设计一个三幕式小说大纲' }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'p-step' });
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark', 'p-cloud', 'p-vision', 'p-step']);
+    expect(chunks.some((chunk) => chunk.type === 'content' && chunk.delta === 'recovered answer')).toBe(true);
   });
 
   it('drops tool continuation rounds to medium reasoning when client did not pin an effort', async () => {

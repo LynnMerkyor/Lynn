@@ -4,7 +4,6 @@
  * 拥有自己的身份、人格、记忆、工具和 prompt 拼装逻辑。
  * Engine 持有一个 Agent，未来可以持有多个。
  */
-import { createHash } from "crypto";
 import fs from "fs";
 import { createRequire } from "module";
 import path from "path";
@@ -53,6 +52,7 @@ import { READ_ONLY_BUILTIN_TOOLS } from "./config-coordinator.js";
 import { formatSkillsForPrompt } from "./agent-runtime/skills.js";
 import { runCompatChecks } from "../lib/compat/index.js";
 import { buildAgentDynamicPrompt } from "./agent-dynamic-prompt.js";
+import { createAgentStaticPromptCacheKey } from "./agent-prompt-cache.js";
 
 type AnyRecord = Record<string, any>;
 type LogFn = (msg: string) => void;
@@ -938,19 +938,14 @@ export class Agent {
     const learnCfg = this._engine?.getLearnSkills?.() || this._config?.capabilities?.learn_skills || {};
 
     // 缓存 key：基于实际静态 prompt 依赖做哈希，避免“长度相同但内容变化”时命中脏缓存
-    const cacheKey = createHash("sha1")
-      .update(isZh ? "zh" : "non-zh")
-      .update("\0")
-      .update(yuanType)
-      .update("\0")
-      .update(ishiki)
-      .update("\0")
-      .update(skillsText)
-      .update("\0")
-      .update(learnCfg.enabled ? "learn-on" : "learn-off")
-      .update("\0")
-      .update(learnCfg.allow_github_fetch ? "github-on" : "github-off")
-      .digest("hex");
+    const cacheKey = createAgentStaticPromptCacheKey({
+      isZh,
+      yuanType,
+      personality: ishiki,
+      skillsText,
+      learnSkillsEnabled: !!learnCfg.enabled,
+      allowGithubFetch: !!learnCfg.allow_github_fetch,
+    });
     if (this._staticPromptCache && this._staticPromptDeps === cacheKey) {
       return this._staticPromptCache;
     }

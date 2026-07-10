@@ -3,6 +3,7 @@ import { debugLog } from "../../lib/debug-log.js";
 import { t } from "../i18n.js";
 import { classifyRouteIntent } from "../../shared/task-route-intent.js";
 import { beginSessionStream } from "../session-stream-store.js";
+import { prepareChatTurnState } from "./stream-state.js";
 import {
   LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS,
   resolveLocalQwen35DirectMaxTokens,
@@ -180,48 +181,13 @@ export function createPromptTurnRunner({
     promptText,
   }: RunPromptTurnOptions) {
     try {
-      ss.thinkTagParser.reset();
-      ss.progressParser.reset();
-      ss.moodParser.reset();
-      ss.xingParser.reset();
-      ss.titleRequested = false;
-      ss.titlePreview = "";
-      ss.visibleTextAcc = "";
-      ss.bufferedVisibleTextDuringTool = "";
-      ss.hasBufferedVisibleTextDuringTool = false;
-      ss.rawTextAcc = "";
-      ss.routeIntent = classifyRouteIntent(promptText, { imagesCount: msg.images?.length || 0 });
-      ss.originalPromptText = promptText;
-      ss.effectivePromptText = promptText;
-      ss.hasLocalPrefetchEvidence = false;
-      ss.pendingToolRetryAttempted = false;
-      ss.internalRetryCounts = {};
-      ss.internalRetryPending = false;
-      ss.internalRetryInFlight = false;
-      ss.internalRetryReason = "";
-      ss.pseudoToolSteered = false;
-      ss.pseudoToolRecoveryHandled = false;
-      ss.pseudoToolCommandRecoveryAttempted = false;
-      ss.pseudoToolXmlBlock = null;
-      ss.emittedFileOutputPaths = new Set();
-      ss.rehydratedThisTurn = false;
-      ss.postRehydrateEscalationAttempted = false;
-      ss.postRehydrateDeterministicAttempted = false;
-      ss.hasOutput = false;
-      ss.hasToolCall = false;
-      ss.hasRealtimeEvidenceToolCall = false;
-      ss.hasThinking = false;
-      ss.hasError = false;
-      ss.realtimeToolFallbackText = "";
-      ss.realtimeToolFallbackKind = "";
-      ss.persistedAssistantTextBaseline = countPersistedAssistantVisibleTexts(
-        engine.getSessionByPath(promptSessionPath),
-        promptSessionPath,
-      );
-      ss.persistedAssistantMessageBaseline = countPersistedAssistantMessages(
-        engine.getSessionByPath(promptSessionPath),
-        promptSessionPath,
-      );
+      const activeSession = engine.getSessionByPath(promptSessionPath);
+      prepareChatTurnState(ss, {
+        promptText,
+        routeIntent: classifyRouteIntent(promptText, { imagesCount: msg.images?.length || 0 }),
+        persistedAssistantTextBaseline: countPersistedAssistantVisibleTexts(activeSession, promptSessionPath),
+        persistedAssistantMessageBaseline: countPersistedAssistantMessages(activeSession, promptSessionPath),
+      });
       const rehydratedMutation = consumeMutationConfirmation(ss, promptText);
       if (rehydratedMutation) {
         ss.originalPromptText = rehydratedMutation.originalPrompt;

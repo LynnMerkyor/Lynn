@@ -5,7 +5,7 @@
  */
 
 import { useStore } from './index';
-import { updateLayout } from '../components/SidebarLayout';
+import { updateLayout } from '../services/layout-controller';
 import type { Artifact } from '../types';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- IPC callback data */

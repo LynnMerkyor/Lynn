@@ -1,56 +1,53 @@
-# Lynn v0.85.8 Release Notes / 发布说明
+# Lynn v0.85.9 Release Notes / 发布说明
 
-> 发布日期: 2026-07-09 · 本地 27B 启动兼容热修 / Mac manager 稳定性 / CLI 与镜像站同步
+> 发布日期: 2026-07-11 · 会话进度 / Agent 回合隔离 / Brain 兜底与工具边界
 
 ## 国内镜像站下载（推荐）
 
 国内用户请优先使用镜像站地址；正式版本记录见 GitHub / Gitee Releases，下载以镜像站为准。
 
-- **GitHub Releases (old)**: https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.8
-- **GitHub Releases (new)**: https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.8
-- **Gitee Releases**: https://gitee.com/merkyor/Lynn/releases/tag/v0.85.8
+- **GitHub Releases (old)**: https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.9
+- **GitHub Releases (new)**: https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.9
+- **Gitee Releases**: https://gitee.com/merkyor/Lynn/releases/tag/v0.85.9
 
 - **CLI**:
 
   ```bash
-  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.8.tgz"
+  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.9.tgz"
   ```
 
-- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.8-macOS-arm64.dmg
-- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.8-macOS-x64.dmg
-- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.8-Windows-Setup.exe
+- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.9-macOS-arm64.dmg
+- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.9-macOS-x64.dmg
+- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.9-Windows-Setup.exe
 - **下载页**: https://download.merkyorlynn.com/download.html
 
 ## 中文重点
 
-- **修复 GitHub #2 Windows 27B 启动失败**: 部分 Win11 环境中的 llama.cpp 不支持 v0.85.7 固定传入的新版 MTP / reasoning / KV cache 参数，导致模型校验完成后服务立即退出。v0.85.8 会按本机 llama.cpp 实际支持的参数自动降级启动。
-- **本地 27B Qwen 工具调用适配**: 本地 BYOK 27B 如果输出 Qwen XML / special-token / legacy `function_call` 工具格式，Lynn runtime 会转成真实 GUI/CLI 工具执行，再把工具结果回写给模型继续总结，避免“只清洗伪工具文本但没实际执行”。
-- **主聊天和设置页都显示明确失败原因**: 本地 27B 启动失败时不再像“没反应”，会显示 llama.cpp 退出原因和最近 stderr/stdout，便于用户和开发者定位。
-- **Mac 本地模型 manager 稳定性补强**: `--help` 能力探测结果会正确缓存，空输出/异常二进制也不会在一次启动中反复 probe；停止/崩溃状态更清楚。
-- **CLI 同步发版**: CLI 包版本、README、下载页、update manifest、镜像站安装命令统一升级到 v0.85.8，避免用户安装到旧包或看到旧版本提示。
-- **保留 v0.85.7 端侧模型链路**: 默认仍是公开 27B Coding Q4 imatrix MTP；低配设备不主动弹安装引导，9B / 4B 作为显式降级选择保留。
-- **保留 v0.85.6+ 回归修复**: 本地绝对路径读取、`file://` 元问题、防串题污染、Windows CMD 弹窗、会话进度右栏和 Agent regression 门禁继续保留。
+- **会话进度更直观**: 右栏只突出一次当前会话，最近会话默认收起详情；打开会话、新建分支和展开状态更明确并支持键盘操作。
+- **回合状态彻底隔离**: 每轮开始统一清理工具、重试、解析器、定时器、sanitizer 和临时输出，避免“重新回答”后的上一题状态污染下一题。
+- **普通回答不再误生成文件**: 只有用户明确要求报告、HTML、PDF、PPT、附件或导出物时才开放交付物工具；清单、设定表、代码和解释留在聊天正文。
+- **Brain 兜底真正可执行**: Step、DS V4 Flash、MiMo Token Plan、端侧和 GLM 候选各有独立尝试时限；reasoning-only、空答和半句截断会交给下一候选。
+- **外部证据工具按需注入**: 查证、来源、天气、行情、比分、新闻等请求继续使用实时工具；普通写作、规划和解释不再无意义启动搜索。
+- **前端边界更清楚**: 拆出 WebSocket transport、布局控制器和 Engine/Agent 帮助模块，新增运行时循环依赖门禁和真实 Session Progress 组件回归。
+- **本地 27B Agent 保持完整**: 默认仍下载 Q4 imatrix MTP 四分片并用 `draft-mtp` 启动；代码和工具任务继续进入完整 Agent loop。
 
 ## 已验证
 
-- `npm test` 通过。
-- `npm run test:agent-regression` 通过。
-- `npm run test:agent-regression:gates:smoke` 通过。
-- `npm run typecheck` 与 `npm run typecheck:runtime` 通过。
-- `npm run build:cli`、`npm run build:main`、`npm run build:renderer`、`npm run build:server:win` 通过。
-- `gate:cli-100` 作为本轮 CLI 体验门禁执行。
-- macOS Apple Silicon / Intel DMG 将完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 校验。
-- Windows x64 NSIS 安装包将生成并签名；CLI tarball 同步镜像站。
+- 根仓与 Brain 全量单测、TypeScript 双门禁、前端运行时循环依赖门禁通过。
+- Agent regression、CLI100、GUI100 与 release preflight 纳入本次发布验证。
+- macOS Apple Silicon / Intel DMG 完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证后发布。
+- Windows x64 NSIS 安装包完成构建验证；CLI tarball 同步镜像站并执行远程安装 smoke。
 
 ---
 
-> Release date: 2026-07-09 · local 27B startup compatibility hotfix / Mac manager hardening / CLI and mirror sync
+> Release date: 2026-07-11 · Session Progress / isolated Agent turns / bounded Brain fallbacks and tool exposure
 
 ## English highlights
 
-- **Fixes GitHub #2 Windows 27B startup failure**: some Win11 environments have a llama.cpp binary that does not support the v0.85.7 MTP / reasoning / KV-cache flags. Lynn now strips unsupported optional flags based on the local binary's actual `--help` output.
-- **Adapts local 27B Qwen tool calls**: Qwen XML / special-token / legacy `function_call` output is converted into real Lynn tool execution before final synthesis, so the local model works as an agent instead of a chat-only fallback.
-- **Makes local-model failures visible**: both chat and Settings now surface the llama.cpp failure reason plus recent child stdout/stderr instead of looking idle.
-- **Hardens the Mac local-model manager**: llama.cpp capability probing is cached reliably, including empty or failed help output, avoiding repeated probes during a single launch.
-- **Ships CLI as part of the same release**: CLI package version, README, download page, update manifest, and mirror install command all move to v0.85.8.
-- **Keeps the v0.85.7 edge-model chain**: the public 27B Coding Q4 imatrix MTP model remains the default local recommendation; 9B / 4B stay as explicit downgrade choices.
+- **Clearer Session Progress**: the current session appears once, older details start collapsed, and Open Session / New Branch actions are keyboard-accessible.
+- **Isolated turn state**: tool, retry, parser, timer, sanitizer, and temporary-output state are reset centrally before each turn.
+- **Deliverables only on explicit intent**: lists, world-building tables, code, and explanations stay in chat unless the user asks for a file, report, HTML, PDF, PPT, attachment, or export.
+- **Bounded Brain fallbacks**: Step, DS V4 Flash, MiMo Token Plan, local, and GLM candidates each get a real attempt budget; empty or incomplete outputs hand off.
+- **Intent-scoped evidence tools**: live lookup remains available for citations, weather, markets, scores, and news without slowing timeless planning or writing.
+- **Stronger architecture gates**: transport/layout/runtime boundaries are separated and protected by import-cycle and real component regressions.
+- **The local 27B Agent path remains intact**: Q4 imatrix MTP stays the default and coding/tool turns continue through the full Agent loop.

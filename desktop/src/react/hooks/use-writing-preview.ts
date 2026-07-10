@@ -9,7 +9,7 @@
 import { useEffect, useRef } from 'react';
 import { useStore } from '../stores';
 import { openPreview } from '../stores/artifact-actions';
-import { updateLayout } from '../components/SidebarLayout';
+import { updateLayout } from '../services/layout-controller';
 import type { Artifact } from '../types';
 
 const MD_EXTS = new Set(['md', 'markdown']);

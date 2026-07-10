@@ -12,9 +12,13 @@ import { useStore } from '../stores';
 import { setStatus } from '../utils/ui-helpers';
 import { AppError } from '../../../../shared/errors.js';
 import { errorBus } from '../../../../shared/error-bus.js';
+import {
+  clearWebSocket,
+  getWebSocket,
+  setWebSocket,
+} from './websocket-transport';
 
-// ── 模块级 WS 实例 ──
-let _ws: WebSocket | null = null;
+export { getWebSocket } from './websocket-transport';
 
 // ── WS 重连状态 ──
 let _wsRetryDelay = 1000;
@@ -32,7 +36,7 @@ injectHandlers(handleServerMessage, applyStreamingStatus);
 function ensureStreamResumeWatchdog(): void {
   if (_streamResumeWatchdog) return;
   _streamResumeWatchdog = setInterval(() => {
-    const ws = _ws;
+    const ws = getWebSocket();
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     const state = useStore.getState();
     if (!state.isStreaming || !state.currentSessionPath) return;
@@ -51,11 +55,6 @@ function markWebSocketStartup(
   }
 }
 
-/** 获取当前 WebSocket 实例 */
-export function getWebSocket(): WebSocket | null {
-  return _ws;
-}
-
 /** 发起 WebSocket 连接 */
 export function connectWebSocket(port?: string, token?: string): void {
   // 如果没有传参，从 Zustand store 获取
@@ -66,16 +65,18 @@ export function connectWebSocket(port?: string, token?: string): void {
   if (!serverPort) return;
 
   if (_wsRetryTimer) { clearTimeout(_wsRetryTimer); _wsRetryTimer = null; }
-  if (_ws) {
-    try { _ws.onclose = null; _ws.close(); } catch { /* silent */ }
+  const existingSocket = getWebSocket();
+  if (existingSocket) {
+    try { existingSocket.onclose = null; existingSocket.close(); } catch { /* silent */ }
   }
 
   const url = `ws://127.0.0.1:${serverPort}/ws`;
   const protocols = serverToken ? ['hana-v1', `token.${serverToken}`] : ['hana-v1'];
-  _ws = new WebSocket(url, protocols);
+  const ws = new WebSocket(url, protocols);
+  setWebSocket(ws);
   ensureStreamResumeWatchdog();
 
-  _ws.onopen = () => {
+  ws.onopen = () => {
     _wsRetryDelay = 1000;
     _wsRetryCount = 0;
     setStatus('status.connected', true);
@@ -96,7 +97,7 @@ export function connectWebSocket(port?: string, token?: string): void {
     }
   };
 
-  _ws.onmessage = (event: MessageEvent) => {
+  ws.onmessage = (event: MessageEvent) => {
     try {
       const msg = JSON.parse(event.data);
       handleServerMessage(msg);
@@ -105,7 +106,8 @@ export function connectWebSocket(port?: string, token?: string): void {
     }
   };
 
-  _ws.onclose = () => {
+  ws.onclose = () => {
+    clearWebSocket(ws);
     setStatus('status.disconnected', false);
     _wsRetryCount++;
 
@@ -120,7 +122,7 @@ export function connectWebSocket(port?: string, token?: string): void {
     }
   };
 
-  _ws.onerror = () => {
+  ws.onerror = () => {
     markWebSocketStartup('error', 'WebSocket 连接出错');
     errorBus.report(new AppError('WS_DISCONNECTED'));
   };

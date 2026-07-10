@@ -11,6 +11,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
+import { resolveBetterSqliteRuntime } from "./native-node-runtime.mjs";
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -186,31 +187,12 @@ async function seedProfile(lynnHome) {
   );
 }
 
-async function assertDevServerNativeAbi() {
-  const probe = spawn(process.execPath, ["-e", `
-    const path = require('node:path');
-    const p = path.join(${JSON.stringify(ROOT)}, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node');
-    const m = { exports: {} };
-    process.dlopen(m, p);
-  `], { stdio: ["ignore", "ignore", "pipe"] });
-  let err = "";
-  probe.stderr.on("data", (chunk) => { err += String(chunk); });
-  const code = await new Promise((resolve) => probe.on("close", resolve));
-  if (code !== 0) {
-    throw new Error(
-      "better-sqlite3 native module cannot be loaded by this gate's Node. "
-      + "Run `npm rebuild better-sqlite3` before launching the GUI live gate.\n"
-      + err.trim(),
-    );
-  }
-}
-
 async function main() {
   const rendererEntry = path.join(ROOT, "desktop", "dist-renderer", "index.html");
   await fs.access(rendererEntry).catch(() => {
     throw new Error("desktop/dist-renderer/index.html missing. Run npm run build:renderer before GUI live gate.");
   });
-  await assertDevServerNativeAbi();
+  const nativeRuntime = resolveBetterSqliteRuntime({ cwd: ROOT, env: process.env });
 
   const electronBin = require("electron");
   const debugPort = await getFreePort();
@@ -226,11 +208,9 @@ async function main() {
       ...process.env,
       LYNN_HOME: lynnHome,
       LYNN_UI_NO_FRONT: process.env.LYNN_UI_NO_FRONT || "1",
-      // Dev/main.cjs launches dist-server-bundle from the repo. Force that child
-      // server to use the same Node that loaded node_modules/better-sqlite3
-      // above; otherwise Electron's embedded Node can disagree with native ABI
-      // and recreate the issue-#72 launch crash during the gate itself.
-      LYNN_SERVER_NODE_BIN: process.execPath,
+      // When the host Node owns the native ABI, pin the server to it. Otherwise
+      // omit the override so server-process uses Electron's ABI-compatible Node.
+      ...(nativeRuntime.kind === "node" ? { LYNN_SERVER_NODE_BIN: nativeRuntime.bin } : {}),
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
     },
     stdio: ["ignore", "pipe", "pipe"],

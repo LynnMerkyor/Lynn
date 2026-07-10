@@ -26,6 +26,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import YAML from "js-yaml";
+import { resolveBetterSqliteRuntime } from "./native-node-runtime.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -137,14 +138,14 @@ function terminate(child) {
 // 起整个桌面 app 会往用户屏幕弹 raw-i18n 的吓人窗口,且与 #72 无关)。
 // 用跑门禁的这个 Node 直接跑 dist-server-bundle/index.js —— ABI 与 node_modules 自洽。
 // 就绪硬信号 = server 在 LYNN_HOME 写出 server-info.json(server/index.ts);崩溃 = 进程早退/致命日志。
-async function launchAndWaitReady({ name, env }) {
+async function launchAndWaitReady({ name, env, runtime }) {
   const serverEntry = path.join(ROOT, "dist-server-bundle", "index.js");
   const lynnHome = env.LYNN_HOME;
   const serverInfoPath = lynnHome ? path.join(lynnHome, "server-info.json") : null;
-  const child = spawn(process.execPath, [serverEntry], {
+  const child = spawn(runtime.bin, [...runtime.argsPrefix, serverEntry], {
     cwd: ROOT,
     env: {
-      ...process.env,
+      ...runtime.env,
       HANA_PORT: "0", // OS 分配,门禁不关心端口,只等 server-info.json
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
       ...env,
@@ -195,25 +196,11 @@ async function main() {
     throw new Error("dist-server-bundle/index.js missing — run `npm run build:server` first");
   }
 
-  // 前置:原生模块 ABI/架构自检(fail-fast)。曾经 build/Release 残留 x86_64 的
-  // better_sqlite3.node(arm64 机器)导致 server boot 崩溃 —— 在这里 1 行报错替代。
-  await new Promise((resolve, reject) => {
-    const probe = spawn(process.execPath, ["-e", `
-      const p = require('path').join(${JSON.stringify(ROOT)}, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node');
-      const m = { exports: {} };
-      process.dlopen(m, p);
-    `], { stdio: ["ignore", "ignore", "pipe"] });
-    let err = "";
-    probe.stderr.on("data", (c) => { err += String(c); });
-    probe.on("close", (code) => {
-      if (code === 0) return resolve();
-      reject(new Error(
-        "原生模块自检失败:better_sqlite3.node 与本机 Node 不匹配(架构或 ABI)。\n"
-        + "修复:npm rebuild better-sqlite3\n"
-        + `详情:${err.split("\n").find((l) => l.includes("dlopen") || l.includes("Error")) || err.slice(0, 200)}`,
-      ));
-    });
-  });
+  // The workspace addon may target Electron while the packaged server addon targets Node.
+  // Select a runtime that can actually open the workspace database instead of assuming the
+  // shell's Node ABI matches after build:server has prepared another runtime.
+  const runtime = resolveBetterSqliteRuntime({ cwd: ROOT });
+  console.log(`[gate-startup] native runtime: ${runtime.kind}`);
 
   const stamp = `${process.pid}-${Date.now()}`;
 
@@ -222,7 +209,7 @@ async function main() {
     console.log("\n[A fresh] 全新空 LYNN_HOME 冷启动");
     const home = path.join(os.tmpdir(), `lynn-gate-fresh-${stamp}`);
     await fs.mkdir(home, { recursive: true });
-    const r = await launchAndWaitReady({ name: "fresh", env: { LYNN_HOME: home } });
+    const r = await launchAndWaitReady({ name: "fresh", env: { LYNN_HOME: home }, runtime });
     check("A 到达 Server 就绪", r.ready, `ready=false fatal=${r.fatal} tail:\n${tail(r.logs)}`);
     check("A 无致命启动错误", !r.fatal, `fatal=${r.fatal}`);
   }
@@ -237,7 +224,7 @@ async function main() {
       await fs.mkdir(memDir, { recursive: true });
       await fs.writeFile(path.join(memDir, "facts.db"), "THIS-IS-NOT-A-SQLITE-DATABASE\n");
     }
-    const r = await launchAndWaitReady({ name: "corrupt-db", env: { LYNN_HOME: home } });
+    const r = await launchAndWaitReady({ name: "corrupt-db", env: { LYNN_HOME: home }, runtime });
     check("B 到达 Server 就绪(不许像 #72 那样启动中断)", r.ready, `ready=false fatal=${r.fatal} tail:\n${tail(r.logs)}`);
     const baks = await findFiles(home, (n) => n.startsWith("facts.db.bak-"));
     const recovered = RECOVERY_PATTERN.test(r.logs) || baks.length > 0;
@@ -259,6 +246,7 @@ async function main() {
       // macOS 下 os.homedir() 读 HOME env —— 把整个 home 沙箱化,让任何「迁移 ~/.hanako」
       // 的回归代码打到哨兵上而不是真用户目录。
       env: { HOME: fakeHome, LYNN_HOME: path.join(fakeHome, ".lynn") },
+      runtime,
     });
     check("C 到达 Server 就绪", r.ready, `ready=false fatal=${r.fatal} tail:\n${tail(r.logs)}`);
     const stillThere = await fs.stat(hanakoDir).then(() => true).catch(() => false);
@@ -305,7 +293,7 @@ async function main() {
       },
     });
 
-    const r = await launchAndWaitReady({ name: "polluted-models", env: { LYNN_HOME: home } });
+    const r = await launchAndWaitReady({ name: "polluted-models", env: { LYNN_HOME: home }, runtime });
     check("D 到达 Server 就绪", r.ready, `ready=false fatal=${r.fatal} tail:\n${tail(r.logs)}`);
     const cfg = await readYamlObject(path.join(agentDir, "config.yaml"));
     const added = await readYamlObject(path.join(home, "added-models.yaml"));

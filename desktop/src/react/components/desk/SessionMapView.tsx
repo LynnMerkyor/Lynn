@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../stores';
+import { useI18n } from '../../hooks/use-i18n';
 import type { Session } from '../../types';
 import { branchSession, consumeInsights, switchSession } from '../../stores/session-actions';
 import s from './Desk.module.css';
@@ -8,10 +9,14 @@ type WorkState = 'active' | 'blocked' | 'risk' | 'done';
 
 const GROUP_LIMIT = 8;
 
-function sessionTitle(session: Session, opts: { current?: boolean } = {}): string {
+function sessionTitle(
+  session: Session,
+  labels: { current: string; untitled: string },
+  opts: { current?: boolean } = {},
+): string {
   const raw = session.digest?.objective || session.title || session.firstMessage || '';
   const trimmed = raw.trim();
-  if (!trimmed) return opts.current ? '当前会话' : '未命名会话';
+  if (!trimmed) return opts.current ? labels.current : labels.untitled;
   return trimmed.length > 44 ? trimmed.slice(0, 43).trimEnd() + '…' : trimmed;
 }
 
@@ -27,7 +32,7 @@ function formatBytes(bytes?: number | null): string {
   return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)}${units[index]}`;
 }
 
-function formatTimeLabel(iso?: string | null): string {
+function formatTimeLabel(iso: string | null | undefined, locale: string): string {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
@@ -35,11 +40,12 @@ function formatTimeLabel(iso?: string | null): string {
   const diffMin = Math.floor(diffMs / 60000);
   const diffHour = Math.floor(diffMs / 3600000);
   const diffDay = Math.floor(diffMs / 86400000);
-  if (diffMin < 1) return '刚刚';
-  if (diffMin < 60) return `${diffMin}分钟前`;
-  if (diffHour < 24) return `${diffHour}小时前`;
-  if (diffDay < 7) return `${diffDay}天前`;
-  return `${date.getMonth() + 1}月${date.getDate()}日`;
+  const relative = new Intl.RelativeTimeFormat(locale || 'zh-CN', { numeric: 'auto' });
+  if (diffMin < 1) return relative.format(0, 'minute');
+  if (diffMin < 60) return relative.format(-diffMin, 'minute');
+  if (diffHour < 24) return relative.format(-diffHour, 'hour');
+  if (diffDay < 7) return relative.format(-diffDay, 'day');
+  return date.toLocaleDateString(locale || 'zh-CN', { month: 'short', day: 'numeric' });
 }
 
 function unreadCount(session: Session): number {
@@ -86,13 +92,6 @@ function deriveState(session: Session): WorkState {
   return 'active';
 }
 
-const STATE_LABEL: Record<WorkState, string> = {
-  active: '进行中',
-  blocked: '需要处理',
-  risk: '需要处理',
-  done: '已完成',
-};
-
 const STATE_DOT: Record<WorkState, string> = {
   active: s.mapDotActive,
   blocked: s.mapDotBlocked,
@@ -127,13 +126,28 @@ function sortWork(a: Session, b: Session, currentPath: string | null): number {
 }
 
 export function SessionMapView() {
+  const { t, locale } = useI18n();
   const sessions = useStore((state) => state.sessions);
   const currentSessionPath = useStore((state) => state.currentSessionPath);
   const requestInputFocus = useStore((state) => state.requestInputFocus);
-  const [selectedPath, setSelectedPath] = useState<string | null>(currentSessionPath);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+
+  const tt = (key: string, fallback: string, vars?: Record<string, string | number>) => {
+    const value = t(key, vars);
+    return !value || value === key ? fallback : value;
+  };
+  const titleLabels = {
+    current: tt('desk.progress.currentSession', '当前会话'),
+    untitled: tt('desk.progress.untitledSession', '未命名会话'),
+  };
+  const stateLabel = (state: WorkState) => {
+    if (state === 'done') return tt('desk.progress.done', '已完成');
+    if (state === 'active') return tt('desk.progress.active', '进行中');
+    return tt('desk.progress.needsAttention', '需要处理');
+  };
 
   useEffect(() => {
-    if (currentSessionPath) setSelectedPath(currentSessionPath);
+    setSelectedPath(null);
   }, [currentSessionPath]);
 
   const { attentionItems, recentItems, folded, counts, currentSession } = useMemo(() => {
@@ -176,7 +190,6 @@ export function SessionMapView() {
     };
   }, [sessions, currentSessionPath]);
 
-  const selected = sessions.find((sess) => sess.path === (selectedPath || currentSessionPath)) || null;
   const parentOf = (sess: Session): Session | null =>
     sess.topology?.parentSessionPath
       ? sessions.find((p) => p.path === sess.topology?.parentSessionPath) || null
@@ -185,65 +198,98 @@ export function SessionMapView() {
   const totalWork = counts.active + counts.stalled + counts.done;
 
   const pulse = totalWork === 0
-    ? '还没有可跟进的会话'
+    ? tt('desk.progress.noTrackedSessions', '还没有可跟进的会话')
     : [
-        counts.active > 0 ? `${counts.active} 进行中` : '',
-        counts.stalled > 0 ? `${counts.stalled} 需要处理` : '',
-        counts.done > 0 ? `${counts.done} 已完成` : '',
+        counts.active > 0 ? tt('desk.progress.activeCount', `${counts.active} 进行中`, { count: counts.active }) : '',
+        counts.stalled > 0 ? tt('desk.progress.attentionCount', `${counts.stalled} 需要处理`, { count: counts.stalled }) : '',
+        counts.done > 0 ? tt('desk.progress.doneCount', `${counts.done} 已完成`, { count: counts.done }) : '',
       ].filter(Boolean).join(' · ');
 
   const renderCard = (sess: Session) => {
     const state = deriveState(sess);
-    const active = sess.path === currentSessionPath;
-    const isSel = selected?.path === sess.path;
+    const isSel = selectedPath === sess.path;
     const unread = unreadCount(sess);
     const parent = parentOf(sess);
     const next = nextLine(sess);
     const meta: string[] = [];
-    if (parent) meta.push(`来自 ${sessionTitle(parent)}`);
+    if (parent) meta.push(tt('desk.progress.fromSession', `来自 ${sessionTitle(parent, titleLabels)}`, { title: sessionTitle(parent, titleLabels) }));
     if (sess.topology?.branchLabel) meta.push(sess.topology.branchLabel);
     if (isRisk(sess) && sess.health?.sizeBytes) meta.push(formatBytes(sess.health.sizeBytes));
-    if (sess.messageCount) meta.push(`${sess.messageCount} 消息`);
-    const time = formatTimeLabel(sess.modified);
+    if (sess.messageCount) meta.push(tt('desk.progress.messageCount', `${sess.messageCount} 条消息`, { count: sess.messageCount }));
+    const time = formatTimeLabel(sess.modified, locale);
     if (time) meta.push(time);
 
     return (
       <div
         key={sess.path}
-        className={`${s.mapCard} ${isSel ? s.mapCardSel : ''} ${active ? s.mapCardActive : ''}`}
-        onClick={() => setSelectedPath(sess.path)}
-        onDoubleClick={() => { void switchSession(sess.path); }}
-        role="option"
-        aria-selected={isSel}
+        className={`${s.mapCard} ${isSel ? s.mapCardSel : ''}`}
+        data-session-card={sess.path}
       >
-        <div className={s.mapCardHead}>
-          <span className={`${s.mapDot} ${STATE_DOT[state]}`} aria-hidden="true" />
-          <span className={s.mapCardTitle}>{sessionTitle(sess)}</span>
-          {active && <span className={`${s.mapChip} ${s.mapChipCurrent}`}>当前</span>}
-          <span className={`${s.mapChip} ${STATE_CHIP[state]}`}>{STATE_LABEL[state]}</span>
-          {unread > 0 && <span className={s.mapCardIns} title={`${unread} 条未读洞察`}>{unread}</span>}
-        </div>
-        {next && (
-          <div className={s.mapCardNext}>
-            <span>下一步</span>
-            {next}
+        <button
+          type="button"
+          className={s.mapCardToggle}
+          onClick={() => setSelectedPath(isSel ? null : sess.path)}
+          aria-expanded={isSel}
+          aria-label={tt('desk.progress.inspectSession', `查看 ${sessionTitle(sess, titleLabels)}`, { title: sessionTitle(sess, titleLabels) })}
+        >
+          <span className={s.mapCardHead}>
+            <span className={`${s.mapDot} ${STATE_DOT[state]}`} aria-hidden="true" />
+            <span className={s.mapCardTitle}>{sessionTitle(sess, titleLabels)}</span>
+            <span className={`${s.mapChip} ${STATE_CHIP[state]}`}>{stateLabel(state)}</span>
+            {unread > 0 && <span className={s.mapCardIns} title={tt('desk.progress.unreadInsights', `${unread} 条未读洞察`, { count: unread })}>{unread}</span>}
+          </span>
+          {!isSel && next && (
+            <span className={s.mapCardNext}>
+              <span>{tt('desk.progress.nextStep', '下一步')}</span>
+              {next}
+            </span>
+          )}
+          {meta.length > 0 && <span className={s.mapCardMeta}>{meta.join(' · ')}</span>}
+        </button>
+
+        {isSel && (
+          <div className={s.mapInlineDetail}>
+            {sess.digest?.summary && <p className={s.mapSummary}>{sess.digest.summary}</p>}
+            {sess.digest?.nextSteps?.length ? (
+              <div className={s.mapNextSteps} aria-label={tt('desk.progress.nextSteps', '下一步')}>
+                {sess.digest.nextSteps.slice(0, 3).map((item) => <span key={item}>{item}</span>)}
+              </div>
+            ) : null}
+            {unread > 0 && (
+              <div className={s.mapInsights}>
+                {(sess.insights || []).filter((item) => item.status === 'unread').slice(0, 3).map((item) => (
+                  <div key={item.id} className={s.mapInsightItem}>
+                    <p title={item.source ? tt('desk.progress.fromSource', `来自 ${item.source}`, { source: item.source }) : undefined}>{item.content}</p>
+                    <div className={s.mapInsightActions}>
+                      <button
+                        type="button"
+                        className={s.mapActionBtn}
+                        onClick={() => {
+                          void consumeInsights(sess.path, [item.id]);
+                          useStore.setState({ composerText: item.content, welcomeVisible: false });
+                          useStore.getState().requestInputFocus();
+                        }}
+                      >
+                        {tt('desk.progress.apply', '应用')}
+                      </button>
+                      <button type="button" className={s.mapGhostBtn} onClick={() => { void consumeInsights(sess.path, [item.id]); }}>
+                        {tt('desk.progress.ignore', '忽略')}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className={s.mapDetailActions}>
+              <button type="button" className={s.mapActionBtn} onClick={() => { void switchSession(sess.path); }}>
+                {tt('desk.progress.openSession', '打开会话')}
+              </button>
+              <button type="button" className={s.mapGhostBtn} onClick={() => { void branchSession(sess.path); }}>
+                {tt('desk.progress.newBranch', '新建分支')}
+              </button>
+            </div>
           </div>
         )}
-        <div className={s.mapCardFoot}>
-          {meta.length > 0 && <div className={s.mapCardMeta}>{meta.join(' · ')}</div>}
-          {!active && (
-            <button
-              type="button"
-              className={s.mapInlineBtn}
-              onClick={(event) => {
-                event.stopPropagation();
-                void switchSession(sess.path);
-              }}
-            >
-              打开
-            </button>
-          )}
-        </div>
       </div>
     );
   };
@@ -254,28 +300,28 @@ export function SessionMapView() {
     const next = nextLine(currentSession);
     const unread = unreadCount(currentSession);
     const meta: string[] = [];
-    if (currentSession.messageCount) meta.push(`${currentSession.messageCount} 条消息`);
-    const time = formatTimeLabel(currentSession.modified);
+    if (currentSession.messageCount) meta.push(tt('desk.progress.messageCount', `${currentSession.messageCount} 条消息`, { count: currentSession.messageCount }));
+    const time = formatTimeLabel(currentSession.modified, locale);
     if (time) meta.push(time);
-    if (unread > 0) meta.push(`${unread} 条洞察`);
+    if (unread > 0) meta.push(tt('desk.progress.insightCount', `${unread} 条洞察`, { count: unread }));
     return (
       <div className={s.mapCurrentCard}>
         <div className={s.mapCurrentTop}>
           <div className={s.mapCurrentCopy}>
-            <span className={s.mapCurrentKicker}>当前会话</span>
-            <strong>{sessionTitle(currentSession, { current: true })}</strong>
+            <span className={s.mapCurrentKicker}>{tt('desk.progress.currentSession', '当前会话')}</span>
+            <strong>{sessionTitle(currentSession, titleLabels, { current: true })}</strong>
           </div>
-          <span className={`${s.mapChip} ${STATE_CHIP[state]}`}>{STATE_LABEL[state]}</span>
+          <span className={`${s.mapChip} ${STATE_CHIP[state]}`}>{stateLabel(state)}</span>
         </div>
         {meta.length > 0 && <div className={s.mapCurrentMeta}>{meta.join(' · ')}</div>}
         <div className={s.mapCurrentBody}>
           {next ? (
             <>
-              <span>下一步</span>
+              <span>{tt('desk.progress.nextStep', '下一步')}</span>
               <p>{next}</p>
             </>
           ) : (
-            <p>正在等待你的下一条输入</p>
+            <p>{tt('desk.progress.waitingForInput', '正在等待你的下一条输入')}</p>
           )}
         </div>
         <div className={s.mapCurrentActions}>
@@ -286,10 +332,10 @@ export function SessionMapView() {
               requestInputFocus();
             }}
           >
-            继续输入
+            {tt('desk.progress.continueInput', '继续输入')}
           </button>
           <button type="button" className={s.mapGhostBtn} onClick={() => { void branchSession(currentSession.path); }}>
-            新建分支
+            {tt('desk.progress.newBranch', '新建分支')}
           </button>
         </div>
       </div>
@@ -302,99 +348,29 @@ export function SessionMapView() {
 
       <div className={s.mapRailStats}>
         <span>{pulse}</span>
-        {counts.recent > 0 && <span>最近会话 {counts.recent}</span>}
-        {counts.unread > 0 && <span className={s.mapPulseInsight}>{counts.unread} 条洞察</span>}
+        {counts.unread > 0 && <span className={s.mapPulseInsight}>{tt('desk.progress.insightCount', `${counts.unread} 条洞察`, { count: counts.unread })}</span>}
       </div>
 
       {attentionItems.length > 0 && (
         <div className={s.mapSection}>
-          <div className={s.mapSectionHead}>需要处理</div>
+          <div className={s.mapSectionHead}>{tt('desk.progress.needsAttention', '需要处理')}</div>
           {attentionItems.map(renderCard)}
         </div>
       )}
 
       <div className={s.mapCanvasWrap}>
         {recentItems.length === 0 ? (
-          <div className={s.mapEmpty}>暂无其他会话</div>
+          <div className={s.mapEmpty}>{tt('desk.progress.noOtherSessions', '暂无其他会话')}</div>
         ) : (
-          <div className={s.mapBoard} role="listbox" aria-label="最近会话">
-            <div className={s.mapBoardTitle}>最近会话</div>
+          <div className={s.mapBoard} aria-label={tt('desk.progress.recentSessions', '最近会话')}>
+            <div className={s.mapBoardTitle}>{tt('desk.progress.recentSessions', '最近会话')}</div>
             {recentItems.map(renderCard)}
           </div>
         )}
       </div>
 
-      {selected && (
-        <div className={s.mapDetail}>
-          <div className={s.mapDetailHead}>
-            <div className={s.mapDetailTitle}>{sessionTitle(selected)}</div>
-            <button
-              type="button"
-              className={s.mapActionBtn}
-              onClick={() => {
-                if (selected.path === currentSessionPath) {
-                  requestInputFocus();
-                  return;
-                }
-                void switchSession(selected.path);
-              }}
-            >
-              {selected.path === currentSessionPath ? '继续输入' : '打开会话'}
-            </button>
-          </div>
-          <div className={s.mapMetaLine}>
-            <span>{STATE_LABEL[deriveState(selected)]}</span>
-            {parentOf(selected) && <span>来自 {sessionTitle(parentOf(selected) as Session)}</span>}
-            {isRisk(selected) && selected.health?.sizeBytes ? <span>{formatBytes(selected.health.sizeBytes)}</span> : null}
-            {unreadCount(selected) > 0 ? <span>{unreadCount(selected)} 条新洞察</span> : null}
-          </div>
-          {selected.digest?.summary && <p className={s.mapSummary}>{selected.digest.summary}</p>}
-          {selected.digest?.nextSteps?.length ? (
-            <div className={s.mapNextSteps}>
-              {selected.digest.nextSteps.slice(0, 3).map((item) => (
-                <span key={item}>{item}</span>
-              ))}
-            </div>
-          ) : null}
-          {unreadCount(selected) > 0 && (
-            <div className={s.mapInsights}>
-              {(selected.insights || []).filter((item) => item.status === 'unread').slice(0, 3).map((item) => (
-                <div key={item.id} className={s.mapInsightItem}>
-                  <p title={item.source ? `来自 ${item.source}` : undefined}>{item.content}</p>
-                  <div className={s.mapInsightActions}>
-                    <button
-                      type="button"
-                      className={s.mapActionBtn}
-                      onClick={() => {
-                        void consumeInsights(selected.path, [item.id]);
-                        useStore.setState({ composerText: item.content, welcomeVisible: false });
-                        useStore.getState().requestInputFocus();
-                      }}
-                    >
-                      应用
-                    </button>
-                    <button
-                      type="button"
-                      className={s.mapGhostBtn}
-                      onClick={() => { void consumeInsights(selected.path, [item.id]); }}
-                    >
-                      忽略
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className={s.mapDetailActions}>
-            <button type="button" className={s.mapGhostBtn} onClick={() => { void branchSession(selected.path); }}>
-              新建分支
-            </button>
-          </div>
-        </div>
-      )}
-
       {folded > 0 && (
-        <div className={s.mapFolded}>更早的会话 {folded} 个 · 可在左侧搜索打开</div>
+        <div className={s.mapFolded}>{tt('desk.progress.olderSessions', `更早的会话 ${folded} 个 · 可在左侧搜索打开`, { count: folded })}</div>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
+import { resolveBetterSqliteRuntime } from "./native-node-runtime.mjs";
 
 import { DIALOGUE_PROMPTS } from "./dialogue-scenario-bank.mjs";
 import { additionalDialogueQualityReason, requiresFreshEvidenceForDialogue } from "./dialogue-quality-rules.mjs";
@@ -302,10 +303,11 @@ async function startManagedServer() {
   const lynnHome = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-gui-gate-"));
   const infoPath = path.join(lynnHome, "server-info.json");
   const logs = [];
-  const child = spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
+  const runtime = resolveBetterSqliteRuntime({ cwd: ROOT, env: process.env });
+  const child = spawn(runtime.bin, [...runtime.argsPrefix, "--import", "tsx", "server/index.ts"], {
     cwd: ROOT,
     env: {
-      ...process.env,
+      ...runtime.env,
       LYNN_HOME: lynnHome,
       HANA_PORT: "0",
       STEP_TEXT_MODEL: process.env.STEP_TEXT_MODEL || "step-3.7-flash",
@@ -313,6 +315,7 @@ async function startManagedServer() {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  logs.push(`[gui-50] managed server runtime=${runtime.kind}`);
   const remember = (chunk) => {
     for (const line of String(chunk || "").split(/\r?\n/)) {
       if (!line.trim()) continue;

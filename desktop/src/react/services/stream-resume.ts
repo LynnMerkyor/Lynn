@@ -9,7 +9,7 @@
 
 import { streamBufferManager } from '../hooks/use-stream-buffer';
 import { useStore } from '../stores';
-import { getWebSocket } from './websocket';
+import { getWebSocket } from './websocket-transport';
 import { clearChat } from '../stores/agent-actions';
 import { loadMessages } from '../stores/session-actions';
 

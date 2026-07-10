@@ -970,6 +970,15 @@ function buildLynnReleaseAnswer(context: unknown, userPrompt: string = ""): stri
   if (!/Lynn 发布资料/.test(text)) return "";
   const versionTag = currentLynnVersionTag();
   const cliTarball = currentLynnCliTarballName();
+  const asksAvailability = /(?:能打开|打不开|可达|访问状态|是否在线|连得上|reachable|available|status|HTTP\s*状态)/i.test(prompt);
+  if (asksAvailability) {
+    const url = "https://download.merkyorlynn.com/download.html";
+    if (/状态:\s*reachable/i.test(text)) return `可以打开：${url}。本轮已成功读取页面正文。`;
+    if (/状态:\s*(?:unconfirmed-empty|unreachable-or-unconfirmed)/i.test(text)) {
+      return `本轮未能确认下载页可达：${url}。请稍后重试，不把版本资料当作在线状态。`;
+    }
+    return `本轮没有完成下载页可达性探测，暂不能确认状态：${url}。`;
+  }
   if (/Gitee|release|tag/i.test(prompt)) {
     return `Lynn 当前发布目标 tag 是 ${versionTag}。Gitee release 页面：https://gitee.com/merkyor/Lynn/releases/tag/${versionTag}；release 列表：https://gitee.com/merkyor/Lynn/releases。请以 Gitee 页面实际显示为准。`;
   }

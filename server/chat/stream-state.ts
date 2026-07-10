@@ -5,6 +5,7 @@
  * stale 检测、stream token 生命周期。
  */
 import {
+  createEmptyToolStormGuard,
   createChatTurnState,
 } from "./turn-state.js";
 import type { ChatTurnState } from "./turn-state.js";
@@ -21,6 +22,13 @@ export interface SessionStateStore {
   hasState(sessionPath: string): boolean;
   deleteState(sessionPath: string): void;
   destroy(): void;
+}
+
+export interface PrepareChatTurnStateOptions {
+  promptText: string;
+  routeIntent: string;
+  persistedAssistantTextBaseline?: number;
+  persistedAssistantMessageBaseline?: number;
 }
 
 const MAX_SESSION_STATES = 20;
@@ -156,8 +164,101 @@ export function clearTurnTimers(ss: SessionLike): void {
   clearPersistedFinalAnswerPollTimer(ss);
 }
 
+function resetTurnParsers(ss: SessionLike): void {
+  ss.thinkTagParser?.reset();
+  ss.progressParser?.reset();
+  ss.moodParser?.reset();
+  ss.xingParser?.reset();
+}
+
+function clearSlowToolTimers(ss: SessionLike): void {
+  if (!ss.__slowToolTimers?.size) return;
+  for (const timer of ss.__slowToolTimers.values()) {
+    try { clearTimeout(timer); } catch { /* timer may already be cleared */ }
+  }
+  ss.__slowToolTimers.clear();
+}
+
+function resetToolEvidenceState(ss: SessionLike): void {
+  ss.hasToolCall = false;
+  ss.hasRealtimeEvidenceToolCall = false;
+  ss.hasPrefetchToolCall = false;
+  ss.hasLocalPrefetchEvidence = false;
+  ss.activeToolCallCount = 0;
+  ss.activeToolCallStartedAt = null;
+  ss.lastToolExecutionActivity = 0;
+  ss.recoveredBashInFlight = false;
+  ss.successfulToolCount = 0;
+  ss.lastSuccessfulTools = [];
+  ss.hasFailedTool = false;
+  ss.lastFailedTools = [];
+  ss.toolStormGuard = createEmptyToolStormGuard();
+  ss.toolStormClosed = false;
+  ss.realtimeToolFallbackText = "";
+  ss.realtimeToolFallbackKind = "";
+  ss.emittedFileOutputPaths = new Set();
+  ss.recoveredArtifactKeys = new Set();
+}
+
+/**
+ * Establish one clean turn boundary while preserving session-scoped state such as a pending
+ * destructive-action confirmation. Every user prompt must pass through this function before a
+ * new stream starts, including turns that follow stale-stream recovery.
+ */
+export function prepareChatTurnState(ss: SessionLike, options: PrepareChatTurnStateOptions): SessionLike {
+  clearTurnTimers(ss);
+  clearSlowToolTimers(ss);
+  resetTurnParsers(ss);
+  resetToolEvidenceState(ss);
+
+  ss.isThinking = false;
+  ss.hasThinking = false;
+  ss.hasOutput = false;
+  ss.hasError = false;
+  ss.titleRequested = false;
+  ss.titlePreview = "";
+  ss.visibleTextAcc = "";
+  ss.bufferedVisibleTextDuringTool = "";
+  ss.hasBufferedVisibleTextDuringTool = false;
+  ss.rawTextAcc = "";
+  ss.sanitizerCarry = "";
+  ss.pseudoToolSteered = false;
+  ss.pseudoToolRecoveryHandled = false;
+  ss.pseudoToolCommandRecoveryAttempted = false;
+  ss.pseudoToolXmlBlock = null;
+  ss.routeIntent = options.routeIntent || "chat";
+  ss.originalPromptText = options.promptText;
+  ss.effectivePromptText = options.promptText;
+  ss.pendingToolRetryAttempted = false;
+  ss.internalRetryCounts = {};
+  ss.internalRetryPending = false;
+  ss.internalRetryInFlight = false;
+  ss.internalRetryReason = "";
+  ss.internalRetryOriginalVisibleLen = 0;
+  ss.internalRetryHadVisibleBeforeReset = false;
+  ss.toolFailedFallbackRetryAttempted = false;
+  ss.toolFinalizationRetryAttempted = false;
+  ss.persistedAssistantTextBaseline = Math.max(0, Number(options.persistedAssistantTextBaseline || 0));
+  ss.persistedAssistantMessageBaseline = Math.max(0, Number(options.persistedAssistantMessageBaseline || 0));
+  ss.rehydratedThisTurn = false;
+  ss.postRehydrateEscalationAttempted = false;
+  ss.postRehydrateDeterministicAttempted = false;
+  ss._rehydratedEffectivePrompt = null;
+  ss.autoReviewStarted = false;
+  ss.activeStreamToken = null;
+  ss.streamSource = null;
+  ss.degenerationAbortRequested = false;
+  ss.progressMarkerCount = 0;
+  ss._turnEndDeferred = false;
+  ss._turnClosed = false;
+  ss._lastTurnAborted = false;
+  ss.lastActivity = Date.now();
+  return ss;
+}
+
 export function resetCompletedTurnState(ss: SessionLike): void {
   clearTurnTimers(ss);
+  clearSlowToolTimers(ss);
   ss.activeStreamToken = null;
   ss.degenerationAbortRequested = false;
   ss.progressMarkerCount = 0;
@@ -169,38 +270,22 @@ export function resetCompletedTurnState(ss: SessionLike): void {
   ss.internalRetryOriginalVisibleLen = 0;
   ss.internalRetryHadVisibleBeforeReset = false;
   ss.hasOutput = false;
-  ss.hasToolCall = false;
-  ss.hasPrefetchToolCall = false;
-  ss.activeToolCallCount = 0;
-  ss.activeToolCallStartedAt = null;
-  ss.lastToolExecutionActivity = 0;
+  resetToolEvidenceState(ss);
   ss.hasThinking = false;
   ss.hasError = false;
-  ss.thinkTagParser?.reset();
-  ss.progressParser?.reset();
-  ss.moodParser?.reset();
-  ss.xingParser?.reset();
+  resetTurnParsers(ss);
   ss.visibleTextAcc = "";
   ss.bufferedVisibleTextDuringTool = "";
   ss.hasBufferedVisibleTextDuringTool = false;
   ss.rawTextAcc = "";
+  ss.sanitizerCarry = "";
   ss.pseudoToolSteered = false;
   ss.pseudoToolRecoveryHandled = false;
   ss.pseudoToolCommandRecoveryAttempted = false;
   ss.pseudoToolXmlBlock = null;
-  ss.successfulToolCount = 0;
-  ss.lastSuccessfulTools = [];
-  ss.hasFailedTool = false;
-  ss.lastFailedTools = [];
-  ss.realtimeToolFallbackText = "";
-  ss.realtimeToolFallbackKind = "";
   ss.autoReviewStarted = false;
-  if (ss.__slowToolTimers?.size) {
-    for (const timer of ss.__slowToolTimers.values()) {
-      try { clearTimeout(timer); } catch { /* timer may already be cleared */ }
-    }
-    ss.__slowToolTimers.clear();
-  }
+  ss.pendingToolRetryAttempted = false;
+  ss.internalRetryCounts = {};
   ss.toolFinalizationRetryAttempted = false;
   ss.toolFailedFallbackRetryAttempted = false;
   ss.persistedAssistantTextBaseline = 0;
@@ -208,4 +293,5 @@ export function resetCompletedTurnState(ss: SessionLike): void {
   ss.rehydratedThisTurn = false;
   ss.postRehydrateEscalationAttempted = false;
   ss.postRehydrateDeterministicAttempted = false;
+  ss._rehydratedEffectivePrompt = null;
 }

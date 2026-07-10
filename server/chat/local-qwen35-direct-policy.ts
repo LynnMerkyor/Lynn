@@ -41,7 +41,7 @@ export const LOCAL_QWEN35_TOOL_SCHEMA_LIMIT = Math.max(
 );
 export const LOCAL_QWEN35_FAILURE_FALLBACK_PROVIDER = process.env.LYNN_LOCAL_QWEN35_FAILURE_FALLBACK_PROVIDER || "step-3.7-flash";
 export const LOCAL_QWEN35_RUNTIME_POLICY = Object.freeze({
-  role: "explicit_opt_in_local_9b",
+  role: "explicit_opt_in_local_27b",
   kvCacheReuse: true,
   warmPoolDefault: false,
   idleUnload: true,

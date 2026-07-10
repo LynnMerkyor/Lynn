@@ -15,6 +15,7 @@ import {
   ModelCallTimeoutError,
   appendToolDelta,
   asRecord,
+  brainModelCallTimeoutMs,
   buildFallbackSynthesisMessages,
   buildPromptUserContent,
   buildRequestBody,
@@ -59,6 +60,10 @@ import {
   type StreamToolCallAccumulator,
 } from "./session-runtime-helpers.js";
 import { buildEvidenceSafetyAnswer } from "../../shared/evidence-safety-answer.js";
+import {
+  filterDeliverableToolsForTurn,
+  hasExplicitDeliverableIntent,
+} from "./turn-tool-policy.js";
 import type {
   AgentSessionEvent,
   AgentSessionEventListener,
@@ -123,6 +128,7 @@ export class LynnAgentSession {
   private pendingPrompts: Array<{ prompt: string; options?: PromptOptions }> = [];
   private disposed = false;
   private stepExecuteDepth = 0;
+  private activeTurnAllowsDeliverables = true;
 
   constructor(options: LynnCreateAgentSessionOptions = {}) {
     this.cwd = path.resolve(options.cwd || process.cwd());
@@ -196,6 +202,7 @@ export class LynnAgentSession {
     const userMessage = roleMessage("user", buildPromptUserContent(prompt, options));
     this.sessionManager.appendMessage(userMessage);
     this.agent.replaceMessages(this.sessionManager.buildSessionContext().messages || []);
+    this.activeTurnAllowsDeliverables = hasExplicitDeliverableIntent(prompt);
     await this.runTurn();
   }
 
@@ -610,7 +617,7 @@ export class LynnAgentSession {
       fallbackMessages = messages;
       const maxToolRounds = 3;
       for (let round = 0; round < maxToolRounds; round += 1) {
-        const result = await this.callModel(messages, { timeoutMs: defaultModelCallTimeoutMs() });
+        const result = await this.callModel(messages);
         result.toolCalls = result.toolCalls.filter(isExecutableToolCall);
         if (!result.toolCalls.length) {
           const content = contentToText(result.assistant.content);
@@ -699,6 +706,7 @@ export class LynnAgentSession {
     } finally {
       this.isStreaming = false;
       this.abortController = null;
+      this.activeTurnAllowsDeliverables = true;
       this.drainPendingPrompts();
     }
   }
@@ -718,7 +726,10 @@ export class LynnAgentSession {
     streamedText: boolean;
   }> {
     const model = options.model || this.model;
-    const tools = options.tools ?? this.getAllTools();
+    const tools = filterDeliverableToolsForTurn(
+      options.tools ?? this.getAllTools(),
+      this.activeTurnAllowsDeliverables,
+    );
     const streamTextImmediately = options.streamText ?? tools.length === 0;
     const body = buildRequestBody(model, messages, tools, this.thinkingLevel);
     const headers: Record<string, string> = {
@@ -729,7 +740,9 @@ export class LynnAgentSession {
     if (model.apiKey && !headers.authorization && !headers.Authorization) {
       headers.authorization = `Bearer ${model.apiKey}`;
     }
-    const timed = createTimedSignal(this.abortController?.signal, options.timeoutMs ?? defaultModelCallTimeoutMs());
+    const resolvedTimeoutMs = options.timeoutMs
+      ?? (isBrainProvider(model.provider) ? brainModelCallTimeoutMs() : defaultModelCallTimeoutMs());
+    const timed = createTimedSignal(this.abortController?.signal, resolvedTimeoutMs);
     try {
       const response = await fetch(chatCompletionsUrl(model), {
         method: "POST",
@@ -797,7 +810,7 @@ export class LynnAgentSession {
         streamedText: streamTextImmediately,
       };
     } catch (err) {
-      if (timed.didTimeout()) throw new ModelCallTimeoutError(options.timeoutMs ?? defaultModelCallTimeoutMs());
+      if (timed.didTimeout()) throw new ModelCallTimeoutError(resolvedTimeoutMs);
       throw err;
     } finally {
       timed.cleanup();
@@ -824,13 +837,19 @@ export class LynnAgentSession {
     }
   }
 
-  private async executeToolCall(toolCall: ToolCall, tools = this.getAllTools()): Promise<ToolResult> {
+  private async executeToolCall(
+    toolCall: ToolCall,
+    tools = filterDeliverableToolsForTurn(this.getAllTools(), this.activeTurnAllowsDeliverables),
+  ): Promise<ToolResult> {
     const normalized = normalizeToolCallForExecution(toolCall.function.name, toolCall.function.arguments, tools);
     toolCall.function.name = normalized.name;
     toolCall.function.arguments = maybeJson(normalized.args);
     let tool = this.resolveToolByName(toolCall.function.name, tools);
     if (!tool?.execute && isBrainManagedCustomToolName(toolCall.function.name)) {
-      tool = this.resolveToolByName(toolCall.function.name, this.getFallbackTools());
+      tool = this.resolveToolByName(
+        toolCall.function.name,
+        filterDeliverableToolsForTurn(this.getFallbackTools(), this.activeTurnAllowsDeliverables),
+      );
     }
     const args = normalized.args;
     this.emit({

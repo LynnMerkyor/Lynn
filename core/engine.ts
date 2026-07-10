@@ -70,6 +70,11 @@ import {
   type BuildToolsOptions,
   type ToolLike,
 } from "./engine-tool-runtime.js";
+import {
+  mergeExternalSkillPaths,
+  refreshExternalSkillPathExistence,
+  type ExternalSkillPath,
+} from "./external-skill-paths.js";
 
 type AnyRecord = Record<string, any>;
 type Logger = (message: string) => void;
@@ -78,12 +83,6 @@ type EngineDirs = {
   productDir: string;
   agentId?: string;
 };
-type ExternalSkillPath = {
-  dirPath: string;
-  label: string;
-  exists?: boolean;
-};
-
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err || "unknown error");
 }
@@ -501,15 +500,10 @@ export class LynnEngine {
 
   /** 获取外部技能路径配置（供 API 使用） */
   getExternalSkillPaths() {
-    // 刷新 exists 状态，检测运行期间新增的目录
-    let newDirAppeared = false;
-    for (const d of this._discoveredExternalPaths || []) {
-      const nowExists = fs.existsSync(d.dirPath);
-      if (nowExists && !d.exists) newDirAppeared = true;
-      d.exists = nowExists;
-    }
+    const refreshed = refreshExternalSkillPathExistence(this._discoveredExternalPaths || []);
+    this._discoveredExternalPaths = refreshed.paths;
     // 运行期间有新目录出现：重新集成到 SkillManager（watcher + 扫描）
-    if (newDirAppeared) {
+    if (refreshed.newDirectoryAppeared) {
       const merged = this._mergeExternalPaths(this._prefs.getExternalSkillPaths());
       this._skills.setExternalPaths(merged);
       this.reloadSkills().then(() => {
@@ -536,26 +530,9 @@ export class LynnEngine {
 
   /** 合并自动发现 + 用户配置的外部路径（去重） */
   _mergeExternalPaths(userConfiguredPaths: string[]): ExternalSkillPath[] {
-    // 每次合并时重新检测目录是否存在（不依赖初始化快照）
-    for (const d of this._discoveredExternalPaths || []) {
-      d.exists = fs.existsSync(d.dirPath);
-    }
-    const discovered = (this._discoveredExternalPaths || [])
-      .filter((d: ExternalSkillPath) => d.exists)
-      .map((d: ExternalSkillPath) => ({ dirPath: d.dirPath, label: d.label }));
-    const userParsed = (userConfiguredPaths || []).map((p: string) => ({
-      dirPath: path.resolve(p),
-      label: path.basename(path.dirname(p)),
-    }));
-    const merged = [...discovered];
-    const seen = new Set(merged.map(m => m.dirPath));
-    for (const up of userParsed) {
-      if (!seen.has(up.dirPath)) {
-        merged.push(up);
-        seen.add(up.dirPath);
-      }
-    }
-    return merged;
+    const refreshed = refreshExternalSkillPathExistence(this._discoveredExternalPaths || []);
+    this._discoveredExternalPaths = refreshed.paths;
+    return mergeExternalSkillPaths(refreshed.paths, userConfiguredPaths);
   }
 
   // ════════════════════════════

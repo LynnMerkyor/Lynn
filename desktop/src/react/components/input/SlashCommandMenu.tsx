@@ -1,4 +1,4 @@
-import type { SlashCommand } from '../InputArea';
+import type { SlashCommand } from './slash-commands';
 import styles from './InputArea.module.css';
 
 export function SlashCommandMenu({ commands, selected, busy, onSelect, onHover }: {

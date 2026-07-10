@@ -7,7 +7,7 @@
 
 import { providerOrderForCapability, getProvider, isInCooldown, markUnhealthy, clearUnhealthy } from './provider-registry.js';
 import { getAdapter } from './wire-adapter/index.js';
-import { isServerTool, executeServerTool, mergeWithServerTools, shouldPreferOfficialModelSearchTool, shouldPreferSportsScoreTool, shouldPreferStockMarketTool, shouldPreferWeatherTool, shouldSuppressWebToolsForInternalLynnUx } from './tool-exec/index.js';
+import { isServerTool, executeServerTool, mergeWithServerTools, shouldPreferOfficialModelSearchTool, shouldSuppressWebToolsForInternalLynnUx } from './tool-exec/index.js';
 import { applySearchContext, createSearchRequestCache, type SearchRequestCache } from './search-context.js';
 import { applyAudioTranscribe, createAudioRequestCache, type AudioRequestCache } from './audio-transcribe.js';
 import { compactToolResults, readToolResultCompactionConfigFromEnv } from './context-compact.js';
@@ -24,6 +24,10 @@ import {
   observeToolCallStorm,
   readToolStormConfigFromEnv,
 } from './tool-storm.js';
+import {
+  buildDirectEvidencePrefetchPlans,
+  skipDirectEvidencePlanningProviders,
+} from './direct-evidence-policy.js';
 import { errorMessage, providerId, type ChatMessage, type FallbackEntry, type FallbackReason, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
 
 type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio' | 'video'>>;
@@ -63,6 +67,19 @@ function shouldEchoReasoningContentForContinuation(result: RunRoundResult): bool
     || !!String(result.reasoningAccum || '').trim();
 }
 
+function looksLikeIncompleteVisibleStop(result: RunRoundResult): boolean {
+  if (result.finishReason !== 'stop' || result.toolCalls.length > 0) return false;
+  // Only retry while content is still buffered. Once a client has seen deltas,
+  // a second answer would duplicate text and be more confusing than the truncation.
+  if (!result.bufferedContentChunks?.length) return false;
+  const visible = String(result.contentAccum || '').trim();
+  const reasoning = String(result.reasoningAccum || '').trim();
+  if (visible.length <= 8 || visible.length >= 48) return false;
+  if (reasoning.length < 160 || reasoning.length < visible.length * 4) return false;
+  if (/[。！？.!?；;：:、，,）)】\]}'"’”>`]$/u.test(visible)) return false;
+  return true;
+}
+
 function assistantToolContinuationMessage(result: RunRoundResult): ChatMessage {
   const message: ChatMessage = {
     role: 'assistant',
@@ -92,14 +109,7 @@ const _emptyCounters = new Map<ProviderId, number>();
 const LOCAL_HEALTH_PROBE_ENABLED = process.env.BRAIN_V2_LOCAL_HEALTH_PROBE !== '0';
 const DEFAULT_LOCAL_HEALTH_PROBE_MS = Number(process.env.BRAIN_V2_LOCAL_HEALTH_PROBE_MS || 1_500);
 const LOCAL_SINGLE_SLOT_GUARD_ENABLED = process.env.BRAIN_V2_LOCAL_SINGLE_SLOT_GUARD !== '0';
-const MIMO_ULTRASPEED_PROVIDER_ID = providerId('mimo-ultraspeed');
 const DEEPSEEK_CHAT_PROVIDER_ID = providerId('deepseek-chat');
-const STEP_FLASH_PROVIDER_ID = providerId('step-3.7-flash');
-
-function skipDirectEvidencePlanningProviders(skippedProviders: Set<ProviderId>): void {
-  skippedProviders.add(MIMO_ULTRASPEED_PROVIDER_ID);
-  skippedProviders.add(DEEPSEEK_CHAT_PROVIDER_ID);
-}
 
 function httpStatusFromError(error: unknown, message = errorMessage(error)): number | null {
   const record = error && typeof error === 'object' && !Array.isArray(error)
@@ -618,20 +628,9 @@ function buildDeterministicSportsEvidenceAnswer(messages: ChatMessage[]): string
   if (!rows.length) return null;
   const prompt = originalUserPrompt(messages);
   if (/预测|预估|猜|可能比分|比分预测|predict|prediction|forecast/i.test(prompt)) {
-    const predictionRows = rows.slice(0, 12).map((row) => {
-      const matchup = row.matchup.replace(/^Group stage:\s*/i, '').trim();
-      let score = '1-1';
-      if (/(Spain|Portugal|England|Croatia|Germany|Belgium|Uruguay|France|Argentina)/i.test(matchup)) score = '2-0';
-      if (/(vs\s+Ghana|vs\s+Croatia|vs\s+Japan|vs\s+Egypt|vs\s+Iran)/i.test(matchup)) score = score === '2-0' ? '2-1' : '1-2';
-      return `| ${row.time} | ${matchup} | ${score} |`;
-    });
-    return [
-      '以下是基于赛程和纸面实力的预测，不是事实、不是赛果，也不构成投注建议。',
-      '',
-      '| 时间(北京时间) | 对阵 | 预测比分 |',
-      '|---|---|---|',
-      ...predictionRows,
-    ].join('\n');
+    // A schedule proves who plays and when, not a likely score. Prediction turns
+    // must be synthesized by a model from evidence instead of hard-coded team keywords.
+    return null;
   }
   const wantsCount = /(几场|多少场|只有一场|就一场|一场吗|赛程|今晚|今天|今日|tonight|today|schedule)/i.test(prompt);
   const title = wantsCount
@@ -666,7 +665,7 @@ function buildDeterministicAirQualityAnswer(prompt: unknown, result: unknown): s
   const question = String(prompt || '');
   if (!/空气质量|空气污染|AQI|PM\s*2\.?5|PM10|雾霾|霾|air\s*quality|pollution/i.test(question)) return null;
   const raw = String(result || '');
-  const city = question.match(/(北京|上海|广州|深圳|杭州|成都|重庆|武汉|南京|天津)/)?.[1] || '目标城市';
+  const city = raw.match(/【(.+?)(?:实时天气|空气质量)】/u)?.[1]?.trim().replace(/当前$/u, '') || '目标城市';
   const aqi = raw.match(/AQI\(US\)[:：]\s*([0-9]+(?:\.\d+)?)(?:（([^）]+)）)?/i);
   const pm25 = raw.match(/PM2\.5[:：]\s*([0-9]+(?:\.\d+)?)/i);
   const pm10 = raw.match(/PM10[:：]\s*([0-9]+(?:\.\d+)?)/i);
@@ -731,30 +730,6 @@ function buildDeterministicWeatherAlertAnswer(prompt: unknown, result: unknown):
   ].filter(Boolean).join('\n');
 }
 
-function buildDirectProjectReleaseAnswer(prompt: unknown): string | null {
-  const question = String(prompt || '');
-  const asksLynnRelease = /(?:Lynn|download\.merkyorlynn\.com|镜像站|Gitee).{0,40}(?:release\s*tag|release|tag|版本号|下载页)|(?:release\s*tag|release|tag|版本号|下载页).{0,40}(?:Lynn|download\.merkyorlynn\.com|镜像站|Gitee)/i.test(question);
-  if (!asksLynnRelease || /能打开|可达|打开吗|status|reachable|available/i.test(question)) return null;
-  if (/Gitee|release\s*tag|tag/i.test(question)) {
-    return [
-      'Lynn 当前发布目标 tag 是 **v0.85.1**。',
-      '',
-      '来源:',
-      '- Gitee release: https://gitee.com/merkyor/Lynn/releases/tag/v0.85.1',
-      '- Gitee releases: https://gitee.com/merkyor/Lynn/releases',
-      '',
-      '说明: GitHub origin 仍可能不可用；当前发版以 Gitee 和镜像站为准。',
-    ].join('\n');
-  }
-  return [
-    'Lynn 镜像下载页应显示 **v0.85.1**。',
-    '',
-    '来源:',
-    '- 镜像下载页: https://download.merkyorlynn.com/download.html',
-    '- CLI 包: https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.1.tgz',
-  ].join('\n');
-}
-
 function buildDirectAppleNotarizationAnswer(prompt: unknown): string | null {
   const question = String(prompt || '');
   if (!/Apple|苹果|developer\.apple\.com|notarization|notarizing|公证/i.test(question)) return null;
@@ -771,26 +746,10 @@ function buildDirectAppleNotarizationAnswer(prompt: unknown): string | null {
   ].join('\n');
 }
 
-function buildDirectPython313MaintenanceAnswer(prompt: unknown): string | null {
-  const question = String(prompt || '');
-  if (!/Python\s*3\.13|Python\s*313/i.test(question)) return null;
-  if (!/最新|latest|维护|maintenance|版本|version/i.test(question)) return null;
-  return [
-    'Python 3.13 的最新维护版本是 **Python 3.13.14**，发布日期是 **2026-06-10**。',
-    '',
-    '说明: Python 3.14 已是更新的 feature release 系列；这里回答的是你问的 3.13 维护线。',
-    '',
-    '来源:',
-    '- Python release page: https://www.python.org/downloads/release/python-31314/',
-    '- Python downloads list: https://www.python.org/downloads/',
-    '- Python documentation versions: https://www.python.org/doc/versions/',
-  ].join('\n');
-}
-
 function buildDirectKnownOfficialAnswer(prompt: unknown): string | null {
-  return buildDirectProjectReleaseAnswer(prompt)
-    || buildDirectAppleNotarizationAnswer(prompt)
-    || buildDirectPython313MaintenanceAnswer(prompt);
+  // Only timeless explanatory material is safe to answer without a live source.
+  // Release versions and maintenance releases age immediately and must use search.
+  return buildDirectAppleNotarizationAnswer(prompt);
 }
 
 function beijingYmdForRouter(date = new Date()): string {
@@ -816,7 +775,7 @@ function buildDeterministicWeatherAnswer(prompt: unknown, result: unknown): stri
   if (/空气质量|空气污染|AQI|PM\s*2\.?5|PM10|雾霾|霾|预警|暴雨预警/i.test(question)) return null;
   const raw = String(result || '');
   if (!/【.+?(?:实时天气|未来天气预报)】|🌡|📅/u.test(raw)) return null;
-  const city = question.match(/(北京|上海|广州|深圳|杭州|成都|重庆|武汉|南京|天津|苏州|西安|长沙|沈阳|青岛|大连|厦门|郑州|东莞|佛山|合肥|昆明|哈尔滨|济南|福州|珠海|无锡|温州|宁波|贵阳|南宁|太原|石家庄|乌鲁木齐|兰州|海口|三亚|香港|澳门|台北)/)?.[1] || '目标城市';
+  const city = raw.match(/【(.+?)实时天气】/u)?.[1]?.trim() || '目标城市';
   const today = beijingYmdForRouter();
   const targetDate = /明天|明日|tomorrow/i.test(question) ? addDaysYmdForRouter(today, 1) : today;
   const forecastLines = [...raw.matchAll(/📅\s*(\d{4}-\d{2}-\d{2})[:：]\s*([^,\n]+),\s*([^\n]+)/gu)]
@@ -1078,8 +1037,20 @@ function providerCanAttemptRound(provider: Provider, capabilityRequired: Capabil
   return true;
 }
 
-function createProviderAttemptSignal(provider: Provider, upstreamSignal?: AbortSignal): { signal?: AbortSignal; cleanup: () => void } {
-  const timeoutMs = Number(provider.timeout_ms || 0);
+function createProviderAttemptSignal(
+  provider: Provider,
+  upstreamSignal?: AbortSignal,
+  capabilityRequired?: CapabilityRequired,
+  timeoutCapMs?: number,
+): { signal?: AbortSignal; cleanup: () => void } {
+  const configuredTimeoutMs = Number(provider.timeout_ms || 0);
+  const isMultimodal = !!(capabilityRequired?.vision || capabilityRequired?.audio || capabilityRequired?.video);
+  const providerTimeoutMs = isMultimodal
+    ? Math.max(configuredTimeoutMs, positiveEnvNumber('BRAIN_V2_MULTIMODAL_PROVIDER_TIMEOUT_MS', 60_000))
+    : configuredTimeoutMs;
+  const timeoutMs = Number.isFinite(timeoutCapMs) && Number(timeoutCapMs) > 0
+    ? Math.min(providerTimeoutMs || Number(timeoutCapMs), Number(timeoutCapMs))
+    : providerTimeoutMs;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     return { signal: upstreamSignal, cleanup: () => {} };
   }
@@ -1137,7 +1108,8 @@ async function runRound({
   skipProviders,
   sanitizeSynthesisOpening,
   bufferContent,
-}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache; skipProviders?: ReadonlySet<ProviderId>; sanitizeSynthesisOpening?: boolean; bufferContent?: boolean }): Promise<RunRoundResult> {
+  attemptTimeoutCapMs,
+}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache; skipProviders?: ReadonlySet<ProviderId>; sanitizeSynthesisOpening?: boolean; bufferContent?: boolean; attemptTimeoutCapMs?: number }): Promise<RunRoundResult> {
   const errors: Array<{ providerId: ProviderId; error: string }> = [];
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
   // (例:"StepFun → Spark fallback"),不再让 cascade decision 对 UI 不可见。
@@ -1249,7 +1221,7 @@ async function runRound({
       }
     };
     try {
-      const providerAttempt = createProviderAttemptSignal(provider, signal);
+      const providerAttempt = createProviderAttemptSignal(provider, signal, capabilityRequired, attemptTimeoutCapMs);
       log && log('info', `→ provider ${providerId}`);
       try {
         const searchContext = await applySearchContext({ messages, provider, signal: providerAttempt.signal, log, requestCache });
@@ -1371,7 +1343,11 @@ async function runRound({
         : `provider ${providerId} failed: ${message}, fallback`;
       log && log('warn', logMsg);
       const fallbackReason = classifyProviderFallbackReason(err, message);
-      markUnhealthy(providerId, `${fallbackReason}: ${message}`, err.cooldownMs ?? null);
+      const cooldownMs = err.cooldownMs
+        ?? (fallbackReason === 'error-timeout'
+          ? positiveEnvNumber('BRAIN_V2_PROVIDER_TIMEOUT_COOLDOWN_MS', 5_000)
+          : null);
+      markUnhealthy(providerId, `${fallbackReason}: ${message}`, cooldownMs);
       fallbackChain.push({ id: providerId, reason: fallbackReason });
       continue;
     }
@@ -1428,6 +1404,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   let groundedToolObserved = false;
   let evidenceHandoffDone = false;
   let summarizeFromEvidenceOnly = false;
+  let lastChanceRecoveryUsed = false;
   // [tool-round effort-down] activeReasoning may be lowered after tool rounds only.
   // Empty visible answers must hand off to the next provider immediately instead of
   // retrying the same model and wasting the user's turn.
@@ -1567,47 +1544,16 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     }
   }
 
-  if (
-    process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH !== '0'
-    && shouldPreferWeatherTool(messages)
-  ) {
+  for (const plan of buildDirectEvidencePrefetchPlans(messages || [], workingMessages)) {
     const directResult = await prefetchDirectEvidenceTool({
-      toolName: 'weather',
-      providerId: STEP_FLASH_PROVIDER_ID,
-      continuationRequirement: '【接续要求】上方 weather 是本轮已经预取的天气证据。不要再调用工具,直接基于证据回答用户原问题；如果证据里没有目标日期、地点、温度或降雨字段,请明确说工具结果未返回该字段。',
-      buildDeterministicAnswer: (query, toolResult) => buildDeterministicWeatherAlertAnswer(query, toolResult)
-        || buildDeterministicAirQualityAnswer(query, toolResult)
-        || buildDeterministicWeatherAnswer(query, toolResult),
-    });
-    if (directResult) return directResult;
-  }
-
-  if (
-    process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH !== '0'
-    && shouldPreferSportsScoreTool(messages)
-    && !workingMessages.some((message) => /【Lynn 工具证据 #\d+:\s*sports_score】/u.test(
-      typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''),
-    ))
-  ) {
-    const directResult = await prefetchDirectEvidenceTool({
-      toolName: 'sports_score',
-      providerId: STEP_FLASH_PROVIDER_ID,
-      continuationRequirement: '【接续要求】上方 sports_score 是本轮已经预取的体育证据。不要再调用工具,直接基于证据回答用户原问题；如果证据里没有比分或赛果,请明确说工具结果未返回该字段。',
-    });
-    if (directResult) return directResult;
-  }
-
-  if (
-    process.env.BRAIN_V2_DIRECT_MARKET_PREFETCH !== '0'
-    && shouldPreferStockMarketTool(messages)
-    && !workingMessages.some((message) => /【Lynn 工具证据 #\d+:\s*stock_market】/u.test(
-      typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''),
-    ))
-  ) {
-    const directResult = await prefetchDirectEvidenceTool({
-      toolName: 'stock_market',
-      providerId: STEP_FLASH_PROVIDER_ID,
-      continuationRequirement: '【接续要求】上方 stock_market 是本轮已经预取的行情证据。不要再调用工具,直接基于证据回答用户原问题；如果证据里没有点位、价格或涨跌幅,请明确说工具结果未返回该字段。',
+      toolName: plan.toolName,
+      providerId: plan.providerId,
+      continuationRequirement: plan.continuationRequirement,
+      buildDeterministicAnswer: plan.kind === 'weather'
+        ? (query, toolResult) => buildDeterministicWeatherAlertAnswer(query, toolResult)
+          || buildDeterministicAirQualityAnswer(query, toolResult)
+          || buildDeterministicWeatherAnswer(query, toolResult)
+        : undefined,
     });
     if (directResult) return directResult;
   }
@@ -1646,7 +1592,51 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
         return { ok: true, providerId, iterations: iter };
       }
-      throw error;
+      const recoveryProviderId = providerOrderForCapability(capabilityRequired).find((candidateId) => {
+        const candidate = getProvider(candidateId);
+        return !!candidate && providerCanAttemptRound(candidate, capabilityRequired, []);
+      });
+      if (
+        lastChanceRecoveryUsed
+        || process.env.BRAIN_V2_LAST_CHANCE_RECOVERY === '0'
+        || signal?.aborted
+        || !recoveryProviderId
+      ) {
+        throw error;
+      }
+      lastChanceRecoveryUsed = true;
+      clearUnhealthy(recoveryProviderId);
+      const recoverySkip = new Set(
+        providerOrderForCapability(capabilityRequired).filter((candidateId) => candidateId !== recoveryProviderId),
+      );
+      const recoveryMessages: ChatMessage[] = [
+        ...workingMessages,
+        {
+          role: 'user',
+          content: '所有候选刚才都未在时限内完成。请用简洁结构直接回答原问题，不调用工具，不解释路由或重试过程。',
+        },
+      ];
+      log && log('warn', `all providers failed without grounded evidence; final recovery probe=${recoveryProviderId}`);
+      try {
+        result = await runRound({
+          messages: recoveryMessages,
+          tools: [],
+          capabilityRequired,
+          signal,
+          onChunk,
+          log,
+          extraBody,
+          reasoningEffort: 'low',
+          requestCache,
+          audioCache,
+          skipProviders: recoverySkip,
+          sanitizeSynthesisOpening: false,
+          bufferContent: true,
+          attemptTimeoutCapMs: positiveEnvNumber('BRAIN_V2_LAST_CHANCE_TIMEOUT_MS', 12_000),
+        });
+      } catch {
+        throw error;
+      }
     }
     lastProviderId = result.providerId;
 
@@ -1662,10 +1652,20 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
           ? 'reasoning-only stop'
           : `empty-visible (${result.finishReason || 'unknown'})`;
       log && log('warn', `provider ${lastProviderId} ${reason}; cooldown and fallback`);
-      markUnhealthy(result.providerId, 'empty_visible', 30_000);
+      skippedProviders.add(result.providerId);
       workingMessages.push({
         role: 'user',
         content: '上一个候选模型没有给出可见正文。请接手并直接给出最终答案;如证据不足,明确说明缺少哪些信息。',
+      });
+      continue;
+    }
+
+    if (looksLikeIncompleteVisibleStop(result)) {
+      log && log('warn', `provider ${lastProviderId} stopped with an incomplete buffered answer; hand off to next provider`);
+      skippedProviders.add(result.providerId);
+      workingMessages.push({
+        role: 'user',
+        content: '上一个候选模型只返回了没有句末的半句话。请忽略那段残缺正文，从头完整回答原问题；不要解释接手过程。',
       });
       continue;
     }

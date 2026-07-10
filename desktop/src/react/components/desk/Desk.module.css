@@ -413,29 +413,6 @@
     margin-top: 2px;
 }
 
-.mapDetail {
-    flex: 0 0 auto;
-    border: 1px solid var(--overlay-light);
-    border-radius: 10px;
-    background: var(--bg-card);
-    padding: 10px;
-}
-
-.mapDetailHead {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-}
-
-.mapDetailTitle {
-    flex: 1;
-    min-width: 0;
-    color: var(--text);
-    font-size: 0.8rem;
-    font-weight: 650;
-    line-height: 1.35;
-}
-
 .mapActionBtn,
 .mapGhostBtn {
     border: 1px solid rgba(var(--accent-rgb), 0.24);
@@ -460,14 +437,6 @@
     background: var(--overlay-subtle);
 }
 
-.mapMetaLine {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 7px;
-}
-
-.mapMetaLine span,
 .mapNextSteps span {
     border: 1px solid var(--overlay-light);
     border-radius: 999px;
@@ -520,17 +489,6 @@
     display: flex;
     justify-content: flex-end;
     margin-top: 9px;
-}
-
-.mapDetailPlaceholder {
-    flex: 0 0 auto;
-    padding: 9px 10px;
-    border-radius: 9px;
-    border: 1px dashed var(--overlay-light);
-    color: var(--text-muted);
-    font-size: 0.68rem;
-    line-height: 1.45;
-    text-align: center;
 }
 
 /* ── 认知地图看板(状态分组 + digest 卡 + 血缘 + 洞察) ── */
@@ -596,21 +554,36 @@
     border-radius: 9px;
     background: var(--bg-card);
     padding: 8px 9px;
-    cursor: pointer;
     transition: border-color 0.12s ease, background 0.12s ease;
 }
 
+.mapCard:focus-within,
 .mapCard:hover {
     background: var(--overlay-subtle);
-}
-
-.mapCardActive {
-    border-color: rgba(var(--accent-rgb), 0.4);
 }
 
 .mapCardSel {
     border-color: rgba(var(--accent-rgb), 0.55);
     background: rgba(var(--accent-rgb), 0.06);
+}
+
+.mapCardToggle {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.mapCardToggle:focus-visible {
+    outline: 2px solid rgba(var(--accent-rgb), 0.45);
+    outline-offset: 3px;
+    border-radius: 5px;
 }
 
 .mapCardHead {
@@ -653,7 +626,6 @@
     border: 1px solid transparent;
 }
 
-.mapChipCurrent { color: var(--accent); background: rgba(var(--accent-rgb), 0.12); }
 .mapChipActive { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.22); }
 .mapChipBlocked { color: var(--danger, #d33); border-color: color-mix(in srgb, var(--danger, #d33) 35%, transparent); }
 .mapChipRisk { color: var(--danger, #d33); background: color-mix(in srgb, var(--danger, #d33) 12%, transparent); }
@@ -682,7 +654,7 @@
 }
 
 .mapCardMeta {
-    flex: 1;
+    display: block;
     min-width: 0;
     color: var(--text-muted);
     font-size: 0.6rem;
@@ -690,33 +662,13 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-.mapCardFoot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
     margin-top: 6px;
-    min-height: 22px;
 }
 
-.mapInlineBtn {
-    flex: 0 0 auto;
-    border: 1px solid rgba(var(--accent-rgb), 0.22);
-    background: rgba(var(--accent-rgb), 0.08);
-    color: var(--accent);
-    border-radius: 7px;
-    padding: 3px 8px;
-    font: inherit;
-    font-size: 0.64rem;
-    line-height: 1.35;
-    cursor: pointer;
-}
-
-.mapInlineBtn:hover {
-    color: var(--text);
-    background: var(--overlay-subtle);
+.mapInlineDetail {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--overlay-light);
 }
 
 .mapFolded {

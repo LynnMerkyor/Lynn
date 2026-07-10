@@ -16,6 +16,24 @@ interface SessionStreamStateFields {
   maxEvents: number;
 }
 
+export interface ToolStormGuardSnapshot {
+  total: number;
+  evidenceTotal: number;
+  byName: Record<string, number>;
+  bySignature: Record<string, number>;
+  lastDecisionReason: string;
+}
+
+export function createEmptyToolStormGuard(): ToolStormGuardSnapshot {
+  return {
+    total: 0,
+    evidenceTotal: 0,
+    byName: {},
+    bySignature: {},
+    lastDecisionReason: "",
+  };
+}
+
 export interface ChatTurnState extends SessionStreamStateFields {
   thinkTagParser: ThinkTagParser;
   progressParser: LynnProgressParser;
@@ -24,6 +42,7 @@ export interface ChatTurnState extends SessionStreamStateFields {
   isThinking: boolean;
   hasOutput: boolean;
   hasToolCall: boolean;
+  hasRealtimeEvidenceToolCall: boolean;
   hasPrefetchToolCall: boolean;
   activeToolCallCount: number;
   activeToolCallStartedAt: number | null;
@@ -56,16 +75,23 @@ export interface ChatTurnState extends SessionStreamStateFields {
   lastSuccessfulTools: ToolSuccessRecord[];
   hasFailedTool: boolean;
   lastFailedTools: string[];
-  toolStormGuard: {
-    total: number;
-    evidenceTotal: number;
-    byName: Record<string, number>;
-    bySignature: Record<string, number>;
-    lastDecisionReason: string;
-  };
+  toolStormGuard: ToolStormGuardSnapshot;
   toolStormClosed: boolean;
-  realtimeToolFallbackText?: string;
-  realtimeToolFallbackKind?: string;
+  realtimeToolFallbackText: string;
+  realtimeToolFallbackKind: string;
+  emittedFileOutputPaths: Set<string>;
+  recoveredArtifactKeys: Set<string>;
+  sanitizerCarry: string;
+  autoReviewStarted: boolean;
+  rehydratedThisTurn: boolean;
+  postRehydrateEscalationAttempted: boolean;
+  postRehydrateDeterministicAttempted: boolean;
+  _rehydratedEffectivePrompt: string | null;
+  pendingMutationContext?: {
+    originalPrompt: string;
+    requirement: Record<string, unknown> | null;
+    recordedAt: number;
+  } | null;
   __slowToolTimers?: Map<string, TimerHandle>;
   toolFailedFallbackRetryAttempted: boolean;
   toolFinalizationRetryAttempted: boolean;
@@ -87,7 +113,6 @@ export interface ChatTurnState extends SessionStreamStateFields {
   _turnEndDeferred: boolean;
   _turnClosed: boolean;
   lastActivity: number;
-  [key: string]: unknown;
 }
 
 export function createChatTurnState(): ChatTurnState {
@@ -131,16 +156,18 @@ export function createChatTurnState(): ChatTurnState {
     lastSuccessfulTools: [],
     hasFailedTool: false,
     lastFailedTools: [],
-    toolStormGuard: {
-      total: 0,
-      evidenceTotal: 0,
-      byName: {},
-      bySignature: {},
-      lastDecisionReason: "",
-    },
+    toolStormGuard: createEmptyToolStormGuard(),
     toolStormClosed: false,
     realtimeToolFallbackText: "",
     realtimeToolFallbackKind: "",
+    emittedFileOutputPaths: new Set(),
+    recoveredArtifactKeys: new Set(),
+    sanitizerCarry: "",
+    autoReviewStarted: false,
+    rehydratedThisTurn: false,
+    postRehydrateEscalationAttempted: false,
+    postRehydrateDeterministicAttempted: false,
+    _rehydratedEffectivePrompt: null,
     toolFailedFallbackRetryAttempted: false,
     toolFinalizationRetryAttempted: false,
     silentBrainAbortTimer: null,

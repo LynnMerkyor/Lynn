@@ -13,82 +13,10 @@ import { closePreview } from '../stores/artifact-actions';
 import { toggleJianSidebar } from '../stores/desk-actions';
 import { enterWritingMode, exitWritingMode } from '../hooks/use-writing-preview';
 import { getWebSocket } from '../services/websocket';
+import { toggleSidebar, updateLayout } from '../services/layout-controller';
 import { ShortcutHelpModal } from './ShortcutHelpModal';
 
-const CHAT_MIN_WIDTH = 400;
-
-
-function getSidebarWidth(): number {
-  return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width')) || 240;
-}
-function getJianWidth(): number {
-  return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--jian-sidebar-width')) || 260;
-}
-function getPreviewWidth(): number {
-  return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--preview-panel-width')) || 580;
-}
-
-// ══════════════════════════════════════════════════════
-// 公开函数（bridge compat shim 也会调用）
-// ══════════════════════════════════════════════════════
-
-export function updateLayout(): void {
-  const s = useStore.getState();
-  const w = window.innerWidth;
-  const leftW = s.sidebarOpen ? getSidebarWidth() : 0;
-  const rightW = s.jianOpen ? getJianWidth() : 0;
-  const previewW = s.previewOpen ? getPreviewWidth() : 0;
-  const contentW = w - leftW - rightW - previewW;
-
-  if (contentW < CHAT_MIN_WIDTH) {
-    if (s.jianOpen) {
-      useStore.setState({ jianOpen: false, jianAutoCollapsed: true });
-
-      const newContentW = w - (s.sidebarOpen ? getSidebarWidth() : 0) - previewW;
-      if (newContentW < CHAT_MIN_WIDTH && s.sidebarOpen) {
-        useStore.setState({ sidebarOpen: false, sidebarAutoCollapsed: true });
-      }
-    } else if (s.sidebarOpen) {
-      useStore.setState({ sidebarOpen: false, sidebarAutoCollapsed: true });
-    }
-  } else {
-    if (s.sidebarAutoCollapsed) {
-      const neededForLeft = getSidebarWidth();
-      if (w - rightW - previewW - neededForLeft >= CHAT_MIN_WIDTH) {
-        const tab = s.currentTab || 'chat';
-        const savedLeft = localStorage.getItem(`hana-sidebar-${tab}`);
-        if (savedLeft !== 'closed') {
-          useStore.setState({ sidebarOpen: true, sidebarAutoCollapsed: false });
-        }
-      }
-    }
-    const s2 = useStore.getState();
-    if (s2.jianAutoCollapsed) {
-      const leftW2 = s2.sidebarOpen ? getSidebarWidth() : 0;
-      const neededForRight = getJianWidth();
-      if (w - leftW2 - previewW - neededForRight >= CHAT_MIN_WIDTH) {
-        const tab2 = s2.currentTab || 'chat';
-        const savedRight = localStorage.getItem(`hana-jian-${tab2}`);
-        if (savedRight === 'open') {
-          useStore.setState({ jianOpen: true, jianAutoCollapsed: false });
-        }
-      }
-    }
-  }
-}
-
-export function toggleSidebar(forceOpen?: boolean): void {
-  const s = useStore.getState();
-  const open = forceOpen !== undefined ? forceOpen : !s.sidebarOpen;
-  useStore.setState({ sidebarOpen: open });
-
-  const tab = s.currentTab || 'chat';
-  localStorage.setItem(`hana-sidebar-${tab}`, open ? 'open' : 'closed');
-
-  if (forceOpen === undefined) {
-    useStore.setState({ sidebarAutoCollapsed: false });
-  }
-}
+export { toggleSidebar, updateLayout } from '../services/layout-controller';
 
 // ══════════════════════════════════════════════════════
 // React 组件

@@ -5,7 +5,7 @@ vi.mock('../tool-exec/web_search.js', () => ({
 }));
 
 import { webSearch } from '../tool-exec/web_search.js';
-import { executeServerTool, isServerTool, mergeWithServerTools, SERVER_TOOLS, SERVER_TOOL_NAMES, shouldPreferSportsScoreTool, shouldPreferStockMarketTool, shouldPreferWeatherTool, shouldSuppressWebToolsForInternalLynnUx } from '../tool-exec/index.js';
+import { executeServerTool, isServerTool, mergeWithServerTools, SERVER_TOOLS, SERVER_TOOL_NAMES, shouldExposeExternalEvidenceTools, shouldPreferSportsScoreTool, shouldPreferStockMarketTool, shouldPreferWeatherTool, shouldSuppressWebToolsForInternalLynnUx } from '../tool-exec/index.js';
 import { parallelResearch } from '../tool-exec/parallel_research.js';
 
 describe('tool-exec dispatcher', () => {
@@ -71,6 +71,48 @@ describe('tool-exec dispatcher', () => {
     expect(shouldSuppressWebToolsForInternalLynnUx(messages)).toBe(false);
     expect(tools).toContain('web_search');
     expect(tools).toContain('web_fetch');
+  });
+
+  it('does not expose external evidence tools for timeless planning or writing turns', () => {
+    for (const content of [
+      '第一次去杭州三天两晚，帮我安排一个不赶路的行程',
+      '设计一个三幕式小说大纲，主题是记忆租赁',
+      '给高中生解释动量守恒，用生活例子',
+    ]) {
+      const messages = [{ role: 'user', content }];
+      const tools = mergeWithServerTools([], messages).map((tool) => tool.function.name);
+      expect(shouldExposeExternalEvidenceTools(messages)).toBe(false);
+      expect(tools).not.toContain('web_search');
+      expect(tools).not.toContain('weather');
+      expect(tools).not.toContain('parallel_research');
+    }
+  });
+
+  it('removes client-supplied evidence and deliverable tools when the turn does not allow them', () => {
+    const clientTools = [
+      { type: 'function', function: { name: 'read' } },
+      { type: 'function', function: { name: 'web-search' } },
+      { type: 'function', function: { name: 'create-artifact' } },
+    ];
+    const tools = mergeWithServerTools(clientTools, [{
+      role: 'user',
+      content: '第一次去杭州三天两晚，帮我安排一个不赶路的行程',
+    }]).map((tool) => tool.function.name);
+
+    expect(tools).toContain('read');
+    expect(tools).not.toContain('web-search');
+    expect(tools).not.toContain('create-artifact');
+  });
+
+  it('keeps external evidence tools for explicit lookup and inherently live questions', () => {
+    for (const content of [
+      '查一下杭州最近有哪些景点临时关闭，给来源',
+      '杭州明天下雨吗？',
+      '美元人民币汇率现在多少？',
+    ]) {
+      const messages = [{ role: 'user', content }];
+      expect(shouldExposeExternalEvidenceTools(messages)).toBe(true);
+    }
   });
 
   it('prefers the dedicated sports score tool for direct sports schedule prompts', () => {
@@ -428,9 +470,9 @@ describe('mergeWithServerTools document-intent gating', () => {
 
   it('gates out the document generators on a plain turn', () => {
     const n = names(null, [{ role: 'user', content: '今天心情很好，帮我改写正式一点' }]);
-    expect(n).toContain('web_search');
-    expect(n).toContain('web_fetch');
-    expect(n).toContain('weather');
+    expect(n).not.toContain('web_search');
+    expect(n).not.toContain('web_fetch');
+    expect(n).not.toContain('weather');
     expect(n).not.toContain('create_report');
     expect(n).not.toContain('create_pptx');
     expect(n).not.toContain('create_pdf');
@@ -469,10 +511,10 @@ describe('mergeWithServerTools document-intent gating', () => {
     expect(names(null, [{ role: 'user', content: 'make a powerpoint deck' }])).toContain('create_pptx');
   });
 
-  it('keeps web_search / web_fetch available regardless of intent', () => {
+  it('keeps external evidence tools out of ordinary chat turns', () => {
     const n = names(null, [{ role: 'user', content: 'hello there' }]);
-    expect(n).toContain('web_search');
-    expect(n).toContain('web_fetch');
+    expect(n).not.toContain('web_search');
+    expect(n).not.toContain('web_fetch');
   });
 
   it('detects intent across the recent user turns, not just the last', () => {

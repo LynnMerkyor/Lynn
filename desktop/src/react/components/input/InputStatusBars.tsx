@@ -1,4 +1,4 @@
-import type { SlashCommand } from '../InputArea';
+import type { SlashCommand } from './slash-commands';
 import { LocalQwenStatusStack } from './LocalQwenStatusStack';
 import type { LocalQwenStatusController } from './useLocalQwenStatusController';
 import styles from './InputArea.module.css';

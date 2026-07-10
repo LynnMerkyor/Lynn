@@ -16,7 +16,7 @@ import { connectWebSocket } from './services/websocket';
 import { setStatus, loadModels } from './utils/ui-helpers';
 import { initJian } from './stores/desk-actions';
 import { initEditorEvents } from './stores/artifact-actions';
-import { updateLayout } from './components/SidebarLayout';
+import { updateLayout } from './services/layout-controller';
 import { initErrorBusBridge } from './errors/error-bus-bridge';
 import { syncRuntimeSnapshot } from './utils/runtime-snapshot';
 import { JARVIS_RUNTIME_TOGGLE_EVENT } from './services/jarvis-runtime-events';

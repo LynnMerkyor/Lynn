@@ -230,6 +230,9 @@ function isLynnReleasePrompt(userPrompt: unknown): boolean {
   const prompt = textOf(userPrompt);
   return /download\.merkyorlynn\.com|Lynn\s+v?\d+\.\d+\.\d+|Lynn.*(?:Gitee|release|tag|镜像站)|Gitee.*Lynn.*(?:release|tag)/i.test(prompt);
 }
+function isLynnReleaseAvailabilityPrompt(userPrompt: unknown): boolean {
+  return /(?:能打开|打不开|可达|访问状态|是否在线|连得上|reachable|available|status|HTTP\s*状态)/i.test(textOf(userPrompt));
+}
 function isKnownOfficialVersionPrompt(userPrompt: unknown): boolean {
   const prompt = textOf(userPrompt);
   return /CUDA\s*Toolkit\s*13|Python\s*3\.13|Node\.?js|Kimi\s*K2\.7\s*Code|GLM\s*5\.0\s*Turbo|Responses\s*API|Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?|Claude.{0,24}(?:最新|公开).{0,12}模型|Claude.{0,12}(?:模型).{0,24}(?:最新|公开)|Apple.{0,32}notarization|notarization.{0,32}Apple|Apple.{0,24}公证|苹果.{0,24}公证|Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm/i.test(prompt);
@@ -276,6 +279,35 @@ function buildLynnReleaseContext(userPrompt: unknown): string {
     `CLI 包: https://download.merkyorlynn.com/downloads/cli/${cliTarball}`,
     "说明：回答应给出当前版本号和 Gitee release 链接，并提示以 Gitee 页面实际显示为准；不要输出内部抓取或调试状态。",
   ].join("\n").slice(0, MAX_CONTEXT_CHARS);
+}
+async function buildLynnReleaseAvailabilityContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
+  const url = "https://download.merkyorlynn.com/download.html";
+  const base = buildLynnReleaseContext(userPrompt);
+  try {
+    const result = await executeWebFetch(url, 1600, {
+      ...opts,
+      timeoutMs: Math.min(resolveTimeout(opts, "fetch", FETCH_TIMEOUT_MS), 8_000),
+      label: "lynn_download_status",
+    });
+    const body = String(result?.text || "").trim();
+    return [
+      base,
+      "",
+      "【下载页可达性探测】",
+      body ? "状态: reachable" : "状态: unconfirmed-empty",
+      `URL: ${url}`,
+      body ? "说明: 本轮 web_fetch 已成功读取页面正文。" : "说明: 请求完成但没有读取到页面正文，不能确认可达。",
+    ].join("\n").slice(0, MAX_CONTEXT_CHARS);
+  } catch (err) {
+    return [
+      base,
+      "",
+      "【下载页可达性探测】",
+      "状态: unreachable-or-unconfirmed",
+      `URL: ${url}`,
+      `说明: ${errorMessage(err)}`,
+    ].join("\n").slice(0, MAX_CONTEXT_CHARS);
+  }
 }
 function isJapanTouristVisaPrompt(userPrompt: unknown): boolean {
   const prompt = textOf(userPrompt);
@@ -610,7 +642,11 @@ function buildRealEstateResearchContext(userPrompt: unknown, opts: ReportResearc
 }
 function buildGenericResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   if (isDgxSparkPrompt(userPrompt)) return Promise.resolve(buildDgxSparkOfficialContext(userPrompt));
-  if (isLynnReleasePrompt(userPrompt)) return Promise.resolve(buildLynnReleaseContext(userPrompt));
+  if (isLynnReleasePrompt(userPrompt)) {
+    return isLynnReleaseAvailabilityPrompt(userPrompt)
+      ? buildLynnReleaseAvailabilityContext(userPrompt, opts)
+      : Promise.resolve(buildLynnReleaseContext(userPrompt));
+  }
   return buildSearchResearchContext("【研究资料】", buildGenericResearchQueries(userPrompt), opts);
 }
 function hostFromUrl(rawUrl: unknown): string {
@@ -954,7 +990,11 @@ export async function fetchForKind(kind: ReportResearchKind, target: StockResear
   const text = opts.text || userPrompt;
   if (isKnownOfficialVersionPrompt(userPrompt)) return buildKnownOfficialVersionContext(userPrompt);
   if (isDgxSparkPrompt(userPrompt)) return buildDgxSparkOfficialContext(userPrompt);
-  if (isLynnReleasePrompt(userPrompt)) return buildLynnReleaseContext(userPrompt);
+  if (isLynnReleasePrompt(userPrompt)) {
+    return isLynnReleaseAvailabilityPrompt(userPrompt)
+      ? buildLynnReleaseAvailabilityContext(userPrompt, opts)
+      : buildLynnReleaseContext(userPrompt);
+  }
   if (isJapanTouristVisaPrompt(userPrompt)) return buildJapanTouristVisaContext(userPrompt);
   if (isShenzhenSocialSecurityPolicyPrompt(userPrompt)) return buildShenzhenSocialSecurityPolicyContext(userPrompt);
   if (isChinaTaxDeductionPolicyPrompt(userPrompt)) return buildChinaTaxDeductionPolicyContext(userPrompt);

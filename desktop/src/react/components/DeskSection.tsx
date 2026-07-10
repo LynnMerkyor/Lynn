@@ -93,7 +93,7 @@ export function DeskSection() {
             onClick={() => { void handleRunPatrol(); }}
             disabled={patrolStatus?.state === 'running' || patrolBusy}
           >
-            {patrolStatus?.state === 'running' || patrolBusy ? tt('desk.patrolRunningShort', '同步中') : tt('desk.runPatrol', '同步')}
+            {patrolStatus?.state === 'running' || patrolBusy ? tt('desk.patrolRunningShort', '刷新中') : tt('desk.runPatrol', '刷新进展')}
           </button>
         </div>
         <div className={styles.workspaceRailTabs}>

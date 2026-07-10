@@ -1,4 +1,4 @@
-import type { SlashCommand } from '../InputArea';
+import type { SlashCommand } from './slash-commands';
 import { AtMentionMenu } from './AtMentionMenu';
 import { AttachedFilesBar } from './AttachedFilesBar';
 import { QuotedSelectionCard } from './QuotedSelectionCard';

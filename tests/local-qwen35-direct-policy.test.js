@@ -11,7 +11,7 @@ import {
 } from "../server/chat/local-qwen35-direct-policy.js";
 import { TOOL_USE_BEHAVIOR } from "../server/chat/tool-use-behavior.js";
 
-describe("local Qwen3.5 direct policy", () => {
+describe("local Qwen3.6 27B direct policy", () => {
   it("uses the direct bridge only for small local non-prefetch text requests", () => {
     expect(shouldUseLocalQwen35DirectBridge("hello", {
       isLocalModel: true,
@@ -27,6 +27,11 @@ describe("local Qwen3.5 direct policy", () => {
       isLocalModel: true,
       toolBehavior: TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN,
       routeIntent: "utility",
+    })).toBe(false);
+    expect(shouldUseLocalQwen35DirectBridge("修复这个 TypeScript 项目并运行测试", {
+      isLocalModel: true,
+      toolBehavior: TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN,
+      routeIntent: "coding",
     })).toBe(false);
   });
 
@@ -72,6 +77,7 @@ describe("local Qwen3.5 direct policy", () => {
   });
 
   it("keeps the local runtime opt-in and small-context by default", () => {
+    expect(LOCAL_QWEN35_RUNTIME_POLICY.role).toBe("explicit_opt_in_local_27b");
     expect(LOCAL_QWEN35_RUNTIME_POLICY.warmPoolDefault).toBe(false);
     expect(LOCAL_QWEN35_RUNTIME_POLICY.idleUnload).toBe(true);
     expect(LOCAL_QWEN35_RUNTIME_POLICY.kvCacheReuse).toBe(true);

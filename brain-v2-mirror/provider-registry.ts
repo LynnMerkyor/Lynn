@@ -52,6 +52,7 @@ const PROVIDER_DEFS = {
     cooldown_ms: 300_000,
     health_path: '/health',
     health_probe_ms: 2_500,
+    timeout_ms: positiveEnvNumber('APEX_SPARK_TIMEOUT_MS', 8_000),
     // 2026-05-25: 默认 thinking-off。短 max_tokens 工况下避免 35B 长思考
     // 把 reasoning_content 吃光、content 空、用户拿到空答案。client 通过 reasoning_effort
     // (非 'off' / 'none')显式 opt-in 才走 thinking-on。
@@ -87,7 +88,7 @@ const PROVIDER_DEFS = {
     default_thinking: true,
     default_reasoning_effort: 'low',
     max_tokens: 16_384,
-    timeout_ms: positiveEnvNumber('MIMO_TOKEN_PLAN_TIMEOUT_MS', 30_000),
+    timeout_ms: positiveEnvNumber('MIMO_TOKEN_PLAN_TIMEOUT_MS', 15_000),
     temperature: 0.2,
   },
   // [step-3.7-flash v1] StepFun 云 198B-MoE/11B-A(step_plan 端点)。
@@ -107,6 +108,7 @@ const PROVIDER_DEFS = {
     cooldown_ms: 60_000,
     default_thinking: false,
     default_reasoning_effort: 'low',
+    timeout_ms: positiveEnvNumber('STEP37_TIMEOUT_MS', 35_000),
     // 48K (was 32K): reasoning + answer + tool-call share this one output budget. At high
     // reasoning, hard tasks overflowed 32K mid-<think> → finish_reason=length → empty answer.
     max_tokens: 49_152,
@@ -123,6 +125,7 @@ const PROVIDER_DEFS = {
     wire: 'openai',
     cooldown_ms: 60_000,
     default_thinking: true,
+    timeout_ms: positiveEnvNumber('MIMO_MULTIMODAL_TIMEOUT_MS', 45_000),
     max_tokens: 8_192,
     temperature: 0.2,
   },
@@ -135,6 +138,7 @@ const PROVIDER_DEFS = {
     wire: 'openai',
     cooldown_ms: 60_000,
     default_thinking: true,
+    timeout_ms: positiveEnvNumber('DEEPSEEK_CHAT_TIMEOUT_MS', 25_000),
   },
   'deepseek-pro': {
     id: providerId('deepseek-pro'),
@@ -145,6 +149,7 @@ const PROVIDER_DEFS = {
     wire: 'openai',
     cooldown_ms: 60_000,
     default_thinking: true,
+    timeout_ms: positiveEnvNumber('DEEPSEEK_PRO_TIMEOUT_MS', 10_000),
   },
   'glm-5-turbo': {
     id: providerId('glm-5-turbo'),
@@ -155,6 +160,7 @@ const PROVIDER_DEFS = {
     wire: 'openai',
     cooldown_ms: 60_000,
     default_thinking: true,
+    timeout_ms: positiveEnvNumber('ZHIPU_CODING_TIMEOUT_MS', 12_000),
   },
   // [glm-coding v1] Year-paid coding plan endpoint, used as VERIFIER_PROVIDER (NOT in universalOrder)
   'glm-coding': {

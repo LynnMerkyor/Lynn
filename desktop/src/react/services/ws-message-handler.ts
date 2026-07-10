@@ -16,7 +16,7 @@ import { loadChannels as loadChannelsAction, openChannel as openChannelAction } 
 import { showError } from '../utils/ui-helpers';
 import { loadRenderMarkdown } from '../utils/markdown-loader';
 import { requestRuntimeSnapshotRefresh } from '../utils/runtime-snapshot';
-import { getWebSocket } from './websocket';
+import { getWebSocket } from './websocket-transport';
 import { setStreamingWakeLock, updateTaskWakeLockFromTask } from './wake-lock';
 import {
   replayStreamResume,
