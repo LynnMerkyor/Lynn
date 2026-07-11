@@ -132,9 +132,9 @@ async function emitLocalPromptAnswer(args: {
   prompt: string;
   saveSession: boolean;
   dataDir: string;
-  sessionPath: string;
+  sessionPath?: string | null;
   cwd: string;
-  title: string;
+  title?: string | null;
   json: boolean;
   meta: Record<string, unknown>;
   modelProvider: string;

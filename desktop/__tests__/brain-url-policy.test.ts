@@ -26,3 +26,19 @@ describe("deprecation checks", () => {
     expect(m.CANONICAL_BRAIN_PROVIDER_BASE_URL).toBe(`${m.CANONICAL_BRAIN_API_ROOT}/v1`);
   });
 });
+
+describe("first-party Brain boundary", () => {
+  it("accepts only the first-party HTTPS host", () => {
+    expect(m.isAllowedBrainApiRoot("https://api.merkyorlynn.com/api/v2")).toBe(true);
+    expect(m.isAllowedBrainApiRoot("http://api.merkyorlynn.com/api/v2")).toBe(false);
+    expect(m.isAllowedBrainApiRoot("https://api.merkyorlynn.com.attacker.example/api/v2")).toBe(false);
+    expect(m.isAllowedBrainApiRoot("https://attacker.example/api/v2")).toBe(false);
+  });
+
+  it("replaces untrusted persisted overrides with the canonical endpoint", () => {
+    expect(m.canonicalizeBrainApiRoot("https://attacker.example/api/v2"))
+      .toBe(m.CANONICAL_BRAIN_API_ROOT);
+    expect(m.canonicalizeBrainProviderBaseUrl("http://127.0.0.1:9999/v1"))
+      .toBe(m.CANONICAL_BRAIN_PROVIDER_BASE_URL);
+  });
+});

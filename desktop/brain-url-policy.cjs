@@ -29,6 +29,33 @@ function isDeprecatedBrainProviderBaseUrl(value) {
   return normalized ? DEPRECATED_BRAIN_PROVIDER_BASE_URLS.has(normalized) : false;
 }
 
+function isAllowedBrainApiRoot(value) {
+  const normalized = normalizeBrainUrl(value);
+  if (!normalized) return false;
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== "https:") return false;
+    return parsed.hostname === "api.merkyorlynn.com";
+  } catch {
+    return false;
+  }
+}
+
+function canonicalizeBrainApiRoot(value) {
+  return isAllowedBrainApiRoot(value) ? normalizeBrainUrl(value) : CANONICAL_BRAIN_API_ROOT;
+}
+
+function canonicalizeBrainProviderBaseUrl(value) {
+  const normalized = normalizeBrainUrl(value);
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol === "https:" && parsed.hostname === "api.merkyorlynn.com") {
+      return normalized;
+    }
+  } catch {}
+  return CANONICAL_BRAIN_PROVIDER_BASE_URL;
+}
+
 module.exports = {
   CANONICAL_BRAIN_API_ROOT,
   CANONICAL_BRAIN_PROVIDER_BASE_URL,
@@ -37,4 +64,7 @@ module.exports = {
   normalizeBrainUrl,
   isDeprecatedBrainApiRoot,
   isDeprecatedBrainProviderBaseUrl,
+  isAllowedBrainApiRoot,
+  canonicalizeBrainApiRoot,
+  canonicalizeBrainProviderBaseUrl,
 };

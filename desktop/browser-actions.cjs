@@ -40,7 +40,7 @@ async function runBrowserAction(cmd, params, deps) {
 
   switch (cmd) {
     case "navigate": {
-      if (!isAllowedBrowserUrl(params.url)) {
+      if (!(await isAllowedBrowserUrl(params.url))) {
         throw new Error("Only http/https URLs are allowed");
       }
       const wc = wcOrThrow();
@@ -157,16 +157,17 @@ async function runBrowserAction(cmd, params, deps) {
     // 2026-05-25 P1-3 security: 4000-char cap + full-expression audit log +
     // optional LYNN_BROWSER_EVAL_DENY_SENSITIVE storage-exfil block.
     case "evaluate": {
+      if (env.LYNN_BROWSER_ALLOW_EVALUATE !== "1") {
+        throw new Error("browser:evaluate is disabled by default; use click/type/select actions instead");
+      }
       if (!params.expression || params.expression.length > 4000) {
         throw new Error("Expression too long (max 4000 chars; was 10000 — tightened 2026-05-25 P1-3 security)");
       }
-      console.log(`[browser:evaluate audit][${new Date().toISOString()}][len=${params.expression.length}] ${params.expression}`);
-      if (env.LYNN_BROWSER_EVAL_DENY_SENSITIVE === "1") {
-        const sensitivePatterns = /\b(document\.cookie|localStorage|sessionStorage|indexedDB|document\.domain|navigator\.credentials)\b/i;
-        if (sensitivePatterns.test(params.expression)) {
-          throw new Error("browser:evaluate denied — expression accesses sensitive storage (LYNN_BROWSER_EVAL_DENY_SENSITIVE=1)");
-        }
+      const sensitivePatterns = /\b(document\s*(?:\.cookie|\[\s*['"]cookie['"]\s*\])|(?:window\s*\.\s*)?(?:localStorage|sessionStorage|indexedDB)|document\.domain|navigator\.credentials)\b/i;
+      if (sensitivePatterns.test(params.expression)) {
+        throw new Error("browser:evaluate denied — expression accesses sensitive browser storage");
       }
+      console.log(`[browser:evaluate audit][${new Date().toISOString()}][len=${params.expression.length}] ${params.expression}`);
       const wc = wcOrThrow();
       const result = await wc.executeJavaScript(params.expression);
       const serialized = typeof result === "string" ? result : JSON.stringify(result, null, 2);

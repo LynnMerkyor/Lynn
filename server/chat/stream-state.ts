@@ -31,11 +31,12 @@ export interface PrepareChatTurnStateOptions {
   persistedAssistantMessageBaseline?: number;
 }
 
-const MAX_SESSION_STATES = 20;
+const MAX_SESSION_STATES = Math.max(20, Number(process.env.LYNN_MAX_SESSION_STREAM_STATES || 100));
+const INACTIVE_SESSION_STATE_TTL_MS = Math.max(300_000, Number(process.env.LYNN_SESSION_STREAM_STATE_TTL_MS || 1_800_000));
 const STALE_EMPTY_STREAM_MS = Number(process.env.LYNN_STALE_EMPTY_STREAM_MS || 90_000);
 const STALE_THINKING_STREAM_MS = Number(process.env.LYNN_STALE_THINKING_STREAM_MS || 120_000);
 
-export function createSessionStateStore(): SessionStateStore {
+export function createSessionStateStore({ maxSessionStates = MAX_SESSION_STATES }: { maxSessionStates?: number } = {}): SessionStateStore {
   const sessionState = new Map<string, SessionLike>();
   let accessSeq = 0;
 
@@ -68,7 +69,7 @@ export function createSessionStateStore(): SessionStateStore {
   function getState(sessionPath: string): SessionLike | null {
     if (!sessionPath) return null;
     if (!sessionState.has(sessionPath)) {
-      if (sessionState.size >= MAX_SESSION_STATES) {
+      if (sessionState.size >= maxSessionStates) {
         evictLeastRecentlyUsed(sessionPath);
       }
       sessionState.set(sessionPath, createChatTurnState() as SessionLike);
@@ -89,7 +90,7 @@ export function createSessionStateStore(): SessionStateStore {
   const _sessionEvictTimer = setInterval(() => {
     const now = Date.now();
     for (const [sp, ss] of sessionState) {
-      if (!ss.isStreaming && now - (ss.lastActivity || 0) > 300_000) {
+      if (!ss.isStreaming && now - (ss.lastActivity || 0) > INACTIVE_SESSION_STATE_TTL_MS) {
         sessionState.delete(sp);
       }
     }
@@ -230,12 +231,6 @@ export function prepareChatTurnState(ss: SessionLike, options: PrepareChatTurnSt
   ss.originalPromptText = options.promptText;
   ss.effectivePromptText = options.promptText;
   ss.pendingToolRetryAttempted = false;
-  ss.internalRetryCounts = {};
-  ss.internalRetryPending = false;
-  ss.internalRetryInFlight = false;
-  ss.internalRetryReason = "";
-  ss.internalRetryOriginalVisibleLen = 0;
-  ss.internalRetryHadVisibleBeforeReset = false;
   ss.toolFailedFallbackRetryAttempted = false;
   ss.toolFinalizationRetryAttempted = false;
   ss.persistedAssistantTextBaseline = Math.max(0, Number(options.persistedAssistantTextBaseline || 0));
@@ -264,11 +259,6 @@ export function resetCompletedTurnState(ss: SessionLike): void {
   ss.progressMarkerCount = 0;
   ss._turnEndDeferred = false;
   ss._turnClosed = false;
-  ss.internalRetryPending = false;
-  ss.internalRetryInFlight = false;
-  ss.internalRetryReason = "";
-  ss.internalRetryOriginalVisibleLen = 0;
-  ss.internalRetryHadVisibleBeforeReset = false;
   ss.hasOutput = false;
   resetToolEvidenceState(ss);
   ss.hasThinking = false;
@@ -285,7 +275,6 @@ export function resetCompletedTurnState(ss: SessionLike): void {
   ss.pseudoToolXmlBlock = null;
   ss.autoReviewStarted = false;
   ss.pendingToolRetryAttempted = false;
-  ss.internalRetryCounts = {};
   ss.toolFinalizationRetryAttempted = false;
   ss.toolFailedFallbackRetryAttempted = false;
   ss.persistedAssistantTextBaseline = 0;

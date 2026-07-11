@@ -28,6 +28,8 @@ function createDesktopAccessPolicy({
     normalizeBrainUrl,
     isDeprecatedBrainApiRoot,
     isDeprecatedBrainProviderBaseUrl,
+    canonicalizeBrainApiRoot,
+    canonicalizeBrainProviderBaseUrl,
   } = brainUrlPolicy;
 
   const fileAccessGrants = new Map();
@@ -50,9 +52,11 @@ function createDesktopAccessPolicy({
       const data = yaml.load(raw) || {};
       const brainProvider = data?.providers?.brain;
       if (!brainProvider || typeof brainProvider !== "object") return false;
-      if (!isDeprecatedBrainProviderBaseUrl(brainProvider.base_url)) return false;
-      brainProvider.base_url = CANONICAL_BRAIN_PROVIDER_BASE_URL;
-      fs.writeFileSync(providersPath, yaml.dump(data, { lineWidth: 120 }), "utf-8");
+      const canonical = canonicalizeBrainProviderBaseUrl(brainProvider.base_url);
+      if (normalizeBrainUrl(brainProvider.base_url) === canonical) return false;
+      brainProvider.base_url = canonical;
+      fs.writeFileSync(providersPath, yaml.dump(data, { lineWidth: 120 }), { encoding: "utf-8", mode: 0o600 });
+      fs.chmodSync(providersPath, 0o600);
       return true;
     } catch {
       return false;
@@ -79,10 +83,10 @@ function createDesktopAccessPolicy({
 
     const normalize = normalizeBrainUrl;
     let persistedApiRoot = normalize(prefs.brain_api_root || prefs.default_model_api_root);
-    if (isDeprecatedBrainApiRoot(persistedApiRoot)) {
+    if (persistedApiRoot && canonicalizeBrainApiRoot(persistedApiRoot) !== persistedApiRoot) {
       persistedApiRoot = CANONICAL_BRAIN_API_ROOT;
       prefs.brain_api_root = CANONICAL_BRAIN_API_ROOT;
-      if (isDeprecatedBrainApiRoot(prefs.default_model_api_root)) {
+      if (prefs.default_model_api_root) {
         prefs.default_model_api_root = CANONICAL_BRAIN_API_ROOT;
       }
       changedPrefs = true;
@@ -102,9 +106,9 @@ function createDesktopAccessPolicy({
     if (changedPrefs) writeUserPreferences(prefs);
     return {
       apiRoot: derivedApiRoot,
-      host: normalize(prefs.brain_api_host || prefs.default_model_api_host),
-      legacyApiRoot: normalize(prefs.brain_legacy_api_root),
-      legacyHost: normalize(prefs.brain_legacy_host),
+      host: "",
+      legacyApiRoot: "",
+      legacyHost: "",
     };
   }
 

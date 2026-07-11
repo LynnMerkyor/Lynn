@@ -3,7 +3,7 @@ const os = require("os");
 const path = require("path");
 const { SNAPSHOT_SCRIPT } = require("./browser-snapshot.cjs");
 const { runBrowserAction } = require("./browser-actions.cjs");
-const { isAllowedBrowserUrl } = require("./browser-url-guard.cjs");
+const { isAllowedBrowserUrl, isAllowedBrowserUrlResolved } = require("./browser-url-guard.cjs");
 
 function createBrowserAgentController(deps) {
   const {
@@ -28,6 +28,7 @@ function createBrowserAgentController(deps) {
   let currentBrowserSession = null;
   let browserViewerTheme = "warm-paper";
   let commandSocket = null;
+  const guardedBrowserSessions = new WeakSet();
 
   const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -214,6 +215,17 @@ function createBrowserAgentController(deps) {
       case "launch": {
         if (browserWebView) return {};
         const ses = session.fromPartition("persist:hana-browser");
+        if (!guardedBrowserSessions.has(ses)) {
+          ses.webRequest.onBeforeRequest(
+            { urls: ["http://*/*", "https://*/*"] },
+            (details, callback) => {
+              void isAllowedBrowserUrlResolved(details.url, process.env)
+                .then((allowed) => callback({ cancel: !allowed }))
+                .catch(() => callback({ cancel: true }));
+            },
+          );
+          guardedBrowserSessions.add(ses);
+        }
         const view = new WebContentsView({
           webPreferences: {
             session: ses,
@@ -226,7 +238,9 @@ function createBrowserAgentController(deps) {
         view.webContents.on("did-navigate", (_event, url) => notifyViewerUrl(url));
         view.webContents.on("did-navigate-in-page", (_event, url) => notifyViewerUrl(url));
         view.webContents.setWindowOpenHandler(({ url }) => {
-          if (isAllowedBrowserUrl(url)) view.webContents.loadURL(url);
+          void isAllowedBrowserUrlResolved(url, process.env).then((allowed) => {
+            if (allowed && !view.webContents.isDestroyed()) void view.webContents.loadURL(url);
+          });
           return { action: "deny" };
         });
         view.webContents.on("page-title-updated", () => {
@@ -329,7 +343,7 @@ function createBrowserAgentController(deps) {
         return runBrowserAction(cmd, params, {
           getWebContents: () => (browserWebView ? browserWebView.webContents : null),
           snapshotScript: SNAPSHOT_SCRIPT,
-          isAllowedBrowserUrl,
+          isAllowedBrowserUrl: (url) => isAllowedBrowserUrlResolved(url, process.env),
           delay,
           env: process.env,
         });

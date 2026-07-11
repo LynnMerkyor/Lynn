@@ -699,7 +699,13 @@ export async function fetchSportsScoreboardEvidence(query: unknown): Promise<Spo
   const league = resolveSportsLeague(text);
   if (!league) return null;
   const range = resolveSportsDateRange(text, league);
-  const source = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard?limit=950&dates=${range.start}-${range.end}`;
+  // ESPN groups soccer events by its source date rather than Beijing date. A
+  // 05:00 Beijing kickoff can therefore live under the previous UTC/source
+  // day. Fetch one extra day on each side, then keep the existing Beijing
+  // filter authoritative for the answer window.
+  const fetchStart = ymdCompact(addDaysYmd(compactToYmd(range.start), -1));
+  const fetchEnd = ymdCompact(addDaysYmd(compactToYmd(range.end), 1));
+  const source = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard?limit=950&dates=${fetchStart}-${fetchEnd}`;
   try {
     const data = await fetchEspnScoreboardJson(source);
     const events = looseRecordArray(data.events);

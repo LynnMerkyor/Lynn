@@ -20,6 +20,7 @@ import {
 import { attachLocalQwen35BenchContext, isLocalQwen35Model } from "./local-qwen35-bench-context.js";
 import { buildPrefetchToolSummary, rememberFailedTool, rememberSuccessfulTool } from "./tool-summary.js";
 import { buildDirectResearchAnswer, buildReportResearchContext } from "./report-research-context.js";
+import { buildRepeatedErrorLoopAnswer, detectRepeatedErrorLoop } from "./repeated-error-loop.js";
 import { consumeMutationConfirmation, recordPendingDeleteRequest } from "./turn-retry-policy.js";
 import { buildLocalOfficeDirectAnswer } from "./local-office-answer.js";
 import {
@@ -211,6 +212,22 @@ export function createPromptTurnRunner({
         streamToken,
       });
       const currentModelInfo: AnyRecord = resolveCurrentModelInfo(engine) as AnyRecord;
+      const repeatedErrorAnswer = !rehydratedMutation
+        ? buildRepeatedErrorLoopAnswer(detectRepeatedErrorLoop(
+          activeSession?.sessionManager?.buildSessionContext?.().messages || [],
+          promptText,
+        ))
+        : "";
+      if (repeatedErrorAnswer) {
+        closeStreamWithVisibleFallback(
+          promptSessionPath,
+          ss,
+          repeatedErrorAnswer,
+          "repeated_error_loop_detected",
+          { trustedFallback: true, persistPromptIfMissing: true },
+        );
+        return;
+      }
       const initialToolUse = resolveInitialToolUseBehavior(promptText, { modelInfo: currentModelInfo });
       const budgetContext = initialToolUse.budgetContext || "";
       let effectivePromptText = initialToolUse.effectivePromptText || promptText;
@@ -223,7 +240,7 @@ export function createPromptTurnRunner({
           ss,
           immediateLocalOfficeAnswer,
           "local_office_direct_answer",
-          { trustedFallback: true },
+          { trustedFallback: true, persistPromptIfMissing: true },
         );
         return;
       }
@@ -257,7 +274,7 @@ export function createPromptTurnRunner({
               ss,
               directReply.text,
               "local_workspace_direct_reply",
-              { trustedFallback: true },
+              { trustedFallback: true, persistPromptIfMissing: true },
             );
             return;
           }
@@ -367,7 +384,7 @@ export function createPromptTurnRunner({
                 ss,
                 directAnswer,
                 "local_realtime_prefetch_direct_answer",
-                { trustedFallback: true },
+                { trustedFallback: true, persistPromptIfMissing: true },
               );
               return;
             }

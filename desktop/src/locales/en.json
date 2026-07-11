@@ -125,6 +125,7 @@
     "jian": "Work map",
     "bridge": "Social Platforms",
     "toggle": "Sidebar",
+    "progress": "Conversation progress",
     "bridgeShort": "Bridge",
     "capability": {
       "web": "web search",
@@ -206,6 +207,7 @@
     "more": "More",
     "empty": "Empty",
     "edit": "Edit",
+    "close": "Close",
     "delete": "Delete",
     "editResend": "Edit & resend",
     "editResendTitle": "Edit & resend (copies this message to the input; press Enter to resend after fixing)"
@@ -269,6 +271,17 @@
     "loading": "Loading...",
     "reconnecting": "Reconnecting",
     "reconnect": "Reconnect",
+    "rendererRecovered": "The interface recovered automatically after an unexpected restart. Your conversation and background tasks are still available.",
+    "model": {
+      "localRunning": "Local Qwen3.6-27B is running",
+      "localLoading": "Local Qwen3.6-27B is loading",
+      "localSelected": "Local Qwen3.6-27B selected · model not started",
+      "currentSpeed": "current {speed}",
+      "totalTokens": "service processed {tokens} tokens",
+      "ready": "{kind} {model} · ready",
+      "default": "{kind} default model · registered",
+      "defaultName": "default model"
+    },
     "usage": {
       "cache": "cache",
       "tip": "Cumulative cloud token spend for this session (incl. prefix-cache hits and cost estimate)"
@@ -1448,6 +1461,7 @@
   },
   "activity": {
     "title": "Activity",
+    "fleet": "Agent workers",
     "empty": "No activity yet. Patrol runs and scheduled tasks will appear here.",
     "back": "Back",
     "openRecoveredTasks": "Open background tasks",
@@ -1605,6 +1619,8 @@
     "selectChat": "Select a conversation",
     "noSessions": "No conversations yet",
     "noMessages": "No messages yet",
+    "user": "You",
+    "agent": "Agent",
     "empty": "No messages",
     "notConfigured": "{platform} not configured",
     "goToSettings": "Go to Settings",
@@ -2338,7 +2354,10 @@
       "start": "Realtime voice",
       "endTurn": "Finish turn",
       "interruptListen": "Talk over",
-      "interrupt": "Stop"
+      "interrupt": "Stop",
+      "working": "Working",
+      "stopTitle": "Stop the current playback or response",
+      "close": "Close Lynn voice assistant"
     },
     "state": {
       "idle": "Tap once for continuous voice",
@@ -2352,6 +2371,12 @@
       "listening": "Listening now. In noisy rooms, tap Finish turn after speaking.",
       "thinking": "Preparing the answer; playback starts automatically.",
       "speaking": "Playing the answer. Lynn resumes listening after playback; use Talk over to interrupt."
+    },
+    "stats": {
+      "label": "Voice connection statistics",
+      "rtt": "RTT",
+      "upload": "Up",
+      "download": "Down"
     }
   }
 }

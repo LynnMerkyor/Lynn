@@ -20,6 +20,16 @@ import { nowIso, writeJsonLine } from "../jsonl.js";
 import { readEnvProviderProfile, resolveCliProviderProfile } from "../provider-profile.js";
 import { resolveEffectivePermissions, type PermissionProfile } from "../permissions.js";
 import { resolveDefaultBrainUrl } from "../brain-url.js";
+import {
+  buildDefaultAgentInvocation,
+  type ExternalAgentInvocation,
+} from "./worker-agent-invocation.js";
+export {
+  buildDefaultAgentCommand,
+  buildDefaultAgentInvocation,
+  buildWorkerPrompt,
+  type ExternalAgentInvocation,
+} from "./worker-agent-invocation.js";
 export { extractGroundingBoxes } from "../vision-result.js";
 import { extractGroundingBoxes } from "../vision-result.js";
 
@@ -109,104 +119,18 @@ function emit(event: FleetWorkerEvent): void {
   if (!validation.ok) {
     throw new Error(validation.errors.join("; "));
   }
-  writeJsonLine(enriched);
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
-
-const WORKER_GUARDRAIL = [
-  "You are running as a Lynn Fleet worker.",
-  "Follow the task brief exactly and keep all edits inside the assigned worktree and owned files.",
-  "Some Fleet briefs are answer-only smoke or coordination tasks. If the brief explicitly says not to inspect files, not to run tools, or to reply/output exactly, answer directly and finish without repository exploration.",
-  "Do not download model weights, BF16/GGUF files, datasets, training packages, or large binary artifacts to this Mac.",
-  "Report progress concisely; Lynn will inspect git diff, tests, and scope after you finish.",
-].join("\n");
-
-export function buildWorkerPrompt(taskText: string): string {
-  return `${WORKER_GUARDRAIL}\n\n${taskText}`;
-}
-
-export function buildDefaultAgentCommand(agent: string, briefPath: string, worktree: string, taskText: string): string | null {
-  const prompt = buildWorkerPrompt(taskText);
-  switch (agent) {
-    case "claude-internal":
-      return [
-        "claude-internal",
-        "-p",
-        "--add-dir",
-        shellQuote(worktree),
-        "--output-format stream-json",
-        "--include-partial-messages",
-        "--permission-mode bypassPermissions",
-        shellQuote(prompt),
-      ].join(" ");
-    case "claude-code":
-      return [
-        "claude",
-        "-p",
-        "--add-dir",
-        shellQuote(worktree),
-        "--output-format stream-json",
-        "--verbose",
-        "--include-partial-messages",
-        "--dangerously-skip-permissions",
-        shellQuote(prompt),
-      ].join(" ");
-    case "codex-cli":
-      return [
-        "codex exec",
-        "--cd",
-        shellQuote(worktree),
-        "--json",
-        "--dangerously-bypass-approvals-and-sandbox",
-        shellQuote(prompt),
-      ].join(" ");
-    case "opencode":
-    case "opencode-cli":
-    case "open-code":
-      return `opencode run --format json --cwd ${shellQuote(worktree)} ${shellQuote(prompt)}`;
-    case "qwen-cli":
-      return [
-        "qwen",
-        "-p",
-        shellQuote(prompt),
-        "--add-dir",
-        shellQuote(worktree),
-        "--output-format stream-json",
-        "--include-partial-messages",
-        "--approval-mode yolo",
-        "--yolo",
-      ].join(" ");
-    case "kimi-cli":
-      return [
-        "kimi",
-        "--work-dir",
-        shellQuote(worktree),
-        "--print",
-        "--output-format stream-json",
-        "--yolo",
-        "--afk",
-        "-p",
-        shellQuote(prompt),
-      ].join(" ");
-    case "codebuddy":
-      return [
-        "codebuddy",
-        "-p",
-        "--output-format stream-json",
-        "--include-partial-messages",
-        "--add-dir",
-        shellQuote(worktree),
-        "--permission-mode bypassPermissions",
-        "-y",
-        shellQuote(prompt),
-      ].join(" ");
-    default:
-      return null;
+  if (workerOutputMode === "jsonl") {
+    writeJsonLine(enriched);
+    return;
+  }
+  const record = enriched as unknown as Record<string, unknown>;
+  if (["worker.started", "worker.progress", "worker.finished", "worker.error", "test.finished", "gate.finished"].includes(enriched.type)) {
+    const message = String(record.message || record.summary || record.status || enriched.type);
+    process.stdout.write(`[${enriched.type}] ${message}\n`);
   }
 }
+
+let workerOutputMode: "jsonl" | "plain" = "jsonl";
 
 function mergeEventDefaults(event: FleetWorkerEvent, workerId: string, agent: string): FleetWorkerEvent {
   return { workerId, agent, ...event } as FleetWorkerEvent;
@@ -394,12 +318,26 @@ function redactSecrets(text: string): string {
 
 async function runExternalWorker(input: {
   command: string;
+  invocation?: ExternalAgentInvocation | null;
   worktree: string;
   workerId: string;
   agent: string;
 }): Promise<number> {
   emit({ type: "shell.started", workerId: input.workerId, agent: input.agent, command: input.command, approval: "auto" });
-  const child = spawn(input.command, {
+  const child = input.invocation
+    ? spawn(input.invocation.command, input.invocation.args, {
+      cwd: input.worktree,
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      env: {
+        ...process.env,
+        LYNN_WORKER_ID: input.workerId,
+        LYNN_WORKER_AGENT: input.agent,
+        LYNN_NO_MODEL_DOWNLOADS: "1",
+      },
+    })
+    : spawn(input.command, {
     cwd: input.worktree,
     shell: true,
     stdio: ["ignore", "pipe", "pipe"],
@@ -410,7 +348,7 @@ async function runExternalWorker(input: {
       LYNN_WORKER_AGENT: input.agent,
       LYNN_NO_MODEL_DOWNLOADS: "1",
     },
-  });
+    });
 
   const started = Date.now();
   const handleLine = (line: string, stream: "stdout" | "stderr"): void => {
@@ -757,6 +695,7 @@ function usageWithDuration(usage: unknown, durationMs: number): unknown {
 }
 
 export async function runWorker(args: ParsedArgs): Promise<number> {
+  workerOutputMode = hasFlag(args.flags, "plain") ? "plain" : "jsonl";
   const subcommand = args.positionals[0] || "";
   if (subcommand && subcommand !== "run") {
     throw new Error(`unsupported worker command: ${subcommand}`);
@@ -790,7 +729,10 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
   emit({ type: "worker.progress", workerId, agent, message: mock ? `Mock worker loaded: ${brief.title}` : `Worker loaded: ${brief.title}` });
 
   const explicitAgentCommand = getStringFlag(args.flags, "agent-command");
-  const externalCommand = explicitAgentCommand || buildDefaultAgentCommand(agent, path.resolve(briefPath), path.resolve(worktree), markdown);
+  const defaultInvocation = explicitAgentCommand
+    ? null
+    : buildDefaultAgentInvocation(agent, path.resolve(briefPath), path.resolve(worktree), markdown);
+  const externalCommand = explicitAgentCommand || defaultInvocation?.display || null;
   if (!mock && isBuiltInLynnWorker(agent)) {
     const exitCode = isVisionTask(brief.taskType)
       ? await runLynnVisionWorker({ args, brief, worktree, workerId, agent, permissions })
@@ -806,7 +748,7 @@ export async function runWorker(args: ParsedArgs): Promise<number> {
       emitExternalWorkerPermissionError(workerId, agent, permissions);
       return 2;
     }
-    const exitCode = await runExternalWorker({ command: externalCommand, worktree, workerId, agent });
+    const exitCode = await runExternalWorker({ command: externalCommand, invocation: defaultInvocation, worktree, workerId, agent });
     const scopeOk = await emitGitDiff(workerId, agent, worktree, brief, diffBaseline);
     const testsOk = await runBriefTests(workerId, agent, worktree, brief.tests);
     const finalExit = exitCode === 0 && scopeOk && testsOk ? 0 : 1;

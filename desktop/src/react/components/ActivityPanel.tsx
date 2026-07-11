@@ -8,6 +8,8 @@ import { sanitizeHtml } from '../utils/sanitize';
 import { stripPseudoToolCallMarkup } from '../../../../shared/pseudo-tool-call.js';
 import fp from './FloatingPanels.module.css';
 import chatStyles from './chat/Chat.module.css';
+import { WorkerCard } from './fleet/WorkerCard';
+import fleetStyles from './fleet/Fleet.module.css';
 
 // ── 稳定头像时间戳（避免每次渲染生成新 URL） ──
 const _avatarTs = Date.now();
@@ -45,6 +47,8 @@ export function ActivityPanel() {
   const currentAgentId = useStore(s => s.currentAgentId);
   const agentName = useStore(s => s.agentName);
   const setActivities = useStore(s => s.setActivities);
+  const fleetWorkers = useStore(s => s.fleetWorkers);
+  const removeWorker = useStore(s => s.removeWorker);
 
   const [detail, setDetail] = useState<DetailState | null>(null);
   const [hbEnabled, setHbEnabled] = useState(true);
@@ -139,7 +143,7 @@ export function ActivityPanel() {
                 </svg>
               </button>
               <DetailHeader detail={detail} />
-              <button className={fp.floatingPanelClose} onClick={close}>
+              <button className={fp.floatingPanelClose} onClick={close} aria-label={translate('common.close')}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
@@ -180,7 +184,7 @@ export function ActivityPanel() {
                   <line x1="16" y1="17" x2="8" y2="17" />
                 </svg>
               </button>
-              <button className={fp.floatingPanelClose} onClick={close}>
+              <button className={fp.floatingPanelClose} onClick={close} aria-label={translate('common.close')}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
@@ -188,6 +192,18 @@ export function ActivityPanel() {
               </button>
             </div>
             <div className={fp.floatingPanelBody}>
+              {fleetWorkers.length > 0 && (
+                <section style={{ padding: '10px 12px', borderBottom: '1px solid var(--overlay-light, rgba(0,0,0,0.06))' }} aria-label={translate('activity.fleet')}>
+                  <div style={{ fontWeight: 650, fontSize: '0.78rem', marginBottom: 8 }}>
+                    {translate('activity.fleet')} ({fleetWorkers.length})
+                  </div>
+                  <div className={fleetStyles.fleetBoard}>
+                    {fleetWorkers.map(worker => (
+                      <WorkerCard key={worker.workerId} worker={worker} onDismiss={removeWorker} />
+                    ))}
+                  </div>
+                </section>
+              )}
               {auditLog !== null && (
                 <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--overlay-light, rgba(0,0,0,0.06))', maxHeight: 240, overflowY: 'auto', fontSize: '0.75rem' }}>
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('activity.auditLog') || '审计日志'} ({auditLog.length})</div>

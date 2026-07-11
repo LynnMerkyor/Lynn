@@ -383,9 +383,31 @@ describe("report research context intent", () => {
     ].join("\n");
 
     const answer = buildDirectResearchAnswer("sports", context, "今年 NBA 马刺夺冠了吗，还是尼克斯？");
-    expect(answer).toContain("没有匹配到 NBA");
+    expect(answer).toContain("未返回 NBA");
+    expect(answer).toContain("不等于赛事数量为 0");
     expect(answer).toContain("不能从这条直接数据源确认冠军归属");
     expect(answer).toContain("不会用猜测补答案");
+  });
+
+  it("does not invent a score prediction when the scoreboard has no fixtures", () => {
+    const context = [
+      "【体育比分工具资料】",
+      "",
+      "体育查询结果 (ESPN scoreboard)",
+      "provider: espn_scoreboard",
+      "league: FIFA World Cup",
+      "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260711-20260714",
+      "dateRange: 20260712-20260713",
+      "时间口径: 北京时间",
+      "matched: 0",
+    ].join("\n");
+
+    const answer = buildDirectResearchAnswer("sports", context, "你能预测今晚世界杯比分吗？请说明这是预测不是事实");
+    expect(answer).toContain("未返回 FIFA World Cup");
+    expect(answer).toContain("没有依据");
+    expect(answer).toContain("具体对阵");
+    expect(answer).toContain("预测都只是赛前判断，不是事实");
+    expect(answer).not.toMatch(/比分(?:预测)?[：:]\s*\d/);
   });
 
   it("defers World Cup direct-source failures instead of closing with a source-failure answer", () => {

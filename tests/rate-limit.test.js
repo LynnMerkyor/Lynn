@@ -31,12 +31,20 @@ describe("token bucket rate limiter", () => {
     expect(check(subject)).toBe(true);
   });
 
-  it("returns false for non-object subjects", () => {
+  it("accepts stable primitive keys but rejects missing/boolean subjects", () => {
     const check = createTokenBucketRateLimiter();
     expect(check(null)).toBe(false);
     expect(check(undefined)).toBe(false);
-    expect(check("string")).toBe(false);
-    expect(check(42)).toBe(false);
+    expect(check(false)).toBe(false);
+    expect(check("session-a")).toBe(true);
+    expect(check(42)).toBe(true);
+  });
+
+  it("does not reset a session bucket when the transport reconnects", () => {
+    const check = createTokenBucketRateLimiter({ capacity: 1 });
+    expect(check("/sessions/a.jsonl")).toBe(true);
+    expect(check("/sessions/a.jsonl")).toBe(false);
+    expect(check("/sessions/b.jsonl")).toBe(true);
   });
 
   it("tracks independent buckets per subject", () => {

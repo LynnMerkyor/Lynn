@@ -39,8 +39,6 @@ describe("chat turn state boundaries", () => {
     ss.recoveredArtifactKeys.add("old-artifact");
     ss.sanitizerCarry = "stale partial tag";
     ss.visibleTextAcc = "previous answer";
-    ss.internalRetryCounts = { empty: 2 };
-    ss.internalRetryPending = true;
     ss.rehydratedThisTurn = true;
     ss.postRehydrateEscalationAttempted = true;
     ss._rehydratedEffectivePrompt = "old retry prompt";
@@ -79,8 +77,6 @@ describe("chat turn state boundaries", () => {
     expect(ss.recoveredArtifactKeys.size).toBe(0);
     expect(ss.sanitizerCarry).toBe("");
     expect(ss.visibleTextAcc).toBe("");
-    expect(ss.internalRetryCounts).toEqual({});
-    expect(ss.internalRetryPending).toBe(false);
     expect(ss.rehydratedThisTurn).toBe(false);
     expect(ss.postRehydrateEscalationAttempted).toBe(false);
     expect(ss._rehydratedEffectivePrompt).toBeNull();

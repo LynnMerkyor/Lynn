@@ -15,8 +15,10 @@ import type { ChatListItem } from '../../stores/chat-types';
 import { findLastAssistantMessageId } from '../../utils/chat-list';
 import styles from './Chat.module.css';
 import { isInternalRecoveryPromptText } from '../../../../../shared/internal-control-message.js';
+import { useI18n } from '../../hooks/use-i18n';
 
 const MAX_ALIVE = 5;
+const HEAVY_HISTORY_ITEM_THRESHOLD = 800;
 
 // ── 入口 ──
 
@@ -55,6 +57,7 @@ export function ChatArea() {
 // ── BridgeChatView: display bridge session messages ──
 
 function BridgeChatView() {
+  const { t } = useI18n();
   const messages = useStore(s => s.activeBridgeMessages);
   const sessionKey = useStore(s => s.activeBridgeSessionKey);
   const ref = useRef<HTMLDivElement>(null);
@@ -70,7 +73,7 @@ function BridgeChatView() {
       <div className={styles.sessionMessages}>
         {messages.length === 0 && (
           <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            No messages yet
+            {t('bridge.noMessages')}
           </div>
         )}
         {messages.map((msg, i) => (
@@ -81,7 +84,7 @@ function BridgeChatView() {
               marginBottom: 2,
               fontWeight: 600,
             }}>
-              {msg.role === 'user' ? 'User' : 'Agent'}
+              {msg.role === 'user' ? t('bridge.user') : t('bridge.agent')}
               {msg.ts ? ` · ${new Date(msg.ts).toLocaleTimeString()}` : ''}
             </div>
             <div style={{ fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
@@ -103,6 +106,14 @@ function PanelHost() {
   const chatSessions = useStore(s => s.chatSessions);
   const welcomeVisible = useStore(s => s.welcomeVisible);
   const [alive, setAlive] = useState<string[]>([]);
+  const maxAlive = useMemo(() => {
+    const totalItems = Object.values(chatSessions).reduce((sum, session) => sum + session.items.length, 0);
+    return totalItems >= HEAVY_HISTORY_ITEM_THRESHOLD ? 2 : MAX_ALIVE;
+  }, [chatSessions]);
+
+  useEffect(() => {
+    setAlive(previous => previous.length <= maxAlive ? previous : previous.slice(-maxAlive));
+  }, [maxAlive]);
 
   // 加入 alive 列表（不重排已有位置，避免 React 移动 DOM 节点导致 scrollTop 丢失）
   useEffect(() => {
@@ -110,7 +121,7 @@ function PanelHost() {
     if (!chatSessions[currentPath] || chatSessions[currentPath].items.length === 0) return;
     setAlive(prev => {
       if (prev.includes(currentPath)) return prev; // 已存在，不动
-      if (prev.length >= MAX_ALIVE) {
+      if (prev.length >= maxAlive) {
         // 淘汰第一个非当前的
         const evictIdx = prev.findIndex(p => p !== currentPath);
         const next = [...prev];
@@ -120,7 +131,7 @@ function PanelHost() {
       }
       return [...prev, currentPath];
     });
-  }, [currentPath, chatSessions]);
+  }, [currentPath, chatSessions, maxAlive]);
 
   if (welcomeVisible || !currentPath) return null;
 

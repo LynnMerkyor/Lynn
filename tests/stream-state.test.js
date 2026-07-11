@@ -4,7 +4,7 @@ import { createSessionStateStore } from "../server/chat/stream-state.js";
 
 describe("session stream state store", () => {
   it("evicts the least recently accessed inactive session when full", () => {
-    const store = createSessionStateStore();
+    const store = createSessionStateStore({ maxSessionStates: 20 });
     try {
       for (let i = 0; i < 20; i++) {
         store.getState(`/sessions/${i}.jsonl`);
@@ -23,7 +23,7 @@ describe("session stream state store", () => {
   });
 
   it("does not evict streaming sessions for capacity cleanup", () => {
-    const store = createSessionStateStore();
+    const store = createSessionStateStore({ maxSessionStates: 20 });
     try {
       for (let i = 0; i < 20; i++) {
         const ss = store.getState(`/sessions/${i}.jsonl`);

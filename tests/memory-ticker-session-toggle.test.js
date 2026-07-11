@@ -122,4 +122,21 @@ describe("memory ticker respects session-level memory toggle", () => {
     expect(skillDistiller.finalizeSession).toHaveBeenCalledOnce();
     expect(skillDistiller.distillFromSession).toHaveBeenCalledOnce();
   });
+
+  it("drains a new turn that arrives while session finalization is in flight", async () => {
+    const { ticker, summaryManager } = makeTicker(tmpDir, () => true);
+    let releaseFirst;
+    summaryManager.rollingSummary
+      .mockImplementationOnce(() => new Promise((resolve) => { releaseFirst = resolve; }))
+      .mockResolvedValue("summary");
+
+    ticker.notifyTurn(sessionPath);
+    const closing = ticker.notifySessionEnd(sessionPath);
+    await vi.waitFor(() => expect(summaryManager.rollingSummary).toHaveBeenCalledTimes(1));
+    ticker.notifyTurn(sessionPath);
+    releaseFirst("summary");
+    await closing;
+
+    expect(summaryManager.rollingSummary).toHaveBeenCalledTimes(2);
+  });
 });

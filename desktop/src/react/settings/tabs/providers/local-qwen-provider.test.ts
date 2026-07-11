@@ -99,12 +99,14 @@ describe('Local Qwen provider UX guards', () => {
     expect(localModelController).toContain('model-path-not-allowed');
     expect(localModelController).toContain('isLocalModelPathAllowed');
     expect(localModelController).toContain('startup auto-start disabled');
+    expect(localModelController).toContain('binaryPath = new LlamaCppManager({ lynnHome }).resolveBinaryPath()');
     expect(localModelController).toContain('LYNN_LOCAL_MODEL_AUTO_START === "1"');
     expect(localModelController).toContain('parsedPayload.startAfterDownload || profile.autoStart');
     expect(profiles).toContain('[DEFAULT_MODEL_ID]:');
     expect(profiles).toContain('autoStart: false');
     expect(controller).toContain('startAfterDownload: true');
     expect(detail).toContain('startAfterDownload: true');
+    expect(detail).toContain('observed.llama_server || llamaState.binaryPath');
     expect(preload).toContain('llamacppStartDownload: (payload)');
     expect(preload).toContain('llamacppStartCustomModel: (modelPath)');
   });
@@ -213,13 +215,16 @@ describe('Local Qwen provider UX guards', () => {
     expect(localQwenStack).toContain('等待下一次采样');
     expect(localQwenController).toContain('intervalMs = active ? 3_000 : 15_000');
     expect(statusBar).toContain('formatTps');
-    expect(statusBar).toContain('当前 ${tps}');
+    expect(statusBar).toContain("status.model.currentSpeed");
+    expect(read('desktop/src/locales/zh.json')).toContain('当前 {speed}');
+    expect(read('desktop/src/locales/en.json')).toContain('current {speed}');
     expect(providerDetail).toContain('formatLocalTps');
     expect(providerDetail).toContain('速度等待采样');
     expect(providerDetail).toContain('setInterval(() =>');
     expect(providerDetail).toContain('}, 3000)');
     expect(localStatus).toContain('服务累计处理');
-    expect(statusBar).toContain('服务累计处理');
+    expect(statusBar).toContain("status.model.totalTokens");
+    expect(read('desktop/src/locales/zh.json')).toContain('服务累计处理 {tokens} tokens');
     expect(providerDetail).toContain('服务累计处理');
   });
 
@@ -302,7 +307,7 @@ describe('Local Qwen provider UX guards', () => {
     expect(localQwenStack).toContain('首次暖机提示');
     expect(localQwenStack).toContain('本地 Qwen3.6-27B 刚启动时要加载权重和预热上下文');
     expect(localStatus).toContain('服务累计处理');
-    expect(read('desktop/src/react/components/StatusBar.tsx')).toContain('服务累计处理');
+    expect(read('desktop/src/react/components/StatusBar.tsx')).toContain('status.model.totalTokens');
     expect(read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx')).toContain('服务累计处理');
     expect(inputArea).not.toContain('本进程累计');
     expect(read('desktop/src/react/components/StatusBar.tsx')).not.toContain('本进程累计');

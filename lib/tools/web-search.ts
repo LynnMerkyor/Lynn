@@ -416,7 +416,8 @@ async function searchLynnBrainProxy(
   const errors: string[] = [];
   for (const root of roots) {
     const ctrl = new AbortController();
-    if (signal) signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+    const abortFromParent = () => ctrl.abort(signal?.reason);
+    if (signal) signal.addEventListener("abort", abortFromParent, { once: true });
     const timer = setTimeout(() => ctrl.abort(), BRAIN_PROXY_TIMEOUT_MS);
     let res: Response;
     try {
@@ -435,6 +436,7 @@ async function searchLynnBrainProxy(
       continue;
     } finally {
       clearTimeout(timer);
+      signal?.removeEventListener("abort", abortFromParent);
     }
 
     const data = await safeParseResponse<BrainProxyResponse>(res, null);

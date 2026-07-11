@@ -91,14 +91,17 @@ export function createFindTool(cwd = process.cwd(), _options: unknown = {}): Too
     name: "find",
     description: "Find files by substring.",
     parameters: Type.Object({ path: Type.Optional(Type.String()), pattern: Type.String() }),
-    async execute(_id, params) {
+    async execute(_id, params, runtime) {
       const p = params as { path?: string; pattern?: string; name?: string };
       const root = resolveWithin(cwd, p.path || ".");
       const pattern = String(p.pattern || p.name || "");
+      const signal = (runtime as { signal?: AbortSignal } | undefined)?.signal;
       const out: string[] = [];
       async function walk(dir: string): Promise<void> {
+        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
         const entries = await fs.readdir(dir, { withFileTypes: true });
         for (const entry of entries) {
+          if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
           if (entry.name === "node_modules" || entry.name === ".git") continue;
           const full = path.join(dir, entry.name);
           if (entry.name.includes(pattern)) out.push(path.relative(cwd, full) || full);

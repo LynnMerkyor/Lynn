@@ -13,6 +13,7 @@ import os from "os";
 import { t } from "../../shared/i18n-runtime.js";
 import {
   BLOCKED_FILES,
+  BLOCKED_AGENT_FILES,
   BLOCKED_DIRS,
   READ_ONLY_AGENT_FILES,
   READ_ONLY_AGENT_DIRS,
@@ -141,6 +142,10 @@ export class PathGuard {
       }
     }
 
+    for (const f of BLOCKED_AGENT_FILES) {
+      if (resolved === path.join(this.agentDir, f)) return AccessLevel.BLOCKED;
+    }
+
     for (const f of READ_ONLY_AGENT_FILES) {
       if (resolved === path.join(this.agentDir, f)) return AccessLevel.READ_ONLY;
     }
@@ -187,9 +192,6 @@ export class PathGuard {
   /**
    * 检查操作是否被允许
    *
-   * 审计模式：始终允许操作，但记录敏感路径访问日志。
-   * 安全感来自透明 + 可回滚，而非阻止。
-   *
    * @param {string} absolutePath
    * @param {"read"|"write"|"delete"} operation
    * @returns {{ allowed: boolean, reason?: string, logged?: boolean }}
@@ -205,7 +207,15 @@ export class PathGuard {
         console.log(`[PathGuard:audit] ${operation} ${resolved} (level=${level})`);
         appendAuditLog({ operation, path: resolved, level, ts: new Date().toISOString() });
       } catch {}
-      return { allowed: true, logged: true };
+      return {
+        allowed: false,
+        reason: t("sandbox.denied", {
+          op: t(`sandbox.op${operation[0].toUpperCase()}${operation.slice(1)}`),
+          path: resolved,
+          level,
+        }),
+        logged: true,
+      };
     }
 
     return { allowed: true };
@@ -239,10 +249,11 @@ function appendAuditLog(entry: AuditLogEntry): void {
         const content = fs.readFileSync(AUDIT_LOG_PATH, "utf-8");
         const lines = content.split("\n");
         const half = Math.floor(lines.length / 2);
-        fs.writeFileSync(AUDIT_LOG_PATH, lines.slice(half).join("\n"), "utf-8");
+        fs.writeFileSync(AUDIT_LOG_PATH, lines.slice(half).join("\n"), { encoding: "utf-8", mode: 0o600 });
       }
     } catch {}
-    fs.appendFileSync(AUDIT_LOG_PATH, JSON.stringify(entry) + "\n", "utf-8");
+    fs.appendFileSync(AUDIT_LOG_PATH, JSON.stringify(entry) + "\n", { encoding: "utf-8", mode: 0o600 });
+    try { fs.chmodSync(AUDIT_LOG_PATH, 0o600); } catch {}
   } catch {}
 }
 

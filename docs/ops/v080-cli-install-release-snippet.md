@@ -1,4 +1,4 @@
-# Lynn CLI v0.85.10 Install Snippet
+# Lynn CLI v0.86.0 Install Snippet
 
 Use this block on the mirror download page and at the top of the GitHub release
 notes. It is intentionally short enough for humans to copy and explicit enough
@@ -13,7 +13,7 @@ for other coding agents to parse.
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update Lynn CLI from the CDN.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.10.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI

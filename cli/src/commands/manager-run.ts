@@ -37,7 +37,15 @@ function emit(event: FleetWorkerEvent, jsonl: boolean): void {
   const enriched = { schemaVersion: FLEET_EVENT_SCHEMA_VERSION, ts: nowIso(), ...event } as FleetWorkerEvent;
   const validation = validateFleetWorkerEvent(enriched);
   if (!validation.ok) throw new Error(validation.errors.join("; "));
-  if (jsonl) writeJsonLine(enriched);
+  if (jsonl) {
+    writeJsonLine(enriched);
+    return;
+  }
+  const record = enriched as unknown as Record<string, unknown>;
+  if (["manager.started", "manager.delegated", "worker.started", "worker.finished", "manager.finished"].includes(enriched.type)) {
+    const message = String(record.summary || record.objective || record.status || enriched.type);
+    process.stderr.write(`[${enriched.type}] ${message}\n`);
+  }
 }
 
 function objectiveFromArgs(args: ParsedArgs): string {
@@ -193,7 +201,8 @@ export async function runManager(args: ParsedArgs): Promise<number> {
   const objective = objectiveFromArgs(args);
   if (!objective) throw new Error("manager run requires -p/--prompt or a positional objective");
 
-  const jsonl = hasFlag(args.flags, "json", "jsonl");
+  const jsonl = hasFlag(args.flags, "json", "jsonl")
+    || (!process.stdout.isTTY && !hasFlag(args.flags, "plain"));
   const mock = hasFlag(args.flags, "mock");
   const taskId = getStringFlag(args.flags, "id") || `manager-${Date.now()}`;
   const reasoning = parseReasoningOptions(args);

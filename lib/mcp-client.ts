@@ -368,29 +368,37 @@ export class McpManager {
     };
   }
 
-  private _readLocalConfig(): { servers: Record<string, RawMcpServerConfig> } {
+  private _readLocalConfig(): { servers: Record<string, RawMcpServerConfig>; discoverExternal: boolean } {
     try {
-      if (!fs.existsSync(this._configPath)) return { servers: {} };
-      const parsed = (YAML.load(fs.readFileSync(this._configPath, "utf-8")) || {}) as { servers?: unknown };
+      if (!fs.existsSync(this._configPath)) return { servers: {}, discoverExternal: false };
+      const parsed = (YAML.load(fs.readFileSync(this._configPath, "utf-8")) || {}) as {
+        servers?: unknown;
+        discover_external?: unknown;
+      };
       return {
         servers: parsed.servers && typeof parsed.servers === "object"
           ? parsed.servers as Record<string, RawMcpServerConfig>
           : {},
+        discoverExternal: parsed.discover_external === true,
       };
     } catch (err) {
       log.log(`config load failed: ${errorMessage(err)}`);
-      return { servers: {} };
+      return { servers: {}, discoverExternal: false };
     }
   }
 
-  private _writeLocalConfig(config: { servers: Record<string, RawMcpServerConfig> }): void {
+  private _writeLocalConfig(config: { servers: Record<string, RawMcpServerConfig>; discoverExternal?: boolean }): void {
     fs.mkdirSync(path.dirname(this._configPath), { recursive: true });
-    const yaml = YAML.dump({ servers: config.servers || {} }, {
+    const yaml = YAML.dump({
+      discover_external: config.discoverExternal === true,
+      servers: config.servers || {},
+    }, {
       indent: 2,
       lineWidth: -1,
       sortKeys: false,
     });
-    fs.writeFileSync(this._configPath, yaml, "utf-8");
+    fs.writeFileSync(this._configPath, yaml, { encoding: "utf-8", mode: 0o600 });
+    fs.chmodSync(this._configPath, 0o600);
   }
 
   private _readBuiltinCredentials(): BuiltinCredentialStore {
@@ -444,8 +452,9 @@ export class McpManager {
     return builtins;
   }
 
-  private _discoverServers(): McpServerConfigMap {
+  private _discoverServers(enabled: boolean): McpServerConfigMap {
     const discovered: McpServerConfigMap = {};
+    if (!enabled) return discovered;
     for (const relativePath of DISCOVERY_PATHS) {
       const fullPath = resolveDiscoveryPath(this._lynnHome, relativePath);
       Object.assign(discovered, parseCompatConfig(fullPath));
@@ -459,7 +468,9 @@ export class McpManager {
       Object.entries(localConfig.servers || {}).map(([name, config]) => [name, normalizeServerConfig(config)]),
     );
     this._builtinServers = this._buildBuiltinServers();
-    this._discoveredServers = this._discoverServers();
+    const allowExternalDiscovery = localConfig.discoverExternal === true
+      || process.env.LYNN_MCP_DISCOVER_EXTERNAL === "1";
+    this._discoveredServers = this._discoverServers(allowExternalDiscovery);
     this._mergedServers = {
       ...this._discoveredServers,
       ...this._builtinServers,

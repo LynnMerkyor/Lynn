@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
 import { useI18n } from '../hooks/use-i18n';
+import { useDialogA11y } from '../hooks/use-dialog-a11y';
 import styles from './ShortcutHelpModal.module.css';
 
 type ShortcutRow = {
@@ -16,6 +16,7 @@ const SHORTCUTS: ShortcutRow[] = [
   { keys: ['Cmd/Ctrl', 'L'], zh: '聚焦输入框', en: 'Focus the composer' },
   { keys: ['Cmd/Ctrl', 'J'], zh: '打开或关闭右侧书桌', en: 'Toggle the desk sidebar' },
   { keys: ['Cmd/Ctrl', 'Shift', 'M'], zh: '切换写作模式', en: 'Toggle writing mode' },
+  { keys: ['Cmd/Ctrl', 'Shift', 'L'], zh: '全局唤起语音助手', en: 'Summon the voice assistant globally' },
   { keys: ['Esc'], zh: '停止生成，或关闭预览', en: 'Stop generation, or close preview' },
 ];
 
@@ -50,24 +51,15 @@ function ShortcutRows({ rows, zh }: { rows: ShortcutRow[]; zh: boolean }) {
 export function ShortcutHelpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { locale } = useI18n();
   const zh = isChineseLocale(locale);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose, open]);
+  const dialogRef = useDialogA11y<HTMLElement>({ open, onClose });
 
   if (!open) return null;
 
   return (
     <div className={styles.overlay} role="presentation" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
+        tabIndex={-1}
         className={styles.dialog}
         role="dialog"
         aria-modal="true"

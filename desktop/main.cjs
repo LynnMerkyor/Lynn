@@ -59,6 +59,7 @@ if (lynnHome !== defaultHome) {
 
 let splashWindow = null;
 let mainWindow = null;
+let rendererRecoveryPending = false;
 let _mainWindowReadyWaiters = [];
 
 let preferredPrimaryWindowKind = "main";
@@ -427,6 +428,7 @@ function createMainWindow() {
   // renderer 崩溃恢复：自动 reload
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     console.error(`[desktop] renderer 崩溃: ${details.reason} (code: ${details.exitCode})`);
+    rendererRecoveryPending = true;
     if (mainWindow && !mainWindow.isDestroyed()) {
       setTimeout(() => {
         try { mainWindow.reload(); } catch {}
@@ -678,6 +680,11 @@ wrapIpcHandler("onboarding-complete", async () => {
 
 // ── 窗口控制 IPC（Windows/Linux 自绘标题栏用）──
 wrapIpcHandler("get-platform", () => process.platform);
+wrapIpcHandler("consume-renderer-recovery", () => {
+  const recovered = rendererRecoveryPending;
+  rendererRecoveryPending = false;
+  return recovered;
+});
 wrapIpcHandler("window-minimize", (event) => {
   BrowserWindow.fromWebContents(event.sender)?.minimize();
 });
@@ -695,22 +702,14 @@ wrapIpcHandler("window-is-maximized", (event) => {
 function isTrustedAppWebContents(webContents) {
   if (!webContents || webContents.isDestroyed?.()) return false;
   const owner = BrowserWindow.fromWebContents(webContents);
-  if (
+  return Boolean(
     owner === mainWindow ||
     owner === splashWindow ||
     owner === settingsOnboarding?.getSettingsWindow() ||
     owner === settingsOnboarding?.getOnboardingWindow() ||
     owner === browserAgent?.getWindow() ||
     owner === editorController?.getWindow()
-  ) {
-    return true;
-  }
-  try {
-    const url = webContents.getURL?.() || "";
-    if (url.startsWith("file://")) return true;
-    if (/^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?\//.test(url)) return true;
-  } catch {}
-  return false;
+  );
 }
 
 // 前端初始化完成后调用，关闭 splash / onboarding，显示主窗口

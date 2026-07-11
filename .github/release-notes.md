@@ -1,60 +1,45 @@
-# Lynn v0.85.10 Release Notes / 发布说明
+# Lynn v0.86.0 Release Notes / 发布说明
 
-> 发布日期: 2026-07-11 · 侧栏信息层级 / 刷新生命周期 / 发布门禁收口
+> 发布日期: 2026-07-12 · 安全边界 / Agent 运行时可靠性 / Windows 本地模型修复
 
 ## 国内镜像站下载（推荐）
 
-国内用户请优先使用镜像站地址；正式版本记录见 GitHub / Gitee Releases，下载以镜像站为准。
+国内用户请优先使用镜像站；GitHub 与 Gitee Releases 保留相同版本记录。
 
-- **GitHub Releases (old)**: https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.10
-- **GitHub Releases (new)**: https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.10
-- **Gitee Releases**: https://gitee.com/merkyor/Lynn/releases/tag/v0.85.10
-
-- **CLI**:
-
-  ```bash
-  npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.10.tgz"
-  ```
-
-- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.10-macOS-arm64.dmg
-- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.10-macOS-x64.dmg
-- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.85.10-Windows-Setup.exe
+- **GitHub Releases**: https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.0
+- **GitHub Releases（镜像仓）**: https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.0
+- **Gitee Releases**: https://gitee.com/merkyor/Lynn/releases/tag/v0.86.0
 - **下载页**: https://download.merkyorlynn.com/download.html
+
+```bash
+# Node.js 20 LTS or 22 LTS with npm.
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz"
+Lynn
+```
+
+- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.0-macOS-arm64.dmg
+- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.0-macOS-x64.dmg
+- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.0-Windows-Setup.exe
 
 ## 中文重点
 
-- **会话进度更直观**: 右栏只突出一次当前会话，最近会话默认收起详情；打开会话、新建分支和展开状态更明确并支持键盘操作。
-- **回合状态彻底隔离**: 每轮开始统一清理工具、重试、解析器、定时器、sanitizer 和临时输出，避免“重新回答”后的上一题状态污染下一题。
-- **普通回答不再误生成文件**: 只有用户明确要求报告、HTML、PDF、PPT、附件或导出物时才开放交付物工具；清单、设定表、代码和解释留在聊天正文。
-- **创作回答收口更稳**: 长思考导致可见正文只输出半句时，运行时会用一次无工具续写完成正文；短答不会被强行拉长。
-- **Brain 兜底真正可执行**: Step、DS V4 Flash、MiMo Token Plan、端侧和 GLM 候选各有独立尝试时限；reasoning-only、空答和半句截断会交给下一候选。
-- **外部证据工具按需注入**: 查证、来源、天气、行情、比分、新闻等请求继续使用实时工具；普通写作、规划和解释不再无意义启动搜索。
-- **前端边界更清楚**: 拆出 WebSocket transport、布局控制器和 Engine/Agent 帮助模块，新增运行时循环依赖门禁和真实 Session Progress 组件回归。
-- **本地 27B Agent 保持完整**: 默认仍下载 Q4 imatrix MTP 四分片并用 `draft-mtp` 启动；代码和工具任务继续进入完整 Agent loop。
-- **右侧空状态更紧凑**: 没有历史会话时不再把“暂无其他会话”拉满整栏，历史列表达到上限后才滚动，当前会话和操作入口优先可见。
-- **刷新任务按生命周期收口**: 会话巡检的延迟刷新会随侧栏卸载清理，避免切换界面后旧定时器继续触发网络请求。
-- **打包门禁不再绕过体验回归**: macOS/Windows `dist` 路径统一进入完整发布门禁，固定执行 Agent regression、CLI100 和 GUI100。
-
-## 已验证
-
-- 根仓与 Brain 全量单测、TypeScript 双门禁、前端运行时循环依赖门禁通过。
-- Agent regression、CLI100、GUI100 与 release full gate 纳入本次发布验证。
-- macOS Apple Silicon / Intel DMG 完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证后发布。
-- Windows x64 NSIS 安装包完成构建验证；CLI tarball 同步镜像站并执行远程安装 smoke。
-
----
-
-> Release date: 2026-07-11 · sidebar hierarchy / refresh lifecycle / enforced release gates
+- **模型浏览器默认拒绝敏感权限**:网页不能静默取得麦克风、摄像头、定位、通知或浏览器敏感数据；导航与子资源请求统一通过 DNS/SSRF 校验。
+- **本地信任边界收紧**:Electron IPC 只信任已知窗口对象，本地 HTTP/WS 同时校验 Host、Origin 与启动 token，敏感配置和日志统一使用仅当前用户可读权限。
+- **执行沙箱真正生效**:授权执行仍受 OS 沙箱约束，SSH、云凭证、浏览器资料、Lynn token 与 Agent 配置均是禁止读取路径。
+- **回合状态可靠收口**:同一会话 prompt 串行进入运行时，`turn_end` 兜底矩阵有独立契约测试，废弃的 internal retry 状态已移除，断线恢复容量可配置。
+- **Brain 双层输出净化**:腾讯 Brain 已部署跨 chunk sanitizer，客户端继续保留末端清理；伪工具、内部推理和模型结构标签不会泄漏，普通代码与 JSX 不会被误删。
+- **Windows 27B 启动修复**:支持从 PATH 发现 `llama-server`；手动 GGUF 启动会明确报告 runtime 缺失、端口冲突、超时、崩溃或 ready 状态。
+- **CLI 更适合脚本和长任务**:流式回答支持 Ctrl+C 取消，未知参数立即失败，命令级帮助、非 TTY 退出码、manager/worker JSONL 行为和 Windows argv 执行保持一致。
+- **GUI 状态更直观**:Fleet worker 进入活动面板，语音显示 RTT/上下行统计，renderer 恢复有明确提示，Bridge、Provider 与快捷键补齐中英文和键盘焦点。
+- **发版门禁扩大**:根仓、Brain、Agent regression、CLI100、GUI100、真实安装、PTY、语音、架构循环与生产 Brain 漂移均为硬门槛。
 
 ## English highlights
 
-- **Clearer Session Progress**: the current session appears once, older details start collapsed, and Open Session / New Branch actions are keyboard-accessible.
-- **Isolated turn state**: tool, retry, parser, timer, sanitizer, and temporary-output state are reset centrally before each turn.
-- **Deliverables only on explicit intent**: lists, world-building tables, code, and explanations stay in chat unless the user asks for a file, report, HTML, PDF, PPT, attachment, or export.
-- **Bounded Brain fallbacks**: Step, DS V4 Flash, MiMo Token Plan, local, and GLM candidates each get a real attempt budget; empty or incomplete outputs hand off.
-- **Intent-scoped evidence tools**: live lookup remains available for citations, weather, markets, scores, and news without slowing timeless planning or writing.
-- **Stronger architecture gates**: transport/layout/runtime boundaries are separated and protected by import-cycle and real component regressions.
-- **The local 27B Agent path remains intact**: Q4 imatrix MTP stays the default and coding/tool turns continue through the full Agent loop.
-- **Compact empty states**: the right rail no longer stretches an empty history surface across the whole panel; it grows with content and scrolls only when needed.
-- **Lifecycle-safe refreshes**: delayed patrol refreshes are cancelled when the rail unmounts, preventing stale background requests after navigation.
-- **Packaging follows the real UX gate**: macOS and Windows `dist` commands now enter the full release gate, including Agent regression, CLI100, and GUI100.
+- Model-driven browser sessions deny sensitive permissions and browser data by default; navigation and subresources pass DNS/SSRF checks.
+- Electron IPC trusts known window identities, while local HTTP/WS validates Host, Origin, and the per-launch token.
+- Authorized execution remains inside the OS sandbox with credential and profile deny-read paths.
+- Per-session prompt admission, explicit turn-end fallback contracts, and removal of legacy retry state prevent cross-turn contamination.
+- Brain and client sanitizers stop split pseudo-tool markup without damaging ordinary code or JSX.
+- Windows discovers `llama-server` through PATH and reports actionable GGUF startup failures.
+- CLI cancellation, strict flags, command help, non-TTY exits, JSONL output, and Windows-safe worker invocation are now consistent.
+- Fleet, voice telemetry, renderer recovery, localization, and dialog keyboard behavior are visible in the desktop app.

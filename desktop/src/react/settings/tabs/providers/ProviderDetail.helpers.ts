@@ -143,5 +143,9 @@ export function localModelActionErrorText(reason?: string, detail?: string) {
   if (reason === 'model-path-not-allowed') return '请通过“选择本机 GGUF 启动”重新选择该文件，或把 GGUF 放到本地模型目录后再启动。';
   if (reason === 'not-gguf') return '只能导入 .gguf 模型文件。';
   if (reason === 'model-not-found') return '模型文件不存在或已移动。请重新选择 GGUF。';
+  if (reason === 'llamacpp-binary-not-found') return '未找到 llama.cpp。请安装 llama-server 并重新启动 Lynn，或把 llama-server 放到 ~/.lynn/llamacpp/bin。';
+  if (reason === 'llamacpp-port-in-use') return '本地端口 18099 已被另一个 llama.cpp 实例占用。请先停止该实例，再启动所选 GGUF。';
+  if (reason === 'startup-timeout') return detail ? `本地模型启动超时：${detail}` : '本地模型启动超时。请检查内存是否足够，并查看 llama-server 的启动输出。';
+  if (reason === 'child-exited' || reason === 'spawn-error') return detail ? `llama-server 启动失败：${detail}` : 'llama-server 启动失败。请检查模型格式与本机运行时是否兼容。';
   return value;
 }

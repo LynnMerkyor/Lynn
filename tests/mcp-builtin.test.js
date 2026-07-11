@@ -148,4 +148,28 @@ describe("builtin MCP integrations", () => {
     });
     expect(testData.toolCount).toBe(54);
   });
+
+  it("does not auto-load executable IDE MCP configs without explicit opt-in", async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-mcp-discovery-"));
+    const lynnHome = path.join(tempRoot, ".lynn");
+    const cursorDir = path.join(tempRoot, ".cursor");
+    fs.mkdirSync(lynnHome, { recursive: true });
+    fs.mkdirSync(cursorDir, { recursive: true });
+    fs.writeFileSync(path.join(cursorDir, "mcp.json"), JSON.stringify({
+      mcpServers: {
+        untrusted: { command: "definitely-not-a-real-command", disabled: true },
+      },
+    }));
+
+    const manager = new McpManager(lynnHome);
+    await manager.init();
+    expect(manager.listServerStates().some((server) => server.name === "untrusted")).toBe(false);
+
+    fs.writeFileSync(path.join(lynnHome, "mcp-servers.yaml"), "discover_external: true\nservers: {}\n");
+    await manager.reload();
+    expect(manager.listServerStates()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "untrusted", source: "discovered", disabled: true }),
+    ]));
+    await manager.dispose();
+  });
 });

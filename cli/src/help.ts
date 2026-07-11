@@ -40,7 +40,7 @@ export function usage(): string {
       "  Lynn permissions [--json]",
       "  Lynn permissions set --approval ask|on-failure|yolo --sandbox workspace-write|danger-full-access",
       "  Lynn manager run -p \"长任务\" --jsonl [--mock]",
-      "  Lynn worker run --brief task.md --worktree path --jsonl --mock",
+      "  Lynn worker run --brief task.md --worktree path --jsonl --mock   # 默认 JSONL；--plain 人类输出",
       "  Lynn worker run --brief task.md --worktree path --jsonl --approval yolo --sandbox danger-full-access",
       "  Lynn code \"review the current diff\"",
       "  Lynn code -p \"review the current diff\" --json",
@@ -117,7 +117,7 @@ export function usage(): string {
     "  Lynn permissions [--json]",
     "  Lynn permissions set --approval ask|on-failure|yolo --sandbox workspace-write|danger-full-access",
       "  Lynn manager run -p \"long task\" --jsonl [--mock]",
-      "  Lynn worker run --brief task.md --worktree path --jsonl --mock",
+      "  Lynn worker run --brief task.md --worktree path --jsonl --mock   # JSONL by default; --plain for humans",
       "  Lynn worker run --brief task.md --worktree path --jsonl --approval yolo --sandbox danger-full-access",
       "  Lynn code \"review the current diff\"",
       "  Lynn code -p \"review the current diff\" --json",
@@ -154,5 +154,20 @@ export function usage(): string {
     "  --save-session --no-save-session --resume <session.jsonl> --data-dir ~/.lynn",
     "  Lynn code human turns autosave checkpoints; JSON/script mode requires --save-session",
     "  --agent-command \"custom worker command\"",
+  ].join("\n");
+}
+
+export function commandUsage(command: string): string {
+  const normalized = String(command || "").trim().toLowerCase();
+  const examples = usage().split("\n").filter((line) => {
+    const value = line.trim().toLowerCase();
+    return value.startsWith(`lynn ${normalized}`);
+  });
+  return [
+    `Lynn ${normalized}`,
+    "",
+    ...(examples.length ? examples : [`  Lynn ${normalized} [options]`]),
+    "",
+    currentLang() === "zh" ? "运行 Lynn help 查看全部命令和通用参数。" : "Run Lynn help for all commands and global options.",
   ].join("\n");
 }

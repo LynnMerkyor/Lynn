@@ -40,11 +40,20 @@ function appendLimited(current: string, next: string): string {
 }
 
 /** Best-effort append to ~/.lynn/bash-audit.log so executed shell is auditable. */
+export function redactBashAuditCommand(command: string): string {
+  return String(command || "")
+    .replace(/https?:\/\/[^:@\s/]+:[^@\s/]+@/gi, (match) => `${match.match(/^https?:\/\//i)?.[0] || "https://"}***@`)
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b/gi, "Bearer [REDACTED]")
+    .replace(/\b(?:sk|tp|ak)-[A-Za-z0-9_=-]{8,}\b/g, "[REDACTED_API_KEY]")
+    .replace(/\b(?:gh[pousr]_[A-Za-z0-9]{12,}|hf_[A-Za-z0-9]{12,}|ms-[A-Za-z0-9-]{12,})\b/g, "[REDACTED_TOKEN]")
+    .replace(/\b(api[_-]?key|token|secret|password|passwd|authorization)\s*[:=]\s*(['"]?)[^\s'";]+\2/gi, "$1=[REDACTED]");
+}
+
 export function auditBash(command: string, cwd: string): void {
   try {
     const file = path.join(os.homedir(), ".lynn", "bash-audit.log");
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.appendFileSync(file, `${new Date().toISOString()}\t${cwd}\t${command}\n`);
+    fs.appendFileSync(file, `${new Date().toISOString()}\t${cwd}\t${redactBashAuditCommand(command)}\n`);
   } catch {
     /* auditing is non-critical */
   }

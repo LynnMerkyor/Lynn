@@ -41,16 +41,13 @@ import { createPromptSession, normalizePromptRequest, resolveCreatedPromptSessio
 import { createHubEventForwarder } from "../chat/hub-event-forwarder.js";
 import { createPromptTurnRunner } from "../chat/prompt-turn-runner.js";
 import { createWsControlHandler } from "../chat/ws-control-handler.js";
+import { createKeyedSerialExecutor } from "../chat/keyed-serial-executor.js";
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 type AnyRecord = Record<string, any>;
 
 function hasStreamEvent(ss: any, type: any) {
   return Array.isArray(ss?.events) && ss.events.some((entry: any) => entry?.event?.type === type);
-}
-
-function hasScheduledInternalRetry(ss: any) {
-  return !!(ss?.internalRetryPending || ss?.internalRetryInFlight);
 }
 
 function hasToolExecutionInFlight(ss: any) {
@@ -105,6 +102,8 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
   });
 
   const checkRateLimit = createTokenBucketRateLimiter({ capacity: 5, refillMs: 10_000 });
+  const runPromptForSession = createKeyedSerialExecutor();
+  const pendingPromptAdmissions = new Set<string>();
 
   type ToolTurnFinalizers = ReturnType<typeof createToolTurnFinalizer>;
   let buildRealtimeToolFallbackText: ToolTurnFinalizers["buildRealtimeToolFallbackText"] = () => "";
@@ -137,7 +136,6 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
 
   async function releaseStaleSessionStream(sessionPath: any, ss: any) {
     if (!sessionPath || !ss) return false;
-    const isInternalRetryStream = ss.streamSource === "internal_retry";
     clearTurnTimers(ss);
     try {
       await engine.abortSessionByPath?.(sessionPath);
@@ -145,24 +143,7 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
       console.warn("[chat] failed to abort stale session stream:", err?.message || err);
     }
     if (ss.isStreaming) {
-      if (isInternalRetryStream) {
-        editRollbackStore.discardPendingForSession(sessionPath, ss.activeStreamToken || null);
-        ss.internalRetryPending = false;
-        ss.internalRetryInFlight = false;
-        ss.internalRetryReason = "";
-        if (ss.isThinking) {
-          ss.isThinking = false;
-          emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-        }
-        if (!hasStreamEvent(ss, "turn_end")) {
-          emitStreamEvent(sessionPath, ss, { type: "turn_end" });
-        }
-        finishSessionStream(ss);
-        resetCompletedTurnState(ss);
-        broadcast({ type: "status", isStreaming: false, sessionPath });
-      } else {
-        closeStreamAfterError(sessionPath, ss);
-      }
+      closeStreamAfterError(sessionPath, ss);
     } else {
       editRollbackStore.discardPendingForSession(sessionPath, ss.activeStreamToken || null);
       finishSessionStream(ss);
@@ -283,7 +264,6 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
     flushBufferedToolVisibleText,
     maybeAppendCodeVerificationPostscript,
     hasStreamEvent,
-    hasScheduledInternalRetry,
     hasToolExecutionInFlight,
     hasDifferentActiveStreamToken,
     timeouts: {
@@ -405,10 +385,6 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
             }
 
             if (msg.type === "prompt" && (msg.text || msg.images?.length)) {
-              if (!checkRateLimit(ws)) {
-                wsSend(ws, { type: "error", message: "Rate limit exceeded. Please wait before sending another message." });
-                return;
-              }
               const imageValidation = validatePromptImages(msg.images, t);
               if (!imageValidation.ok) {
                 wsSend(ws, { type: "error", message: imageValidation.message || t("error.imageTooLarge") });
@@ -424,65 +400,75 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
                 const createdSession = await createPromptSession(engine);
                 promptSessionPath = resolveCreatedPromptSessionPath(createdSession, engine);
               }
-              const ss = getState(promptSessionPath);
-              if (!ss) {
-                wsSend(ws, { type: "error", message: t("error.noActiveSession") });
+              if (!checkRateLimit(promptSessionPath)) {
+                wsSend(ws, { type: "error", message: "Rate limit exceeded. Please wait before sending another message." });
                 return;
               }
-              const { promptText } = normalizePromptRequest(msg, promptSessionPath, { locale: getLocale() });
-              debugLog()?.log("ws", `user message (${promptText.length} chars, ${msg.images?.length || 0} images)`);
-              const engineStreaming = engine.isSessionStreaming(promptSessionPath);
-              if (engineStreaming || ss?.isStreaming) {
-                const isLegacySyntheticStream = ss?.streamSource === "internal_retry";
-                const shouldReleaseStale = isStaleEmptySessionStream(ss)
-                  || (engineStreaming && !ss?.isStreaming)
-                  || isLegacySyntheticStream;
-                let releasedStale = shouldReleaseStale
-                  ? await releaseStaleSessionStream(promptSessionPath, ss)
-                  : false;
-                if (!releasedStale && ss?.isStreaming) {
-                  releasedStale = await closeBusySessionBeforeNextPrompt(promptSessionPath, ss);
-                }
-                if (releasedStale && isLegacySyntheticStream) {
-                  debugLog()?.warn("ws", `[STALE-STREAM-FENCE v1] released legacy synthetic stream on new user prompt · session=${promptSessionPath}`);
-                }
-                if (!releasedStale) {
-                  wsSend(ws, { type: "error", message: t("error.stillStreaming", { name: engine.agentName }) });
+              pendingPromptAdmissions.add(promptSessionPath);
+              let promptAdmission;
+              try {
+                promptAdmission = await runPromptForSession(promptSessionPath, async () => {
+                const ss = getState(promptSessionPath);
+                if (!ss) {
+                  wsSend(ws, { type: "error", message: t("error.noActiveSession") });
                   return;
                 }
-              }
-              const replaceFromMessageId = msg.replaceFromMessageId != null
-                ? String(msg.replaceFromMessageId || "").trim()
-                : "";
-              if (replaceFromMessageId) {
-                const replaceFromMessageIndex = Number.isInteger(Number(msg.replaceFromMessageIndex)) && Number(msg.replaceFromMessageIndex) >= 0
-                  ? String(Number(msg.replaceFromMessageIndex))
-                  : replaceFromMessageId;
-                const result = await Promise.resolve(
-                  engine.truncateSessionBeforeVisibleMessage?.(promptSessionPath, replaceFromMessageIndex),
-                );
-                if (!result?.ok) {
-                  debugLog()?.warn("ws", `edit-resend rewind failed · session=${promptSessionPath} · reason=${result?.reason || "unknown"}`);
-                  wsSend(ws, {
-                    type: "error",
-                    message: "无法定位要编辑的历史消息，请重新打开会话后再试。",
-                    sessionPath: promptSessionPath,
-                  });
-                  return;
+                const { promptText } = normalizePromptRequest(msg, promptSessionPath, { locale: getLocale() });
+                debugLog()?.log("ws", `user message (${promptText.length} chars, ${msg.images?.length || 0} images)`);
+                const engineStreaming = engine.isSessionStreaming(promptSessionPath);
+                if (engineStreaming || ss?.isStreaming) {
+                  const shouldReleaseStale = isStaleEmptySessionStream(ss)
+                    || (engineStreaming && !ss?.isStreaming);
+                  let releasedStale = shouldReleaseStale
+                    ? await releaseStaleSessionStream(promptSessionPath, ss)
+                    : false;
+                  if (!releasedStale && ss?.isStreaming) {
+                    releasedStale = await closeBusySessionBeforeNextPrompt(promptSessionPath, ss);
+                  }
+                  if (!releasedStale) {
+                    wsSend(ws, { type: "error", message: t("error.stillStreaming", { name: engine.agentName }) });
+                    return;
+                  }
                 }
+                const replaceFromMessageId = msg.replaceFromMessageId != null
+                  ? String(msg.replaceFromMessageId || "").trim()
+                  : "";
+                if (replaceFromMessageId) {
+                  const replaceFromMessageIndex = Number.isInteger(Number(msg.replaceFromMessageIndex)) && Number(msg.replaceFromMessageIndex) >= 0
+                    ? String(Number(msg.replaceFromMessageIndex))
+                    : replaceFromMessageId;
+                  const result = await Promise.resolve(
+                    engine.truncateSessionBeforeVisibleMessage?.(promptSessionPath, replaceFromMessageIndex),
+                  );
+                  if (!result?.ok) {
+                    debugLog()?.warn("ws", `edit-resend rewind failed · session=${promptSessionPath} · reason=${result?.reason || "unknown"}`);
+                    wsSend(ws, {
+                      type: "error",
+                      message: "无法定位要编辑的历史消息，请重新打开会话后再试。",
+                      sessionPath: promptSessionPath,
+                    });
+                    return;
+                  }
+                }
+                wsSend(ws, {
+                  type: "prompt_accepted",
+                  sessionPath: promptSessionPath,
+                  clientMessageId: msg.clientMessageId || null,
+                });
+                return {
+                  pending: runPromptTurn({
+                    ws,
+                    msg,
+                    promptSessionPath,
+                    ss,
+                    promptText,
+                  }),
+                };
+                });
+              } finally {
+                pendingPromptAdmissions.delete(promptSessionPath);
               }
-              wsSend(ws, {
-                type: "prompt_accepted",
-                sessionPath: promptSessionPath,
-                clientMessageId: msg.clientMessageId || null,
-              });
-              await runPromptTurn({
-                ws,
-                msg,
-                promptSessionPath,
-                ss,
-                promptText,
-              });
+              if (promptAdmission?.pending) await promptAdmission.pending;
             }
           })().catch((err: any) => {
             const appErr = AppError.wrap(err);
@@ -508,7 +494,7 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
           scheduleDisconnectAbort();
           if (activeWsClients === 0) {
             for (const [sp, ss] of sessionState) {
-              if (!ss.isStreaming) sessionState.delete(sp);
+              if (!ss.isStreaming && !pendingPromptAdmissions.has(sp)) sessionState.delete(sp);
             }
           }
         },

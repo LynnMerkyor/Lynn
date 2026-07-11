@@ -3,6 +3,7 @@ import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createToolTurnFinalizer } from "../server/chat/tool-turn-finalizer.js";
+import { SessionManager } from "../core/agent-runtime/session-manager.js";
 
 const tempDirs: string[] = [];
 
@@ -90,6 +91,77 @@ describe("tool turn finalizer fallback persistence", () => {
     expect(lines.at(-1)?.message?.content?.[0]?.text).toContain("模型这次没有返回可见内容");
     expect(session.messages.at(-1)?.role).toBe("assistant");
     expect(session.messages.at(-1)?.content?.[0]?.text).toContain("模型这次没有返回可见内容");
+  });
+
+  it("persists the user prompt before a direct fallback answer", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lynn-finalizer-direct-"));
+    tempDirs.push(dir);
+    const sessionPath = path.join(dir, "session.jsonl");
+    fs.writeFileSync(sessionPath, `${JSON.stringify({
+      type: "message",
+      id: "a0",
+      parentId: null,
+      timestamp: new Date().toISOString(),
+      message: { role: "assistant", content: [{ type: "text", text: "上一轮回答" }], timestamp: Date.now() },
+    })}\n`, "utf-8");
+    const manager = SessionManager.open(sessionPath, dir);
+    const session = {
+      sessionManager: manager,
+      agent: { replaceMessages: vi.fn() },
+    };
+    const ss: any = {
+      streamId: "stream-direct",
+      nextSeq: 1,
+      events: [],
+      maxEvents: 50,
+      originalPromptText: "深圳明天下雨吗？",
+      visibleTextAcc: "",
+      hasOutput: false,
+      isThinking: false,
+      activeStreamToken: "tok-direct",
+    };
+    const finalizer = createToolTurnFinalizer({
+      engine: { getSessionByPath: vi.fn(() => session) },
+      editRollbackStore: { discardPendingForSession: vi.fn() },
+      lifecycleHooks: { run: vi.fn() },
+      broadcast: vi.fn(),
+      emitStreamEvent: vi.fn((_: string, state: any, event: any) => state.events.push({ event })),
+      emitTrustedVisibleTextDelta: vi.fn((_: string, state: any, delta: unknown) => {
+        state.hasOutput = true;
+        state.visibleTextAcc += String(delta || "");
+        return true;
+      }),
+      emitVisibleTextDelta: vi.fn(),
+      flushBufferedAssistantText: vi.fn(),
+      flushBufferedToolVisibleText: vi.fn(),
+      maybeAppendCodeVerificationPostscript: vi.fn(() => false),
+      hasStreamEvent: vi.fn(() => false),
+      hasToolExecutionInFlight: vi.fn(() => false),
+      hasDifferentActiveStreamToken: vi.fn(() => false),
+      timeouts: {
+        returnedTurnFinalizationGraceMs: 1,
+        turnHardAbortMs: 1,
+        turnLongResearchHardAbortMs: 1,
+        toolFinalizationGraceMs: 1,
+        toolAuthorizationGraceMs: 1,
+      },
+    });
+
+    expect(finalizer.closeStreamWithVisibleFallback(
+      sessionPath,
+      ss,
+      "深圳明天有雨。",
+      "local_realtime_prefetch_direct_answer",
+      { trustedFallback: true, persistPromptIfMissing: true },
+    )).toBe(true);
+
+    const messages = fs.readFileSync(sessionPath, "utf-8").trim().split("\n").map((line) => JSON.parse(line).message);
+    expect(messages.map((message) => message.role)).toEqual(["assistant", "user", "assistant"]);
+    expect(messages[0].content[0].text).toBe("上一轮回答");
+    expect(messages[1].content).toBe("深圳明天下雨吗？");
+    expect(messages[2].content).toBe("深圳明天有雨。");
+    expect(manager.buildSessionContext().messages.map((message) => message.role)).toEqual(["assistant", "user", "assistant"]);
+    expect(session.agent.replaceMessages).toHaveBeenCalled();
   });
 
   it("sanitizes persisted final text after tool evidence before closing", () => {

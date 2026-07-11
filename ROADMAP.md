@@ -31,9 +31,18 @@
 
 ---
 
-## In Progress (当前版本)
+## Current (V0.86)
 
-### V0.80 — GUI 指挥台 + CLI Worker Fleet
+### V0.86 — 安全边界与运行时可靠性
+- Electron 自动浏览器权限默认拒绝，并对所有子请求执行 DNS/SSRF 校验
+- 默认授权模式仍在 OS 沙箱内运行；敏感目录、配置与凭证不可读
+- GUI/CLI/Brain 统一覆盖取消、空答、伪工具、并发 prompt 与断线重放契约
+- Fleet 运行状态进入活动面板；语音延迟、错误与长会话资源占用可见
+- 发版门禁验证 Brain mirror 与腾讯生产环境漂移
+
+## Historical Milestones
+
+### V0.80 — GUI 指挥台 + CLI Worker Fleet（已完成）
 - GUI 指挥台并行调度多个 CLI worker (Codex / Claude / Qwen…), 每个 worker 独立 worktree
 - `@lynn/cli` npm 包: `Lynn -p` / `Lynn code` / `Lynn agents` / `Lynn worker run`
 - Fleet 门禁 (测试 + 越界) → review → gated merge-to-main + 远端 push

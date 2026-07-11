@@ -144,19 +144,11 @@ checks.push(run("version", ["version"]).then((r) => {
   assertIncludes(r.name, r.stdout, "@lynn/cli");
 }));
 
-checks.push(run("startup banner", []).then((r) => {
-  assertIncludes(r.name, r.stdout, "Lynn CLI");
-  assertIncludes(r.name, r.stdout, "StepFun 3.7 Flash");
-  assertIncludes(r.name, r.stdout, "默认 StepFun 3.7 Flash");
-  assertIncludes(r.name, r.stdout, "48K 推理/生成预算");
-  assertIncludes(r.name, r.stdout, "ask / workspace");
-  assertIncludes(r.name, r.stdout, "Shift+Tab");
-  assertIncludes(r.name, r.stdout, "Brain:");
-  if (!r.stdout.includes("offline") && !r.stdout.includes("online")) {
-    throw new Error(`${r.name} output did not include a Brain online/offline status\n${r.stdout}`);
-  }
-  assertIncludes(r.name, r.stdout, "Lynn providers");
-  assertNotIncludes(r.name, r.stdout, "MiMo via local Brain router");
+checks.push(run("non-interactive no input", [], { expectFailure: true }).then((r) => {
+  const text = `${r.stdout}\n${r.stderr}`;
+  assertIncludes(r.name, text, "Lynn CLI");
+  assertIncludes(r.name, text, "非交互模式需要提供问题");
+  assertIncludes(r.name, text, 'Lynn -p "你好"');
 }));
 
 checks.push(run("providers", ["providers", "--data-dir", missingDataDir]).then((r) => {

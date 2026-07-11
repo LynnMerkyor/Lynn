@@ -20,8 +20,15 @@ const SANITIZER_CARRY_KEY = "sanitizerCarry";
 // tag name + attrs is well under 100 chars; 512 is a generous ceiling that still lets a stray
 // run-on fragment flush instead of holding forever.
 const SANITIZER_CARRY_MAX = 512;
-const VISIBLE_STRUCTURAL_TAG_NAMES = ["plan", "steps", "answer", "final", "response", "solution", "outline", "template"] as const;
-const VISIBLE_STRUCTURAL_TAG_RE = /<\/?(?:plan|steps|answer|final|response|solution|outline|template)>/giu;
+const INTERNAL_REASONING_TAG_KEY = "internalReasoningTag";
+const INTERNAL_REASONING_TAIL_KEY = "internalReasoningTail";
+const INTERNAL_REASONING_TAG_NAMES = ["reflect", "analysis", "thinking", "reasoning", "thought"] as const;
+const INTERNAL_REASONING_OPEN_RE = /<(reflect|analysis|thinking|reasoning|thought)\s*>/giu;
+const VISIBLE_STRUCTURAL_TAG_NAMES = [
+  "plan", "steps", "answer", "final", "response", "solution", "outline", "template",
+  "position", "cancellation", "reviews",
+] as const;
+const VISIBLE_STRUCTURAL_TAG_RE = /<\/?(?:plan|steps|answer|final|response|solution|outline|template|position|cancellation|reviews)>/giu;
 const VISIBLE_STRUCTURAL_LABEL_RE = /(^|\n)\s*<[^<>\n]*(?:方案|计划|流程|步骤|回答|思路|分析|总结|plan|steps|answer|final|response|solution|outline|template)[^<>\n]*>\s*/giu;
 const VISIBLE_SNAKE_STRUCTURAL_TAG_RE = /<\/?[a-z][a-z0-9_-]*_(?:checklist|plan|steps|template|outline|summary|answer|flow|process|list)[a-z0-9_-]*>/giu;
 
@@ -37,6 +44,72 @@ function writeCarry(ss: unknown, value: string): void {
   if (ss && typeof ss === "object") {
     (ss as Record<string, unknown>)[SANITIZER_CARRY_KEY] = value;
   }
+}
+
+function readInternalReasoningState(ss: unknown): { tag: string; tail: string } {
+  if (!ss || typeof ss !== "object") return { tag: "", tail: "" };
+  const state = ss as Record<string, unknown>;
+  return {
+    tag: typeof state[INTERNAL_REASONING_TAG_KEY] === "string" ? String(state[INTERNAL_REASONING_TAG_KEY]) : "",
+    tail: typeof state[INTERNAL_REASONING_TAIL_KEY] === "string" ? String(state[INTERNAL_REASONING_TAIL_KEY]) : "",
+  };
+}
+
+function writeInternalReasoningState(ss: unknown, tag: string, tail: string): void {
+  if (!ss || typeof ss !== "object") return;
+  const state = ss as Record<string, unknown>;
+  state[INTERNAL_REASONING_TAG_KEY] = tag;
+  state[INTERNAL_REASONING_TAIL_KEY] = tail;
+}
+
+function closingTagPattern(tag: string): RegExp {
+  return new RegExp(`<\\/\\s*${tag}\\s*>`, "iu");
+}
+
+function retainClosingTagTail(text: string, tag: string): string {
+  return text.slice(-Math.max(0, `</${tag}>`.length - 1));
+}
+
+function stripInternalReasoningBlocks(ss: unknown, raw: string): StreamSanitizerResult {
+  let source = raw;
+  let visible = "";
+  let suppressed = false;
+  const active = readInternalReasoningState(ss);
+
+  if (active.tag) {
+    const combined = active.tail + source;
+    const close = closingTagPattern(active.tag);
+    const match = close.exec(combined);
+    if (!match) {
+      writeInternalReasoningState(ss, active.tag, retainClosingTagTail(combined, active.tag));
+      return { text: "", suppressed: Boolean(combined) };
+    }
+    source = combined.slice((match.index || 0) + match[0].length);
+    writeInternalReasoningState(ss, "", "");
+    suppressed = true;
+  }
+
+  while (source) {
+    INTERNAL_REASONING_OPEN_RE.lastIndex = 0;
+    const open = INTERNAL_REASONING_OPEN_RE.exec(source);
+    if (!open) {
+      visible += source;
+      break;
+    }
+    visible += source.slice(0, open.index);
+    const tag = String(open[1] || "").toLowerCase();
+    const afterOpen = source.slice(open.index + open[0].length);
+    const close = closingTagPattern(tag);
+    const closeMatch = close.exec(afterOpen);
+    suppressed = true;
+    if (!closeMatch) {
+      writeInternalReasoningState(ss, tag, retainClosingTagTail(afterOpen, tag));
+      break;
+    }
+    source = afterOpen.slice((closeMatch.index || 0) + closeMatch[0].length);
+  }
+
+  return { text: visible, suppressed };
 }
 
 // `||<digits>` possibly with trailing space — the opening of a `||N tool_name|| {...}` block.
@@ -63,7 +136,8 @@ function findUnresolvedVisibleStructuralTagStart(text: string): number {
   const tail = text.slice(start);
   if (tail.includes(">")) return -1;
   const lower = tail.toLowerCase();
-  return VISIBLE_STRUCTURAL_TAG_NAMES.some((name) => `<${name}`.startsWith(lower) || `</${name}`.startsWith(lower))
+  return [...VISIBLE_STRUCTURAL_TAG_NAMES, ...INTERNAL_REASONING_TAG_NAMES]
+    .some((name) => `<${name}`.startsWith(lower) || `</${name}`.startsWith(lower))
     || /^<\/?[a-z][a-z0-9_-]*$/iu.test(tail) && tail.includes("_")
     ? start
     : -1;
@@ -129,6 +203,8 @@ export function stripStreamingPseudoToolBlocks(
 ): StreamSanitizerResult {
   const incoming = String(chunk || "");
   const carry = readCarry(ss);
+  const hasInternalOpen = INTERNAL_REASONING_OPEN_RE.test(incoming);
+  INTERNAL_REASONING_OPEN_RE.lastIndex = 0;
 
   // Fast path: no carry, no detectable pseudo marker anywhere, and no unresolved pseudo-tool
   // opener → emit as-is at zero extra latency. This is the common case for ordinary assistant
@@ -140,6 +216,8 @@ export function stripStreamingPseudoToolBlocks(
     !VISIBLE_STRUCTURAL_TAG_RE.test(incoming) &&
     !VISIBLE_STRUCTURAL_LABEL_RE.test(incoming) &&
     !VISIBLE_SNAKE_STRUCTURAL_TAG_RE.test(incoming) &&
+    !hasInternalOpen &&
+    !readInternalReasoningState(ss).tag &&
     findUnresolvedPseudoToolOpen(incoming) === -1 &&
     findUnclosedPipeNumStart(incoming) === -1 &&
     findUnresolvedVisibleStructuralTagStart(incoming) === -1
@@ -151,10 +229,11 @@ export function stripStreamingPseudoToolBlocks(
   VISIBLE_SNAKE_STRUCTURAL_TAG_RE.lastIndex = 0;
 
   const combined = carry + incoming;
-  const { emit: toProcess, carry: toCarry } = splitAtUnresolvedOpener(combined);
+  const internal = stripInternalReasoningBlocks(ss, combined);
+  const { emit: toProcess, carry: toCarry } = splitAtUnresolvedOpener(internal.text);
 
   let emitText = toProcess;
-  let suppressed = false;
+  let suppressed = internal.suppressed;
   if (toProcess && containsPseudoToolSimulation(toProcess)) {
     const stripped = stripPseudoToolCallMarkup(toProcess);
     suppressed = stripped !== toProcess;
@@ -184,14 +263,18 @@ export function stripStreamingPseudoToolBlocks(
  */
 export function flushStreamingPseudoToolBlocks(ss: unknown): StreamSanitizerResult {
   const carry = readCarry(ss);
+  const internal = readInternalReasoningState(ss);
   writeCarry(ss, "");
-  if (!carry) return { text: "", suppressed: false };
+  writeInternalReasoningState(ss, "", "");
+  if (!carry) return { text: "", suppressed: Boolean(internal.tag) };
 
   // First: did the carry's opener ever get its closer? Check the ORIGINAL carry (before any
   // strip), because stripPseudoToolCallMarkup only removes the opener tag "<tool_call>" and
   // leaves the inner "{\"name\":...}" behind — that residue is exactly what we must withhold.
   const hasUnresolvedOpener =
-    findUnresolvedPseudoToolOpen(carry) !== -1 || findUnclosedPipeNumStart(carry) !== -1;
+    findUnresolvedPseudoToolOpen(carry) !== -1
+    || findUnclosedPipeNumStart(carry) !== -1
+    || findUnresolvedVisibleStructuralTagStart(carry) !== -1;
 
   if (hasUnresolvedOpener) {
     // The block never closed. Withhold the whole carry so neither the raw tag nor its inner

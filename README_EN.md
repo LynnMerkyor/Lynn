@@ -72,9 +72,9 @@ NVFP4's real payoff is **batched throughput**. Same R6000, `VLLM_MOE_FORCE_MARLI
 - [#44672](https://github.com/vllm-project/vllm/pull/44672) ModelOpt W4A16 NVFP4 Marlin path docs
 - [#44673](https://github.com/vllm-project/vllm/pull/44673) speculative decoding correctness gate
 
-## 🔭 V0.80 Origin: CLI Workers, V0.85.10 Session And Agent Reliability
+## 🔭 V0.80 Origin: CLI Workers, V0.86 Security Boundaries And Runtime Reliability
 
-V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. In V0.85.10 the right rail becomes a clearer **current session + recent sessions + files + acceptance** surface, while Brain and the local Agent enforce tool exposure, fallback handoff, and per-turn state reset as regression-tested runtime contracts. The public 27B Coding Q4 MTP GGUF remains the default edge model, while parallel worker power stays in the CLI for terminals, CI, and other agents.
+V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. In V0.86 the right rail becomes a clearer **current session + recent sessions + files + acceptance** surface, while Brain and the local Agent enforce tool exposure, permission boundaries, fallback handoff, and per-turn state reset as regression-tested runtime contracts. The public 27B Coding Q4 MTP GGUF remains the default edge model, while parallel worker power stays in the CLI for terminals, CI, and other agents.
 
 This is not Lynn stepping away from code. It is the opposite:code tasks, research tasks, and business tasks should share the same orchestration layer.
 
@@ -84,7 +84,7 @@ This is not Lynn stepping away from code. It is the opposite:code tasks, researc
 - **Acceptance flow**: worker output returns to GUI diffs, evidence, test gates, and release flow for review.
 - **`@lynn/cli`**: the CLI package supports `Lynn -p`, `Lynn code`, `Lynn agents`, and `Lynn worker run`, usable directly in terminals and callable by other agents.
 
-Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.85.10 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay visible, inspectable, and shippable.**
+Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.86 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay safely visible, inspectable, and shippable.**
 
 ### CLI Quick Install
 
@@ -95,12 +95,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.10.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.85.10
+Lynn --version  # should print 0.86.0
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -126,7 +126,28 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details open>
-<summary><strong>Lynn v0.85.10</strong> · 2026-07-11 · Session Progress and Agent reliability <em>(latest)</em></summary>
+<summary><strong>Lynn v0.86.0</strong> · 2026-07-12 · Security boundaries and runtime reliability <em>(latest)</em></summary>
+
+**v0.86.0 security, runtime, and UX update**:
+- Model-driven browser sessions deny microphone, camera, location, notification, and storage access by default; navigation and subresources pass DNS/SSRF checks.
+- Authorized execution remains inside the OS sandbox; SSH/cloud credentials, browser profiles, Lynn tokens, and agent configuration are deny-read paths.
+- IPC trusts known window identities and rejects failures with trace IDs; local HTTP/WS validates Host, Origin, and the per-launch token.
+- Windows finds `llama-server` through `where.exe`, while manual GGUF startup now reports real ready/failure, missing-runtime, timeout, crash, and port-conflict states.
+- Per-session prompt admission, explicit turn-end fallback tests, larger reconnect state, and removal of legacy internal retry state prevent cross-turn contamination.
+- Brain now strips pseudo-tool markup across stream chunks while the client keeps its final defensive sanitizer.
+- CLI streaming supports Ctrl+C cancellation, strict flags, command-level help, consistent non-TTY exits, and Windows-safe external worker argv execution.
+- Fleet workers appear in Activity, voice shows RTT and traffic, renderer recovery is visible, and i18n/dialog focus gaps are closed.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz"
+```
+
+[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.0)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.85.10</strong> · 2026-07-11 · Session Progress and Agent reliability</summary>
 
 **v0.85.10 runtime and UX update**:
 - **Clearer Session Progress**: the right rail presents the current session once, collapses older details by default, and exposes explicit Open Session / New Branch actions with keyboard-accessible expansion state.
@@ -1022,11 +1043,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases). The V0.85.10 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases). The V0.86.0 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
 **Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases).
 
-> **Windows SmartScreen notice:** The v0.85.10 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.86.0 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
 
 Linux builds are planned.
 

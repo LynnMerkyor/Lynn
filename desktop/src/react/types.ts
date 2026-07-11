@@ -339,6 +339,7 @@ export interface PlatformApi {
   getFilePath?(file: File): Promise<string | null>;
   startDrag?(filePaths: string | string[]): void;
   appReady(): void;
+  consumeRendererRecovery?(): Promise<boolean>;
 
   // ── Window controls (Windows/Linux) ──
   getPlatform?(): Promise<string>;

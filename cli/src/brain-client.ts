@@ -12,6 +12,7 @@ export interface BrainChatRequest {
   reasoning: ReasoningOptions;
   fallbackProvider?: CliProviderProfile | null;
   tools?: ChatToolDefinition[];
+  signal?: AbortSignal;
 }
 
 export interface ChatMessage {
@@ -306,9 +307,10 @@ export async function* streamLynnChat(request: BrainChatRequest): AsyncGenerator
       }
       return;
     } catch (error) {
+      if (request.signal?.aborted) throw request.signal.reason || error;
       lastError = error;
       if (error instanceof BrainStreamInterruptedError && attempt < attempts) {
-        await sleep(brainRetryDelayMs(attempt));
+        await sleep(brainRetryDelayMs(attempt), request.signal);
         continue;
       }
       if ((error instanceof BrainConnectionError || error instanceof BrainUnavailableError || error instanceof BrainStreamInterruptedError) && request.fallbackProvider) {
@@ -401,14 +403,14 @@ async function fetchBrainResponseWithRetry(request: BrainChatRequest, body: Reco
       const response = await fetchBrainResponseOnce(request, body);
       if (!response.ok && isRecoverableBrainStatus(response.status) && attempt < attempts) {
         lastError = new BrainUnavailableError(request.brainUrl, response.status, response.statusText);
-        await sleep(brainRetryDelayMs(attempt));
+        await sleep(brainRetryDelayMs(attempt), request.signal);
         continue;
       }
       return response;
     } catch (error) {
       lastError = error;
       if (attempt >= attempts) break;
-      await sleep(brainRetryDelayMs(attempt));
+      await sleep(brainRetryDelayMs(attempt), request.signal);
     }
   }
   throw new BrainConnectionError(request.brainUrl, lastError);
@@ -416,14 +418,20 @@ async function fetchBrainResponseWithRetry(request: BrainChatRequest, body: Reco
 
 async function fetchBrainResponseOnce(request: BrainChatRequest, body: Record<string, unknown>): Promise<Response> {
   let response: Response;
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), brainRequestTimeoutMs(!!request.fallbackProvider));
+  const timeoutAbort = new AbortController();
+  const timer = setTimeout(
+    () => timeoutAbort.abort(new Error("Brain response headers timed out")),
+    brainRequestTimeoutMs(!!request.fallbackProvider),
+  );
+  const signal = request.signal
+    ? AbortSignal.any([request.signal, timeoutAbort.signal])
+    : timeoutAbort.signal;
   try {
     response = await fetch(brainEndpointUrl(request.brainUrl, "/v1/chat/completions"), {
       method: "POST",
       headers: { "content-type": "application/json", ...signedBrainHeaders({ pathname: "/v1/chat/completions" }) },
       body: JSON.stringify(body),
-      signal: abort.signal,
+      signal,
     });
     if (response.status === 401) {
       const registered = await registerRemoteBrainDevice(request.brainUrl);
@@ -432,13 +440,16 @@ async function fetchBrainResponseOnce(request: BrainChatRequest, body: Record<st
           method: "POST",
           headers: { "content-type": "application/json", ...signedBrainHeaders({ pathname: "/v1/chat/completions" }) },
           body: JSON.stringify(body),
-          signal: abort.signal,
+          signal,
         });
       }
     }
   } catch (error) {
+    if (request.signal?.aborted) throw request.signal.reason || error;
     throw new BrainConnectionError(request.brainUrl, error);
   } finally {
+    // This timeout protects connection/header establishment only. Once fetch()
+    // resolves, an SSE response may legitimately stream for several minutes.
     clearTimeout(timer);
   }
   return response;
@@ -462,6 +473,7 @@ export async function* streamDirectProviderChat(request: BrainChatRequest, provi
       method: "POST",
       headers: providerHeaders(provider),
       body: JSON.stringify(body),
+      signal: request.signal,
     });
   } catch (error) {
     throw new Error(`CLI BYOK provider request failed (${provider.provider}): ${error instanceof Error ? error.message : String(error)}`);
@@ -532,8 +544,20 @@ function brainRetryDelayMs(attempt: number): number {
   return Math.min(5_000, base * (2 ** Math.max(0, attempt - 1)) + jitter);
 }
 
-function sleep(ms: number): Promise<void> {
-  return ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(signal.reason || new Error("Request cancelled"));
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason || new Error("Request cancelled"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function isRecoverableBrainStatus(status: number): boolean {

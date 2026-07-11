@@ -1661,6 +1661,32 @@ describe("chat route event forwarding", () => {
     expect(hub.send.mock.calls[1]?.[0]).toContain("周日广州会下雨吗？");
   });
 
+  it("serializes simultaneous prompt admission before the second request closes the first stream", async () => {
+    engine.abortSessionByPath = vi.fn(async () => true);
+    engine.isSessionStreaming = vi.fn(() => false);
+    hub.send = vi.fn(() => new Promise(() => {}));
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "第一条消息", clientMessageId: "first" }),
+    }, connections[0].client);
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "第二条消息", clientMessageId: "second" }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(2));
+    expect(clients[0].sent.filter((event) => event.type === "prompt_accepted")).toHaveLength(2);
+    expect(hub.send.mock.calls[0]?.[0]).toContain("第一条消息");
+    expect(hub.send.mock.calls[1]?.[0]).toContain("第二条消息");
+    expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+      type: "turn_end",
+      sessionPath: "/sessions/current.jsonl",
+    }));
+  });
+
   it("does not abort a silent Brain turn after the old 25s grace window", async () => {
     vi.useFakeTimers();
     let rejectSend;

@@ -724,17 +724,18 @@ function buildDirectSportsAnswer(context: unknown, userPrompt: string = ""): str
     const dateRange = text.match(/dateRange:\s*([^\n]+)/)?.[1]?.trim() || "";
     const source = text.match(/source:\s*(https?:\/\/\S+)/)?.[1] || "";
     const askWinner = /冠军|夺冠|谁赢|winner|champion/i.test(prompt);
-    if (wantsPrediction) return "";
-    if (/(?:是否有比赛|有没有比赛|有比赛|对阵|今晚.*比赛|今天.*比赛)/.test(prompt)) {
+    if (wantsPrediction) {
       return [
-        `本轮 ESPN scoreboard 没有在 ${league}${dateRange ? `（${dateRange}）` : ""}匹配到这组对阵。`,
-        "所以按这条直接数据源看，今晚没有这场比赛；我不会再用泛搜索结果猜测补答案。",
+        `可以做比分预测，但本轮 ESPN scoreboard 未返回 ${league}${dateRange ? `（${dateRange}）` : ""}可供核验的对阵。`,
+        "在不知道具体对阵时编一个比分没有依据；请把球队对阵发给我，或等赛程源刷新后再预测。",
+        "任何比分预测都只是赛前判断，不是事实，也不构成投注建议。",
         source ? `来源：${source}` : "",
       ].filter(Boolean).join("\n");
     }
     return [
-      `本轮 ESPN scoreboard 没有匹配到 ${league}${dateRange ? `（${dateRange}）` : ""}的相关比赛记录。`,
+      `本轮 ESPN scoreboard 未返回 ${league}${dateRange ? `（${dateRange}）` : ""}可供核验的赛事清单。`,
       buildSportsNoMatchExplanation(prompt, askWinner),
+      "这不等于赛事数量为 0；请以赛事官方赛程页或稍后刷新的 scoreboard 为准。",
       source ? `来源：${source}` : "",
     ].filter(Boolean).join("\n");
   }

@@ -126,6 +126,41 @@ describe("stream sanitizer · cross-chunk carry buffer", () => {
     expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
   });
 
+  it("hides closed internal reasoning blocks and keeps the final answer", () => {
+    const ss = {};
+    const result = stripStreamingPseudoToolBlocks(
+      ss,
+      "<reflect>Premise: internal notes only.</reflect>给客户先道歉，再确认问题并转交研发。",
+    );
+
+    expect(result).toEqual({
+      text: "给客户先道歉，再确认问题并转交研发。",
+      suppressed: true,
+    });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
+  it("withholds an unclosed internal reasoning block so empty-answer recovery can run", () => {
+    const ss = {};
+    const first = stripStreamingPseudoToolBlocks(ss, "<ref");
+    const second = stripStreamingPseudoToolBlocks(ss, "lect>Premise: internal notes only.");
+    const third = stripStreamingPseudoToolBlocks(ss, "Still reasoning without a final answer.");
+
+    expect(first.text).toBe("");
+    expect(second).toEqual({ text: "", suppressed: true });
+    expect(third).toEqual({ text: "", suppressed: true });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: true });
+  });
+
+  it("recognizes an internal reasoning closer split across chunks", () => {
+    const ss = {};
+    stripStreamingPseudoToolBlocks(ss, "<thinking>hidden</thi");
+    const result = stripStreamingPseudoToolBlocks(ss, "nking>最终答案。 ");
+
+    expect(result).toEqual({ text: "最终答案。 ", suppressed: true });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
   it("strips visible angle-bracket structure labels", () => {
     const ss = {};
     const result = stripStreamingPseudoToolBlocks(ss, "<方案：30分钟手机存储整理流程> **原则：先备份再删除。**");
@@ -143,6 +178,20 @@ describe("stream sanitizer · cross-chunk carry buffer", () => {
 
     expect(result).toEqual({
       text: "主题：延期说明\n提前预约搬家公司。",
+      suppressed: true,
+    });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
+  it("strips model-generated section tags from travel advice", () => {
+    const ss = {};
+    const result = stripStreamingPseudoToolBlocks(
+      ss,
+      "<position>先核对实际位置。</position>\n<cancellation>展开取消条款。</cancellation>\n<reviews>优先看近期差评。</reviews>",
+    );
+
+    expect(result).toEqual({
+      text: "先核对实际位置。\n展开取消条款。\n优先看近期差评。",
       suppressed: true,
     });
     expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });

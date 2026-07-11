@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Static, Text, render, useApp, useInput } from "ink";
 import { detectImageProtocol, renderImageThumbnail } from "./terminal-image.js";
 import { getStringFlag, hasFlag, type ParsedArgs } from "./args.js";
@@ -129,6 +129,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
   const effectiveCwd = getStringFlag(props.args.flags, "cwd") || process.cwd();
   const contextInfo = useMemo(() => analyzePastedContext(input, effectiveCwd), [input, effectiveCwd]);
   const [memoryFrame, setMemoryFrame] = useState(() => buildMemoryContextFrameSync(dataDir));
+  const activeAbortRef = useRef<AbortController | null>(null);
   const messages = useMemo<ChatMessage[]>(() => resetCliRuntimeMessages(chatRouteLabel(props.fallbackProvider), memoryFrame), [props.fallbackProvider]);
   const placeholderFrame = Math.floor(frame / 43);
 
@@ -141,11 +142,15 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
   }, [profile.animation]);
 
   useInput((value, key) => {
-    if (busy) return;
     if (key.ctrl && value === "c") {
+      if (busy && activeAbortRef.current && !activeAbortRef.current.signal.aborted) {
+        activeAbortRef.current.abort(new Error(t("chat.cancelled")));
+        return;
+      }
       app.exit();
       return;
     }
+    if (busy) return;
     const newlineIndex = value.search(/[\r\n]/);
     if (!key.return && newlineIndex >= 0) {
       const lines = value.replace(/\r\n?/g, "\n").split("\n");
@@ -171,6 +176,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
           memoryFrame,
           setMemoryFrame,
           cwd: effectiveCwd,
+          activeAbortRef,
         });
         return;
       }
@@ -212,6 +218,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
         memoryFrame,
         setMemoryFrame,
         cwd: effectiveCwd,
+        activeAbortRef,
       });
       return;
     }
@@ -494,6 +501,7 @@ async function submitInput(inputData: {
   memoryFrame: string;
   setMemoryFrame: (value: string) => void;
   cwd: string;
+  activeAbortRef: React.MutableRefObject<AbortController | null>;
 }): Promise<void> {
   const text = normalizeSlashInput(inputData.text.trim());
   if (!text) return;
@@ -670,6 +678,7 @@ async function submitChatTurn(inputData: {
   promptText: string;
   userContent: ChatMessage["content"];
   contextSummary: string;
+  activeAbortRef: React.MutableRefObject<AbortController | null>;
 }): Promise<void> {
   const userTurn: Turn = { id: Date.now(), role: "user", text: inputData.promptText, meta: inputData.contextSummary };
   const assistantId = userTurn.id + 1;
@@ -689,12 +698,15 @@ async function submitChatTurn(inputData: {
   let assistant = "";
   const startedAt = Date.now();
   const decodeTracker = createDecodeSpeedTracker(startedAt);
+  const abort = new AbortController();
+  inputData.activeAbortRef.current = abort;
   try {
     for await (const event of streamBrainChat({
       brainUrl: inputData.props.brainUrl,
       messages: inputData.messages,
       reasoning: inputData.reasoning,
       fallbackProvider: inputData.fallbackProvider,
+      signal: abort.signal,
     })) {
       if (event.type === "provider") inputData.setProvider(event.activeProvider);
       if (event.type === "usage") inputData.setUsage(summarizeUsage(event.usage, { durationMs: Date.now() - startedAt }));
@@ -715,9 +727,12 @@ async function submitChatTurn(inputData: {
     inputData.messages.push({ role: "assistant", content: assistant });
   } catch (error) {
     inputData.messages.pop();
-    const message = error instanceof Error ? error.message : String(error);
+    const message = abort.signal.aborted
+      ? t("chat.cancelled")
+      : error instanceof Error ? error.message : String(error);
     inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, text: message, pending: false, error: true } : turn));
   } finally {
+    if (inputData.activeAbortRef.current === abort) inputData.activeAbortRef.current = null;
     inputData.setBusy(false);
   }
 }

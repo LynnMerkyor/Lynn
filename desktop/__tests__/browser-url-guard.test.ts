@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { isBlockedBrowserHost, isAllowedBrowserUrl } = require("../browser-url-guard.cjs");
+const { isBlockedBrowserHost, isAllowedBrowserUrl, isAllowedBrowserUrlResolved } = require("../browser-url-guard.cjs");
 
 describe("isBlockedBrowserHost (browser SSRF guard)", () => {
   it("blocks loopback / private / link-local / metadata", () => {
-    for (const h of ["localhost", "app.localhost", "127.0.0.1", "0.0.0.0", "10.1.2.3", "192.168.0.1", "172.16.0.1", "172.31.255.255", "169.254.169.254", "::1", "metadata.google.internal"]) {
+    for (const h of ["localhost", "app.localhost", "127.0.0.1", "0.0.0.0", "10.1.2.3", "192.168.0.1", "172.16.0.1", "172.31.255.255", "169.254.169.254", "100.64.0.1", "198.18.0.1", "::1", "::ffff:192.168.1.2", "metadata.google.internal"]) {
       expect(isBlockedBrowserHost(h), h).toBe(true);
     }
+  });
+
+  it("rejects public-looking hostnames when DNS resolves them to private addresses", async () => {
+    const privateLookup = async () => [{ address: "127.0.0.1", family: 4 }];
+    const publicLookup = async () => [{ address: "93.184.216.34", family: 4 }];
+    expect(await isAllowedBrowserUrlResolved("https://rebind.example/x", {}, privateLookup)).toBe(false);
+    expect(await isAllowedBrowserUrlResolved("https://example.com/x", {}, publicLookup)).toBe(true);
   });
   it("allows public hosts", () => {
     for (const h of ["example.com", "8.8.8.8", "172.32.0.1", "github.com"]) {

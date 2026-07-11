@@ -37,6 +37,9 @@ const BAD_TEXT_NEEDLES = [
   "Tool not found",
   "<reflect>",
   "</reflect>",
+  "<position>",
+  "<cancellation>",
+  "<reviews>",
   "<｜｜DSML｜｜",
   "DSML｜｜tool_calls",
   "根据本轮已执行工具返回的证据",
@@ -643,7 +646,10 @@ function hasWorldCupPredictionAnswer(text) {
   const raw = String(text || "");
   const hasPredictionCue = /预测|猜测|不是事实|不代表实际|仅供参考|娱乐|不构成投注/i.test(raw);
   const hasScore = /\b\d{1,2}\s*[-–—:：比]\s*\d{1,2}\b|预测比分\s*\d{1,2}\s*[-–—:：比]\s*\d{1,2}/.test(raw);
-  return hasPredictionCue && hasScore;
+  const honestNoFixtureBoundary = /(?:未返回|未拿到|没有拿到|无法确认).{0,60}(?:对阵|赛程)/.test(raw)
+    && (/(?:不能|无法|不应|不要).{0,40}(?:编|预测|给出).{0,20}(?:比分|具体比分)/.test(raw)
+      || /(?:编|预测|给出).{0,20}(?:比分|具体比分).{0,20}(?:没有依据|无依据|不可靠)/.test(raw));
+  return hasPredictionCue && (hasScore || honestNoFixtureBoundary);
 }
 
 function hasPreviousYearLeakForRelativePrompt(prompt, text) {
@@ -806,12 +812,12 @@ function qualityReason(prompt, text, result = {}) {
     return "denies-available-tool-after-tool-event";
   }
   if (/世界杯/.test(prompt)) {
-    if (isStaleWorldCupAnswer(prompt, text)) {
-      return "world-cup-stale-or-not-started-answer";
-    }
     if (isWorldCupPredictionPrompt(prompt)) {
       if (!hasWorldCupPredictionAnswer(text)) return "world-cup-prediction-without-score-or-disclaimer";
       return "";
+    }
+    if (isStaleWorldCupAnswer(prompt, text)) {
+      return "world-cup-stale-or-not-started-answer";
     }
     const scorePattern = /\d+\s*[\u00a0\u202f ]*(?:[-–—:：比])[\u00a0\u202f ]*\d+/;
     if (/已经出的赛事比分|最新的比赛结果|上一场比分/.test(prompt) && !scorePattern.test(text)) {

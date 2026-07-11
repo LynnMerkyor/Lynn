@@ -242,7 +242,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     ...(hardware.warnings || []),
     ...(hardware.blockers || []),
   ])];
-  const hasRuntime = !endpointForeign && !!observed.llama_server;
+  const hasRuntime = !endpointForeign && !!(observed.llama_server || llamaState.binaryPath);
   const defaultDownload = llamaState.download;
   const managerStatus = llamaState.status;
   const managerStarting = managerStatus === 'starting' || managerStatus === 'unhealthy';

@@ -389,7 +389,6 @@ export interface ToolTurnFinalizerDeps {
   flushBufferedToolVisibleText: (sessionPath: string, ss: any, finalText?: string) => void;
   maybeAppendCodeVerificationPostscript: (sessionPath: string, ss: any) => boolean;
   hasStreamEvent: (ss: any, type: string) => boolean;
-  hasScheduledInternalRetry: (ss: any) => boolean;
   hasToolExecutionInFlight: (ss: any) => boolean;
   hasDifferentActiveStreamToken: (ss: any, streamToken: any) => boolean;
   timeouts: {
@@ -413,17 +412,57 @@ export function createToolTurnFinalizer({
   flushBufferedToolVisibleText,
   maybeAppendCodeVerificationPostscript,
   hasStreamEvent,
-  hasScheduledInternalRetry,
   hasToolExecutionInFlight,
   hasDifferentActiveStreamToken,
   timeouts,
 }: ToolTurnFinalizerDeps) {
-  function persistVisibleFallbackText(sessionPath: any, ss: any, text: any): boolean {
+  function persistVisibleFallbackText(sessionPath: any, ss: any, text: any, opts: any = {}): boolean {
     const visibleText = String(text || "");
     if (!sessionPath || !visibleText.trim()) return false;
     const session = engine.getSessionByPath?.(sessionPath);
+    const sessionManager = session?.sessionManager;
+    const originalPromptText = String(ss?.originalPromptText || "").trim();
+    if (opts.persistPromptIfMissing && originalPromptText && sessionManager?.appendMessage) {
+      const currentMessages = sessionManager.buildSessionContext?.().messages || [];
+      const latestCurrent = currentMessages[currentMessages.length - 1];
+      if (!(latestCurrent?.role === "user" && extractText(latestCurrent.content).trim() === originalPromptText)) {
+        sessionManager.appendMessage({ role: "user", content: originalPromptText, timestamp: Date.now() });
+      }
+      sessionManager.appendMessage({ role: "assistant", content: visibleText, timestamp: Date.now() });
+      session?.agent?.replaceMessages?.(sessionManager.buildSessionContext?.().messages || []);
+      return true;
+    }
     let persisted = false;
-    const latest = latestPersistedMessageText(sessionPath);
+    let latest = latestPersistedMessageText(sessionPath);
+    if (
+      opts.persistPromptIfMissing
+      && originalPromptText
+      && !(latest?.role === "user" && String(latest.text || "").trim() === originalPromptText)
+    ) {
+      const userMessage = {
+        role: "user",
+        content: [{ type: "text", text: originalPromptText }],
+        timestamp: Date.now(),
+      };
+      try {
+        appendJsonlLine(sessionPath, {
+          type: "message",
+          id: sessionLineId(),
+          parentId: getLastSessionEntryId(sessionPath),
+          timestamp: new Date().toISOString(),
+          message: userMessage,
+        });
+        latest = { role: "user", text: originalPromptText };
+      } catch (err) {
+        debugLog()?.warn("ws", `[TURN-CLOSE-FALLBACK v3] persist direct user failed · ${formatError(err)} · ${sessionPath}`);
+      }
+      if (session && Array.isArray(session.messages)) {
+        const latestInMemory = session.messages[session.messages.length - 1];
+        if (!(latestInMemory?.role === "user" && extractText(latestInMemory.content).trim() === originalPromptText)) {
+          session.messages.push(userMessage);
+        }
+      }
+    }
     const fallbackMessage = {
       role: "assistant",
       content: [{ type: "text", text: visibleText }],
@@ -464,9 +503,6 @@ export function createToolTurnFinalizer({
   function closeStreamWithVisibleFallback(sessionPath: any, ss: any, text: any, reason: any, opts: any = {}) {
     if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
     ss._turnClosed = true;
-    ss.internalRetryPending = false;
-    ss.internalRetryInFlight = false;
-    ss.internalRetryReason = "";
     clearTurnTimers(ss);
     editRollbackStore.discardPendingForSession(sessionPath, ss.activeStreamToken || null);
     if (ss.isThinking) {
@@ -475,7 +511,7 @@ export function createToolTurnFinalizer({
     }
     if (text && (!ss.hasOutput || opts.appendEvenIfHasOutput)) {
       const prefix = ss.hasOutput && opts.appendEvenIfHasOutput ? "\n\n" : "";
-      persistVisibleFallbackText(sessionPath, ss, prefix + text);
+      persistVisibleFallbackText(sessionPath, ss, prefix + text, opts);
       if (opts.trustedFallback) {
         emitTrustedVisibleTextDelta(sessionPath, ss, prefix + text);
       } else {
@@ -546,7 +582,6 @@ export function createToolTurnFinalizer({
   function finalizeReturnedTurnWithoutStream(sessionPath: any, ss: any, reason: any, opts: any = {}) {
     if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
     if (hasToolExecutionInFlight(ss)) return false;
-    if (!opts.ignoreInternalRetry && hasScheduledInternalRetry(ss)) return false;
     const session = engine.getSessionByPath(sessionPath);
     const finalText = !ss.hasOutput
       ? extractLatestAssistantVisibleText(session, sessionPath)
@@ -566,8 +601,7 @@ export function createToolTurnFinalizer({
         ss.hasError ||
         ss._turnClosed ||
         hasStreamEvent(ss, "turn_end") ||
-        hasToolExecutionInFlight(ss) ||
-        hasScheduledInternalRetry(ss)
+        hasToolExecutionInFlight(ss)
       ) {
         return;
       }
@@ -587,8 +621,7 @@ export function createToolTurnFinalizer({
         ss.hasError ||
         ss.hasOutput ||
         ss._turnClosed ||
-        hasStreamEvent(ss, "turn_end") ||
-        hasScheduledInternalRetry(ss)
+        hasStreamEvent(ss, "turn_end")
       ) {
         clearPersistedFinalAnswerPollTimer(ss);
         return;

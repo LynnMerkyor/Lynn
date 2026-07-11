@@ -125,14 +125,16 @@ function atomicWriteYAML(filePath: string, data: unknown, header = ""): void {
     forceQuotes: false,
   });
   const tmp = filePath + ".tmp";
-  fs.writeFileSync(tmp, yamlStr, "utf-8");
+  fs.writeFileSync(tmp, yamlStr, { encoding: "utf-8", mode: 0o600 });
   fs.renameSync(tmp, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 
 function atomicWriteJSON(filePath: string, data: unknown): void {
   const tmp = filePath + ".tmp";
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + "\n", "utf-8");
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
   fs.renameSync(tmp, filePath);
+  fs.chmodSync(filePath, 0o600);
 }
 
 // ── 主迁移函数 ────────────────────────────────────────────────────────────────

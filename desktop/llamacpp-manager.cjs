@@ -106,19 +106,22 @@ function defaultBinaryPath(homeDir, platform) {
   return binaryPathForLynnRoot(defaultLynnRoot(homeDir), platform);
 }
 
-function systemBinaryCandidates(platform) {
-  if (platform === "win32") return [];
-  const candidates = [
+function systemBinaryCandidates(platform, spawnSyncFn = spawnSync) {
+  const candidates = platform === "win32" ? [] : [
     "/opt/homebrew/bin/llama-server",
     "/usr/local/bin/llama-server",
     "/usr/bin/llama-server",
   ];
   try {
-    const resolved = spawnSync("which", ["llama-server"], { encoding: "utf8", timeout: 1000, windowsHide: true });
-    const fromPath = String(resolved.stdout || "").trim();
-    if (fromPath) candidates.unshift(fromPath);
+    const locator = platform === "win32" ? "where.exe" : "which";
+    const resolved = spawnSyncFn(locator, ["llama-server"], { encoding: "utf8", timeout: 1000, windowsHide: true });
+    const fromPath = String(resolved.stdout || "")
+      .split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    candidates.unshift(...fromPath);
   } catch {
-    // which is best-effort only; static candidates cover the common Mac/Linux paths.
+    // PATH discovery is best-effort; static candidates cover common Mac/Linux paths.
   }
   return [...new Set(candidates)];
 }
@@ -241,6 +244,7 @@ class LlamaCppManager {
     this.onState = opts.onState || (() => {});
     // DI for tests
     this.spawnFn = opts.spawnFn || spawn;
+    this.spawnSyncFn = opts.spawnSyncFn || spawnSync;
     this.httpModule = opts.httpModule || http;
     this.netModule = opts.netModule || net;
     this.fsModule = opts.fsModule || fs;
@@ -283,7 +287,7 @@ class LlamaCppManager {
     }
     const candidate = binaryPathForLynnRoot(this.lynnHome, this.platform);
     if (this.fsModule.existsSync(candidate)) return candidate;
-    for (const systemCandidate of systemBinaryCandidates(this.platform)) {
+    for (const systemCandidate of systemBinaryCandidates(this.platform, this.spawnSyncFn)) {
       if (this.fsModule.existsSync(systemCandidate)) return systemCandidate;
     }
     return null;
@@ -612,5 +616,6 @@ module.exports = {
   defaultBinaryPath,
   defaultModelPath,
   lynnHomeModelPath,
+  systemBinaryCandidates,
   DEFAULT_CONFIG,
 };

@@ -1,6 +1,6 @@
 // Brain v2 · Router — BYOK-equality thin pipe
 // 原则: 只做事实层 (provider universalOrder + cooldown + capability gate + wire adapter)
-//       + 服务端工具回灌循环。不注入 system prompt,不限工具调用次数(env 可配),不检测/拒绝伪工具,
+//       + 服务端工具回灌循环。不注入 system prompt,不限工具调用次数(env 可配),仅清理伪工具展示标记,
 //       不强制 synthesis,不解析模型内容做策略判断。BYOK 直连什么样,brain 就什么样。
 //
 // 2026-05-23 重构: 砍掉 ~500 行 synthesis + pseudo-tool detection + buffered content 干涉。
@@ -29,6 +29,7 @@ import {
   skipDirectEvidencePlanningProviders,
 } from './direct-evidence-policy.js';
 import { errorMessage, providerId, type ChatMessage, type FallbackEntry, type FallbackReason, type Provider, type ProviderCapability, type ProviderId, type RouterRunOptions, type RouterRunResult, type ToolCall } from './types.js';
+import { createPseudoToolSanitizerState, flushPseudoToolSanitizer, sanitizePseudoToolDelta } from './pseudo-tool-sanitizer.js';
 
 type CapabilityRequired = Partial<Pick<ProviderCapability, 'vision' | 'audio' | 'video'>>;
 type ProviderError = Error & { suppressBody?: boolean; cooldownMs?: number; status?: number; statusCode?: number; code?: string };
@@ -1191,10 +1192,11 @@ async function runRound({
     let contentAccum = '';
     let reasoningAccum = '';
     let synthesisBuffer = '';
+    const pseudoToolSanitizer = createPseudoToolSanitizerState();
     const bufferedContentChunks: RunRoundResult['bufferedContentChunks'] = [];
     let bufferedFinishChunk: RunRoundResult['bufferedFinishChunk'] | undefined;
     const toolCallsAcc: ToolCall[] = [];
-    const emitContentDelta = async (delta: string): Promise<void> => {
+    const emitRawContentDelta = async (delta: string): Promise<void> => {
       if (!delta) return;
       contentAccum += delta;
       const fallback_from = fallbackChain.length > 0 ? [...fallbackChain] : undefined;
@@ -1203,6 +1205,14 @@ async function runRound({
         return;
       }
       await onChunk({ type: 'content', delta }, { providerId, fallback_from });
+    };
+    const emitContentDelta = async (delta: string): Promise<void> => {
+      const sanitized = sanitizePseudoToolDelta(pseudoToolSanitizer, delta);
+      if (sanitized) await emitRawContentDelta(sanitized);
+    };
+    const flushPseudoToolCarry = async (): Promise<void> => {
+      const sanitized = flushPseudoToolSanitizer(pseudoToolSanitizer);
+      if (sanitized) await emitRawContentDelta(sanitized);
     };
     const flushSynthesisBuffer = async (final = false): Promise<void> => {
       if (!sanitizeSynthesisOpening || !synthesisBuffer) return;
@@ -1273,6 +1283,7 @@ async function runRound({
           }
           if (chunk.type === 'finish') {
             await flushSynthesisBuffer(true);
+            await flushPseudoToolCarry();
             finishReason = chunk.reason;
             if (bufferContent && chunk.reason !== 'tool_calls') {
               bufferedFinishChunk = {
@@ -1298,6 +1309,7 @@ async function runRound({
         providerAttempt.cleanup();
       }
       await flushSynthesisBuffer(true);
+      await flushPseudoToolCarry();
       // [prefix-cache 埋点] StepFun 流式 usage 的中途帧恒报 cached_tokens=0,只有最终帧带真值
       // (2026-06-10 实测)。这里只记最终帧,prod 日志可直接观测真实命中率。
       if (lastUsage && typeof lastUsage === 'object') {
@@ -1345,7 +1357,7 @@ async function runRound({
       const fallbackReason = classifyProviderFallbackReason(err, message);
       const cooldownMs = err.cooldownMs
         ?? (fallbackReason === 'error-timeout'
-          ? positiveEnvNumber('BRAIN_V2_PROVIDER_TIMEOUT_COOLDOWN_MS', 5_000)
+          ? positiveEnvNumber('BRAIN_V2_PROVIDER_TIMEOUT_COOLDOWN_MS', 60_000)
           : null);
       markUnhealthy(providerId, `${fallbackReason}: ${message}`, cooldownMs);
       fallbackChain.push({ id: providerId, reason: fallbackReason });
@@ -1592,7 +1604,11 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
         return { ok: true, providerId, iterations: iter };
       }
-      const recoveryProviderId = providerOrderForCapability(capabilityRequired).find((candidateId) => {
+      const recoveryOrder = [
+        'glm-5-turbo' as ProviderId,
+        ...providerOrderForCapability(capabilityRequired),
+      ];
+      const recoveryProviderId = Array.from(new Set(recoveryOrder)).find((candidateId) => {
         const candidate = getProvider(candidateId);
         return !!candidate && providerCanAttemptRound(candidate, capabilityRequired, []);
       });
@@ -1625,14 +1641,20 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
           signal,
           onChunk,
           log,
-          extraBody,
-          reasoningEffort: 'low',
+          extraBody: {
+            ...(extraBody && typeof extraBody === 'object' ? extraBody : {}),
+            thinking: { type: 'disabled' },
+            max_tokens: 2_048,
+          },
+          // Last chance exists to produce visible content, not another hidden
+          // reasoning trace. Prefer the non-thinking GLM lane and force off.
+          reasoningEffort: 'off',
           requestCache,
           audioCache,
           skipProviders: recoverySkip,
           sanitizeSynthesisOpening: false,
           bufferContent: true,
-          attemptTimeoutCapMs: positiveEnvNumber('BRAIN_V2_LAST_CHANCE_TIMEOUT_MS', 12_000),
+          attemptTimeoutCapMs: positiveEnvNumber('BRAIN_V2_LAST_CHANCE_TIMEOUT_MS', 20_000),
         });
       } catch {
         throw error;

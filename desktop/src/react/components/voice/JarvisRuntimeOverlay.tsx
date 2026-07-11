@@ -11,7 +11,7 @@ import { IncrementalTtsSegmenter } from '../../services/incremental-tts-segmente
 import styles from './JarvisRuntimeOverlay.module.css';
 
 export const LYNN_RUNTIME_DISPLAY_NAME = 'Lynn';
-export const LYNN_RUNTIME_ARIA_LABEL = 'Lynn 语音助手';
+export const LYNN_RUNTIME_ARIA_LABEL = 'Lynn voice assistant';
 
 type JarvisAction = 'start' | 'end-turn' | 'interrupt-listen' | 'interrupt';
 
@@ -655,7 +655,7 @@ export function JarvisRuntimeOverlay() {
   if (!open) return null;
 
   return (
-    <section className={styles.shell} aria-label={LYNN_RUNTIME_ARIA_LABEL}>
+    <section className={styles.shell} aria-label={tr('jarvis.ariaLabel', LYNN_RUNTIME_ARIA_LABEL)}>
       <div className={styles.header}>
         <div
           className={styles.orb}
@@ -672,19 +672,19 @@ export function JarvisRuntimeOverlay() {
         </div>
         <div className={styles.compactActions}>
           <button className={styles.primaryButton} type="button" onClick={handlePrimary} disabled={busy}>
-            {busy ? '处理中' : jarvisPrimaryLabel(primaryAction)}
+            {busy ? tr('jarvis.action.working', 'Working') : jarvisPrimaryLabel(primaryAction)}
           </button>
           <button
             className={styles.secondaryButton}
             type="button"
             onClick={() => void interrupt(false)}
             disabled={status.state === VOICE_STATE.IDLE}
-            title="强制停止当前播报 / 思考"
+            title={tr('jarvis.action.stopTitle', 'Stop the current playback or response')}
           >
-            停止
+            {tr('jarvis.action.interrupt', 'Stop')}
           </button>
         </div>
-        <button className={styles.closeButton} type="button" onClick={close} aria-label={`关闭 ${LYNN_RUNTIME_DISPLAY_NAME}`}>
+        <button className={styles.closeButton} type="button" onClick={close} aria-label={tr('jarvis.action.close', `Close ${LYNN_RUNTIME_DISPLAY_NAME}`)}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
@@ -710,6 +710,13 @@ export function JarvisRuntimeOverlay() {
       </div>
 
       <div className={styles.modeHint}>{modeHint(status.state)}</div>
+      {status.stats && (
+        <div className={styles.stats} aria-label={tr('jarvis.stats.label', 'Voice connection statistics')}>
+          <span>{tr('jarvis.stats.rtt', 'RTT')} {Math.max(0, Math.round(status.stats.rttMs || 0))} ms</span>
+          <span>{tr('jarvis.stats.upload', 'Up')} {Math.round((status.stats.pcmBytesOut || 0) / 1024)} KB</span>
+          <span>{tr('jarvis.stats.download', 'Down')} {Math.round((status.stats.ttsBytesIn || 0) / 1024)} KB</span>
+        </div>
+      )}
       {status.error && <div className={styles.error}>{status.error}</div>}
     </section>
   );

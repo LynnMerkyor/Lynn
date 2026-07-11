@@ -6,6 +6,7 @@ import { isDisplayDefaultModel } from '../utils/brain-models';
 import { getBrainComplianceNote } from '../../../../shared/brain-provider.js';
 import { getUserFacingModelAlias } from '../../../../shared/assistant-role-models.js';
 import styles from './StatusBar.module.css';
+import { useI18n } from '../hooks/use-i18n';
 
 declare function t(key: string, vars?: Record<string, string | number>): string;
 
@@ -42,7 +43,9 @@ function formatTps(value: number | null | undefined): string | null {
   return `${value.toFixed(digits)} tok/s`;
 }
 
-function formatLocalQwenTag(status: LocalQwenStatus | null): string {
+type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+function formatLocalQwenTag(status: LocalQwenStatus | null, translate: Translate): string {
   const endpointRunning = status?.runtime?.endpoint_running === true
     || status?.plan?.observed?.endpoint_running === true;
   const endpointLoading = !endpointRunning && (
@@ -55,13 +58,13 @@ function formatLocalQwenTag(status: LocalQwenStatus | null): string {
     const predictedTokens = Number(status?.runtime?.metrics?.predicted_tokens_total || 0);
     const totalTokens = Math.round(promptTokens + predictedTokens);
     const tps = formatTps(status?.runtime?.metrics?.predicted_tps);
-    const parts = ['本地 Qwen3.6-27B 正在运行'];
-    if (tps) parts.push(`当前 ${tps}`);
-    if (totalTokens > 0) parts.push(`服务累计处理 ${totalTokens.toLocaleString()} tokens`);
+    const parts = [translate('status.model.localRunning')];
+    if (tps) parts.push(translate('status.model.currentSpeed', { speed: tps }));
+    if (totalTokens > 0) parts.push(translate('status.model.totalTokens', { tokens: totalTokens.toLocaleString() }));
     return parts.join(' · ');
   }
-  if (endpointLoading) return '本地 Qwen3.6-27B 正在加载';
-  return '本地 Qwen3.6-27B 已选择 · 模型未启动';
+  if (endpointLoading) return translate('status.model.localLoading');
+  return translate('status.model.localSelected');
 }
 
 function formatModelTag(
@@ -70,10 +73,11 @@ function formatModelTag(
   role?: string | null,
   purpose?: 'chat' | 'utility' | 'utility_large',
   localQwenStatus?: LocalQwenStatus | null,
+  translate: Translate = t,
 ): string | null {
   if (!model?.id) return null;
   if (isLocalQwenModel(model)) {
-    return formatLocalQwenTag(localQwenStatus || null);
+    return formatLocalQwenTag(localQwenStatus || null, translate);
   }
   const alias = getUserFacingModelAlias({
     modelId: model.id,
@@ -82,16 +86,17 @@ function formatModelTag(
     purpose,
   });
   if (alias) {
-    return `${kind} ${alias} · 已就绪`;
+    return translate('status.model.ready', { kind, model: alias });
   }
   if (isDisplayDefaultModel(model.id, model.provider)) {
-    return `${kind} 默认模型 · 已备案`;
+    return translate('status.model.default', { kind });
   }
   const ref = model.provider ? `${model.provider}/${model.id}` : model.id;
   return `${kind} ${ref}`;
 }
 
 export function StatusBar() {
+  const { t: translate } = useI18n();
   const wsState = useStore((s) => s.wsState);
   const attempt = useStore((s) => s.wsReconnectAttempt);
   const currentModel = useStore((s) => s.currentModel);
@@ -131,27 +136,26 @@ export function StatusBar() {
 
   const meta = useMemo(() => {
     const parts: string[] = [];
-    const chat = formatModelTag('chat', currentModel, agentYuan, 'chat', localQwenStatus);
-    const tool = formatModelTag('tool', utilityModel, agentYuan, 'utility', localQwenStatus);
-    const large = formatModelTag('large', utilityLargeModel, agentYuan, 'utility_large', localQwenStatus);
+    const chat = formatModelTag('chat', currentModel, agentYuan, 'chat', localQwenStatus, translate);
+    const tool = formatModelTag('tool', utilityModel, agentYuan, 'utility', localQwenStatus, translate);
+    const large = formatModelTag('large', utilityLargeModel, agentYuan, 'utility_large', localQwenStatus, translate);
 
     if (chat) parts.push(chat);
     if (tool) parts.push(tool);
     if (large) parts.push(large);
 
     return parts;
-  }, [agentYuan, currentModel, localQwenStatus, utilityModel, utilityLargeModel]);
+  }, [agentYuan, currentModel, localQwenStatus, translate, utilityModel, utilityLargeModel]);
 
   // 会话成本(StepFun 一条龙:全 token 云计费)。来自 usage-slice 的去重累计。
   const usageChip = useMemo(() => {
     const u = currentSessionPath ? sessionUsageMap[currentSessionPath] : undefined;
     if (!u || u.totalTokens <= 0) return null;
-    const tr = (k: string, fb: string) => { const v = t(k); return v && v !== k ? v : fb; };
     const fmt = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : String(n));
     const cachePct = u.input > 0 ? Math.round((u.cacheRead / u.input) * 100) : 0;
     const cost = u.costTotal > 0 ? ` · $${u.costTotal >= 0.1 ? u.costTotal.toFixed(2) : u.costTotal.toFixed(4)}` : '';
-    return `Σ ${fmt(u.totalTokens)} tok (in ${fmt(u.input)} · out ${fmt(u.output)}) · ${tr('status.usage.cache', '缓存')} ${cachePct}%${cost}`;
-  }, [currentSessionPath, sessionUsageMap]);
+    return `Σ ${fmt(u.totalTokens)} tok (in ${fmt(u.input)} · out ${fmt(u.output)}) · ${translate('status.usage.cache')} ${cachePct}%${cost}`;
+  }, [currentSessionPath, sessionUsageMap, translate]);
 
   if (wsState === 'connected' && meta.length === 0 && !usageChip) return null;
 
@@ -163,7 +167,7 @@ export function StatusBar() {
             <span
               key={item}
               className={styles.metaChip}
-              title={item.includes('默认模型') ? getBrainComplianceNote() : item}
+              title={item.includes(translate('status.model.defaultName')) ? getBrainComplianceNote() : item}
             >
               {item}
             </span>

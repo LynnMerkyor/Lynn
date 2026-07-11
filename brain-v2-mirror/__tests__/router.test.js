@@ -717,7 +717,7 @@ describe('Router', () => {
     expect(mockState.unhealthy).toContainEqual(expect.objectContaining({
       id: 'p-step',
       reason: expect.stringContaining('timeout'),
-      cooldownMs: 5_000,
+      cooldownMs: 60_000,
     }));
     expect(chunks.some((c) => c.type === 'content' && c.delta === 'fallback answer')).toBe(true);
   });

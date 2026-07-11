@@ -367,7 +367,7 @@ describe('tool-exec dispatcher', () => {
       expect(r).toContain('dateRange: 20260622-20260624');
       expect(r).toContain('Argentina vs Austria');
       expect(r).not.toContain('Portugal vs Uzbekistan');
-      expect(global.fetch.mock.calls[0][0]).toContain('dates=20260622-20260624');
+      expect(global.fetch.mock.calls[0][0]).toContain('dates=20260621-20260625');
     } finally {
       vi.useRealTimers();
     }

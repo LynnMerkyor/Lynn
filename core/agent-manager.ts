@@ -492,7 +492,9 @@ export class AgentManager {
       }
       configYamlOut = config;
     }
-    fs.writeFileSync(path.join(agentDir, "config.yaml"), configYamlOut, "utf-8");
+    const configPath = path.join(agentDir, "config.yaml");
+    fs.writeFileSync(configPath, configYamlOut, { encoding: "utf-8", mode: 0o600 });
+    fs.chmodSync(configPath, 0o600);
 
     const pd = this._d.productDir;
     // identity.md（按 yuan 选模板，缺省回退 hanako / identity.example）

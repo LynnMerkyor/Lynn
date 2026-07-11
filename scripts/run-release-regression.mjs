@@ -831,6 +831,11 @@ function summarizeTools(tools) {
   return tools.map((tool) => `${tool.name || "unknown"}:${tool.success === true ? "ok" : tool.success === false ? "fail" : "?"}`);
 }
 
+function turnPromptMarker(prompt) {
+  const match = String(prompt || "").match(/【([^】]+)】/u);
+  return String(match?.[1] || "").trim();
+}
+
 function scoreTurn(testCase, turn, turnResult, turnIndex) {
   const failures = [];
   const warnings = [];
@@ -1076,7 +1081,7 @@ async function runLiveCase(testCase, config) {
       result.turns.push(turnResult);
       result.failures.push(...turnScore.failures.map((item) => `turn ${i + 1}: ${item}`));
       result.warnings.push(...turnScore.warnings.map((item) => `turn ${i + 1}: ${item}`));
-      previousTexts.push({ marker: testCase.id, text: active.text });
+      previousTexts.push({ marker: turnPromptMarker(turn.prompt), text: active.text });
       if (active.endTimer) clearTimeout(active.endTimer);
       active = null;
       activeResolve = null;

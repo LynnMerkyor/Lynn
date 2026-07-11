@@ -1,6 +1,11 @@
 const { ipcMain } = require('electron');
 
 let senderValidator = null;
+let ipcMainRuntime = ipcMain;
+
+function setIpcMainForTests(value) {
+  ipcMainRuntime = value || ipcMain;
+}
 
 function setIpcSenderValidator(validator) {
   senderValidator = typeof validator === "function" ? validator : null;
@@ -17,28 +22,27 @@ function isSenderAllowed(channel, event) {
 }
 
 /**
- * Non-breaking IPC handler wrapper.
- * Adds structured error logging as a safety net. Does NOT change return format.
- * If an error escapes the handler, it is logged and undefined is returned.
+ * IPC handler wrapper. Handler failures reject ipcRenderer.invoke with a trace id
+ * instead of silently returning undefined and making the renderer guess what failed.
  */
 function wrapIpcHandler(channel, handler) {
-  ipcMain.handle(channel, async (event, ...args) => {
+  ipcMainRuntime.handle(channel, async (event, ...args) => {
     if (!isSenderAllowed(channel, event)) {
       console.warn(`[IPC][${channel}] rejected untrusted sender`);
-      return undefined;
+      throw new Error(`IPC request rejected: ${channel}`);
     }
     try {
       return await handler(event, ...args);
     } catch (err) {
       const traceId = Math.random().toString(16).slice(2, 10);
       console.error(`[IPC][${channel}][${traceId}] ${err?.message || err}`);
-      return undefined;
+      throw new Error(`IPC ${channel} failed (trace ${traceId})`);
     }
   });
 }
 
 function wrapIpcOn(channel, handler) {
-  ipcMain.on(channel, (event, ...args) => {
+  ipcMainRuntime.on(channel, (event, ...args) => {
     if (!isSenderAllowed(channel, event)) {
       console.warn(`[IPC][${channel}] rejected untrusted sender`);
       return;
@@ -56,4 +60,4 @@ function wrapIpcOn(channel, handler) {
   });
 }
 
-module.exports = { setIpcSenderValidator, wrapIpcHandler, wrapIpcOn };
+module.exports = { setIpcMainForTests, setIpcSenderValidator, wrapIpcHandler, wrapIpcOn };

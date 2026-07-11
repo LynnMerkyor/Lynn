@@ -31,6 +31,7 @@ const lynnBridge = {
     return () => ipcRenderer.removeListener("auto-update-state", handler);
   },
   appReady: () => ipcRenderer.invoke("app-ready"),
+  consumeRendererRecovery: () => ipcRenderer.invoke("consume-renderer-recovery"),
   // llama.cpp local 推理 (Lynn V0.79 默认本地模型)
   llamacppGetState: () => ipcRenderer.invoke("llamacpp:state"),
   cliEnvStatus: () => ipcRenderer.invoke("cli:status"),

@@ -80,6 +80,10 @@ interface CreateSandboxedToolsResult {
   customTools: unknown[];
 }
 
+export function resolveSandboxPolicyMode(mode: SandboxMode): SandboxPolicyMode {
+  return mode === "authorized" ? "standard" : mode;
+}
+
 /**
  * 为一个 session 创建沙盒包装后的工具集
  *
@@ -105,9 +109,9 @@ export function createSandboxedTools(
   const wrapperOpts = {
     agentId: basename(agentDir || "") || "default",
   };
-  // authorized 模式保留执行模式的自由访问，只对危险 bash 命令弹确认卡片。
-  // safe/plan 才进入 OS 沙盒 + PathGuard 严格限制。
-  const policyMode: SandboxPolicyMode = mode === "authorized" ? "full-access" : mode;
+  // 执行模式保留危险操作确认卡，同时也进入 OS 沙盒。确认负责用户意图，
+  // 沙盒负责限制工作区外写入和凭证读取，两层边界不能互相替代。
+  const policyMode = resolveSandboxPolicyMode(mode);
   const policy = deriveSandboxPolicy({ agentDir, workspace, trustedRoots, lynnHome, mode: policyMode });
   const policyTrustedRoots = policy.mode === "standard"
     ? policy.trustedRoots

@@ -10,7 +10,6 @@
 import { useStore } from './stores';
 import { hanaFetch } from './hooks/use-hana-fetch';
 import { applyAgentIdentity, loadAgents, loadAvatars } from './stores/agent-actions';
-import { loadChannels } from './stores/channel-actions';
 import { loadSessions } from './stores/session-actions';
 import { connectWebSocket } from './services/websocket';
 import { setStatus, loadModels } from './utils/ui-helpers';
@@ -174,6 +173,14 @@ export async function initApp(): Promise<void> {
     await i18n.load(configData.locale || 'zh-CN');
     useStore.setState({ locale: i18n.locale });
     useStore.getState().markStartupStep('locale', '加载语言资源', 'success', i18n.locale);
+    if (await platform.consumeRendererRecovery?.()) {
+      useStore.getState().addToast(
+        t('status.rendererRecovered'),
+        'warning',
+        0,
+        { dedupeKey: 'renderer-recovered', persistent: true },
+      );
+    }
 
     // 4. 应用 agent 身份
     useStore.getState().markStartupStep('agent-identity', '同步当前助手身份', 'running');
@@ -245,16 +252,11 @@ export async function initApp(): Promise<void> {
   useStore.getState().markStartupStep('layout', '计算初始布局', 'success');
 
   // 12-17. 主数据与次要状态统一转后台补齐，避免阻塞首屏。
-  useStore.getState().markStartupStep('background-loads', '后台补齐主数据', 'running', 'agents / sessions / models / channels / cron / bridge');
+  useStore.getState().markStartupStep('background-loads', '后台补齐主数据', 'running', 'agents / sessions / models / cron / bridge');
   void Promise.allSettled([
     loadAgents(),
     loadSessions(),
     loadModels(),
-    (async () => {
-      try {
-        await loadChannels();
-      } catch { /* ignore */ }
-    })(),
     (async () => {
       try {
         const res = await hanaFetch('/api/desk/cron');
@@ -368,7 +370,6 @@ export async function initApp(): Promise<void> {
         });
         void syncRuntimeSnapshot({ announceRecovery: false });
         loadSessions();
-        loadChannels();
         window.__loadDeskSkills?.();
         break;
       case 'skills-changed':
@@ -392,7 +393,6 @@ export async function initApp(): Promise<void> {
       case 'agent-created':
       case 'agent-deleted':
         loadAgents();
-        loadChannels();
         break;
       case 'agent-updated':
         if (!data?.agentId || data.agentId === useStore.getState().currentAgentId) {

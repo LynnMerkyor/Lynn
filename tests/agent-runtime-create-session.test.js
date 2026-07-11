@@ -79,6 +79,62 @@ describe("createLynnAgentSession native runtime", () => {
     });
   });
 
+  it("quarantines an aborted tool result from the next turn", async () => {
+    const fetchMock = vi.fn(async () => {
+      if (fetchMock.mock.calls.length === 1) {
+        return sseResponse([
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"slow-1\",\"function\":{\"name\":\"slow_find\",\"arguments\":\"{}\"}}]}}]}\n\n",
+          "data: [DONE]\n\n",
+        ]);
+      }
+      return sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"SECOND_OK\"}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]);
+    });
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+    let toolStarted = false;
+    const events = [];
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: {
+        id: "test-model",
+        provider: "test-provider",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:65530/v1",
+        apiKey: "test-key",
+      },
+      tools: [{
+        name: "slow_find",
+        description: "slow cancellable tool",
+        parameters: { type: "object", properties: {} },
+        execute: vi.fn(async (_id, _params, runtime) => {
+          toolStarted = true;
+          await new Promise((resolve, reject) => {
+            runtime.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+          });
+          return { content: [{ type: "text", text: "LATE_RESULT" }] };
+        }),
+      }],
+    });
+    session.subscribe((event) => events.push(event));
+
+    const firstTurn = session.prompt("first turn");
+    await waitFor(() => toolStarted);
+    session.abort();
+    const secondTurn = session.prompt("second turn");
+    await Promise.all([firstTurn, secondTurn]);
+
+    const messages = manager.buildSessionContext().messages;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(messages.some((message) => message.role === "tool")).toBe(false);
+    expect(JSON.stringify(messages)).not.toContain("LATE_RESULT");
+    expect(messages.at(-1)).toMatchObject({ role: "assistant", content: "SECOND_OK" });
+    expect(events.filter((event) => event.type === "tool_execution_end")).toHaveLength(0);
+  });
+
   it("drops nameless streamed tool calls instead of executing empty tool cards", async () => {
     const fetchMock = vi.fn(async () => sseResponse([
       "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"\",\"function\":{\"name\":\"\",\"arguments\":\"{\\\"query\\\":\\\"世界杯\\\"}\"}}]}}]}\n\n",

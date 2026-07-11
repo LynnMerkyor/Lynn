@@ -12,6 +12,44 @@ const {
   resolveLlamacppDownloadProfile,
 } = require("./llamacpp-profiles.cjs");
 
+function ipcOk(payload = {}) {
+  return { ok: true, ...payload };
+}
+
+function ipcError(reason, payload = {}) {
+  return { ok: false, reason: String(reason || "unknown-error"), ...payload };
+}
+
+function managerStartResult(state, payload = {}) {
+  const status = String(state?.status || "unknown");
+  if (status === "ready") {
+    return ipcOk({ ...payload, status, port: state?.port || state?.activePort || null });
+  }
+  if (status === "standby") {
+    return ipcError("llamacpp-port-in-use", {
+      ...payload,
+      detail: "Port 18099 is already served by another llama.cpp instance. Stop it before starting the selected GGUF.",
+      status,
+    });
+  }
+  if (status === "needs-binary") {
+    return ipcError("llamacpp-binary-not-found", {
+      ...payload,
+      detail: state?.expectedPath
+        ? `llama-server was not found in PATH or at ${state.expectedPath}`
+        : "llama-server was not found in PATH or Lynn's managed runtime directory.",
+    });
+  }
+  if (status === "needs-model") {
+    return ipcError("model-not-found", { ...payload, detail: state?.expectedPath || null });
+  }
+  return ipcError(state?.reason || `llamacpp-${status}`, {
+    ...payload,
+    detail: state?.error || null,
+    status,
+  });
+}
+
 function createLocalModelController(deps) {
   const {
     BrowserWindow,
@@ -50,14 +88,6 @@ const LOCAL_MODEL_IPC = Object.freeze({
   downloadProgress: "llamacpp:download-progress",
   downloadState: "llamacpp:download-state",
 });
-
-function ipcOk(payload = {}) {
-  return { ok: true, ...payload };
-}
-
-function ipcError(reason, payload = {}) {
-  return { ok: false, reason: String(reason || "unknown-error"), ...payload };
-}
 
 function parseStartDownloadPayload(payload) {
   if (payload == null) return { ok: true, modelId: undefined, startAfterDownload: false };
@@ -194,8 +224,8 @@ async function startLlamacppCustomModel(modelPath) {
         broadcastToAllWindows(LOCAL_MODEL_IPC.state, lastLlamacppState);
       },
     });
-    void llamacpp.start();
-    return ipcOk({ modelId: modelAlias, modelPath });
+    await llamacpp.start();
+    return managerStartResult(llamacpp.getStatus(), { modelId: modelAlias, modelPath });
   } catch (err) {
     const reason = err?.message || err;
     llamacpp = null;
@@ -538,11 +568,16 @@ function stopManagedQwen35LlamaServer() {
 
 
   function markExplicitStartRequired() {
+    let binaryPath = null;
+    try {
+      binaryPath = new LlamaCppManager({ lynnHome }).resolveBinaryPath();
+    } catch {}
     lastLlamacppState = {
       status: "stopped",
       stopped: true,
       healthy: false,
       reason: "explicit-start-required",
+      binaryPath,
       ts: Date.now(),
     };
     console.log("[llamacpp] startup auto-start disabled; waiting for explicit user action");
@@ -578,4 +613,4 @@ function stopManagedQwen35LlamaServer() {
   };
 }
 
-module.exports = { createLocalModelController };
+module.exports = { createLocalModelController, managerStartResult };

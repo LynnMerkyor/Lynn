@@ -437,9 +437,14 @@ export class LynnAgentSession {
     return { usedTokens: 0, maxTokens: this.model.contextWindow || 0 };
   }
 
-  _buildRuntime(opts?: { activeToolNames?: string[] }): Record<string, unknown> {
+  _buildRuntime(opts?: { activeToolNames?: string[]; signal?: AbortSignal }): Record<string, unknown> {
     if (Array.isArray(opts?.activeToolNames) && this._baseToolsOverride == null) this.setActiveToolsByName(opts.activeToolNames);
-    return { cwd: this.cwd, session: this, sessionManager: this.sessionManager };
+    return {
+      cwd: this.cwd,
+      session: this,
+      sessionManager: this.sessionManager,
+      signal: opts?.signal || this.abortController?.signal,
+    };
   }
 
   private emit(event: AgentSessionEvent): void {
@@ -507,7 +512,9 @@ export class LynnAgentSession {
     baseMessages: ChatMessage[],
     reason: ModelFallbackReason,
     fromModel: Model,
+    turnSignal?: AbortSignal,
   ): Promise<boolean> {
+    if (turnSignal?.aborted) return false;
     const originalEvidenceMessages = hasAnyToolEvidence(baseMessages) ? [...baseMessages] : [];
     const candidates = this.fallbackModels(fromModel);
     if (!candidates.length) {
@@ -522,6 +529,7 @@ export class LynnAgentSession {
     let latestEvidenceMessages = originalEvidenceMessages.length ? [...originalEvidenceMessages] : [];
     for (const candidate of candidates) {
       try {
+        if (turnSignal?.aborted) return false;
         this.emitFallbackRoute(candidate, fromModel, reason);
         const existingAnyEvidence = hasAnyToolEvidence(sharedMessages);
         const existingUsableEvidence = hasUsableToolEvidence(sharedMessages);
@@ -539,10 +547,11 @@ export class LynnAgentSession {
         for (let round = 0; round <= maxFallbackToolRounds; round += 1) {
           const result = await this.callModel(workingMessages, {
             model: candidate,
-          tools: round < maxFallbackToolRounds ? fallbackTools : [],
-          streamText: false,
-          timeoutMs: fallbackModelCallTimeoutMs(),
-        });
+            tools: round < maxFallbackToolRounds ? fallbackTools : [],
+            streamText: false,
+            timeoutMs: fallbackModelCallTimeoutMs(),
+          });
+          if (turnSignal?.aborted) return false;
           result.toolCalls = result.toolCalls.filter(isExecutableToolCall);
           const content = contentToText(result.assistant.content);
           if (content.trim() && !isUnsafeFinalAnswerText(content)) {
@@ -561,7 +570,8 @@ export class LynnAgentSession {
           this.sessionManager.appendMessage(assistantForHistory);
           this.agent.replaceMessages(this.sessionManager.buildSessionContext().messages || []);
           for (const toolCall of result.toolCalls) {
-            const toolResult = await this.executeToolCall(toolCall, fallbackTools);
+            const toolResult = await this.executeToolCall(toolCall, fallbackTools, turnSignal);
+            if (turnSignal?.aborted) return false;
             const toolMessage: ChatMessage = {
               role: "tool",
               tool_call_id: toolCall.id,
@@ -585,6 +595,7 @@ export class LynnAgentSession {
         // usable answer or the explicit safety fallback below, not intermediate noise.
       }
     }
+    if (turnSignal?.aborted) return false;
     const evidenceSafetyAnswer = buildEvidenceSafetyAnswer(
       latestEvidenceMessages.length
         ? latestEvidenceMessages
@@ -599,7 +610,8 @@ export class LynnAgentSession {
 
   private async runTurn(): Promise<void> {
     this.isStreaming = true;
-    this.abortController = new AbortController();
+    const turnController = new AbortController();
+    this.abortController = turnController;
     let fallbackMessages: ChatMessage[] = [];
     try {
       const stepExecutorPolicy = this.findStepExecutorModel() ? buildStepExecutorPolicyPrompt() : "";
@@ -619,6 +631,7 @@ export class LynnAgentSession {
       const maxToolRounds = 3;
       for (let round = 0; round < maxToolRounds; round += 1) {
         const result = await this.callModel(messages);
+        if (turnController.signal.aborted) return;
         result.toolCalls = result.toolCalls.filter(isExecutableToolCall);
         if (!result.toolCalls.length) {
           let content = contentToText(result.assistant.content);
@@ -632,6 +645,7 @@ export class LynnAgentSession {
               tools: [],
               streamText: result.streamedText,
             });
+            if (turnController.signal.aborted) return;
             const extra = contentToText(continuation.assistant.content);
             if (extra.trim()) {
               content = `${content}${extra}`;
@@ -639,7 +653,7 @@ export class LynnAgentSession {
             }
           }
           if (!content.trim()) {
-            const handled = await this.finishWithFallback(messages, "empty_response", this.model);
+            const handled = await this.finishWithFallback(messages, "empty_response", this.model, turnController.signal);
             if (handled) return;
             this.finishAssistantAnswer(
               "模型这次没有返回可见内容。本轮已安全结束，避免空回复污染后续上下文；请点击「编辑重发」重试，或换个更明确的问题。",
@@ -649,7 +663,7 @@ export class LynnAgentSession {
             return;
           }
           if (isUnsafeFinalAnswerText(content)) {
-            const handled = await this.finishWithFallback(messages, "empty_response", this.model);
+            const handled = await this.finishWithFallback(messages, "empty_response", this.model, turnController.signal);
             if (handled) return;
             const evidenceSafetyAnswer = buildEvidenceSafetyAnswer(messages);
             if (evidenceSafetyAnswer) {
@@ -680,7 +694,8 @@ export class LynnAgentSession {
         this.sessionManager.appendMessage(assistantForHistory);
         this.agent.replaceMessages(this.sessionManager.buildSessionContext().messages || []);
         for (const toolCall of result.toolCalls) {
-          const toolResult = await this.executeToolCall(toolCall);
+          const toolResult = await this.executeToolCall(toolCall, undefined, turnController.signal);
+          if (turnController.signal.aborted) return;
           const content = toolResultToMessageContent(toolResult);
           const toolMessage: ChatMessage = {
             role: "tool",
@@ -694,11 +709,11 @@ export class LynnAgentSession {
         this.agent.replaceMessages(this.sessionManager.buildSessionContext().messages || []);
         fallbackMessages = messages;
         if (this.shouldAutoDelegateToStep(messages, round)) {
-          const handled = await this.finishWithFallback(messages, "tool_round_limit", this.model);
+          const handled = await this.finishWithFallback(messages, "tool_round_limit", this.model, turnController.signal);
           if (handled) return;
         }
       }
-      const handled = await this.finishWithFallback(messages, "tool_round_limit", this.model);
+      const handled = await this.finishWithFallback(messages, "tool_round_limit", this.model, turnController.signal);
       if (handled) return;
       const evidenceSafetyAnswer = buildEvidenceSafetyAnswer(messages);
       if (evidenceSafetyAnswer) {
@@ -712,21 +727,20 @@ export class LynnAgentSession {
       );
     } catch (err) {
       const isAbortError = (err as any)?.name === "AbortError";
+      if (turnController.signal.aborted) return;
       const handled = fallbackMessages.length
-        ? await this.finishWithFallback(fallbackMessages, "model_error", this.model)
+        ? await this.finishWithFallback(fallbackMessages, "model_error", this.model, turnController.signal)
         : false;
       if (handled) return;
-      if (isAbortError) {
-        this.emit(eventError("aborted"));
-      } else {
-        this.emit(eventError(err instanceof Error ? err.message : String(err)));
-      }
+      this.emit(eventError(isAbortError ? "aborted" : err instanceof Error ? err.message : String(err)));
       this.emit({ type: "agent_end", messages: this.messages });
     } finally {
-      this.isStreaming = false;
-      this.abortController = null;
-      this.activeTurnAllowsDeliverables = true;
-      this.drainPendingPrompts();
+      if (this.abortController === turnController) {
+        this.isStreaming = false;
+        this.abortController = null;
+        this.activeTurnAllowsDeliverables = true;
+        this.drainPendingPrompts();
+      }
     }
   }
 
@@ -859,7 +873,9 @@ export class LynnAgentSession {
   private async executeToolCall(
     toolCall: ToolCall,
     tools = filterDeliverableToolsForTurn(this.getAllTools(), this.activeTurnAllowsDeliverables),
+    signal = this.abortController?.signal,
   ): Promise<ToolResult> {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const normalized = normalizeToolCallForExecution(toolCall.function.name, toolCall.function.arguments, tools);
     toolCall.function.name = normalized.name;
     toolCall.function.arguments = maybeJson(normalized.args);
@@ -902,7 +918,8 @@ export class LynnAgentSession {
       return result;
     }
     try {
-      const result = normalizeToolResult(await tool.execute(toolCall.id, args, this._buildRuntime()));
+      const result = normalizeToolResult(await tool.execute(toolCall.id, args, this._buildRuntime({ signal })));
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
       this.emit({
         type: "tool_execution_end",
         toolName: toolCall.function.name,
@@ -918,6 +935,7 @@ export class LynnAgentSession {
       });
       return result;
     } catch (err) {
+      if (signal?.aborted || (err as any)?.name === "AbortError") throw err;
       const result = {
         isError: true,
         content: [{ type: "text", text: err instanceof Error ? err.message : String(err) }],

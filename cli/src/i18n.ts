@@ -88,6 +88,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "chat.think": "✓ 思考模式 · 推理强度高",
     "chat.think.set": "✓ 思考模式 · 推理强度 {value}",
     "chat.cleared": "✓ 上下文已清空",
+    "chat.cancelled": "已取消当前请求。",
+    "help.noInput": "非交互模式需要提供问题，例如：Lynn -p \"你好\"",
     "chat.help":
       "/exit 退出聊天\n" +
       "/clear 清空上下文\n" +
@@ -379,6 +381,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "chat.think": "✓ thinking mode · reasoning high",
     "chat.think.set": "✓ thinking mode · reasoning {value}",
     "chat.cleared": "✓ context cleared",
+    "chat.cancelled": "Current request cancelled.",
+    "help.noInput": "Non-interactive mode requires a prompt, for example: Lynn -p \"hello\"",
     "chat.help":
       "/exit leave chat\n" +
       "/clear reset context\n" +

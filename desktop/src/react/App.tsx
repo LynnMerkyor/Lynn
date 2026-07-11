@@ -308,6 +308,7 @@ function App() {
           className={`tb-toggle tb-toggle-left${sidebarOpen ? ' active' : ''}`}
           id="tbToggleLeft"
           title={t('sidebar.toggle')}
+          aria-label={t('sidebar.toggle')}
           onClick={() => { hideFloat(); toggleSidebar(); }}
           onMouseEnter={(e) => showFloat('left', e.currentTarget)}
           onMouseLeave={scheduleFloatHide}
@@ -346,7 +347,8 @@ function App() {
         <button
           className={`tb-toggle tb-toggle-right${jianOpen ? ' active' : ''}`}
           id="tbToggleRight"
-          title="会话进展"
+          title={t('sidebar.progress')}
+          aria-label={t('sidebar.progress')}
           onClick={() => { hideFloat(); toggleJianSidebar(); }}
           onMouseEnter={(e) => showFloat('right', e.currentTarget)}
           onMouseLeave={scheduleFloatHide}
@@ -371,14 +373,14 @@ function App() {
               <div className="sidebar-header">
                 <span className="sidebar-title">{t('sidebar.title')}</span>
                 <div className="sidebar-header-actions">
-                  <button className="sidebar-footer-btn" id="bridgeBar" title={t('sidebar.bridgeShort')} onClick={() => togglePanel('bridge')}>
+                  <button className="sidebar-footer-btn" id="bridgeBar" title={t('sidebar.bridgeShort')} aria-label={t('sidebar.bridgeShort')} onClick={() => togglePanel('bridge')}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
                       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
                     </svg>
                     <BridgeDot />
                   </button>
-                  <button className="sidebar-footer-btn" id="activityBar" title={t('sidebar.activity')} onClick={() => togglePanel('activity')}>
+                  <button className="sidebar-footer-btn" id="activityBar" title={t('sidebar.activity')} aria-label={t('sidebar.activity')} onClick={() => togglePanel('activity')}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                     </svg>
@@ -387,6 +389,7 @@ function App() {
                     className="sidebar-action-btn"
                     id="newSessionBtn"
                     title={t('sidebar.newChat')}
+                    aria-label={t('sidebar.newChat')}
                     onClick={createNewSession}
                     disabled={sessionCreationPending}
                   >
@@ -395,14 +398,14 @@ function App() {
                       <line x1="5" y1="12" x2="19" y2="12"></line>
                     </svg>
                   </button>
-                  <button className="sidebar-action-btn" id="sidebarCollapseBtn" title={t('sidebar.collapse')} onClick={() => toggleSidebar()}>
+                  <button className="sidebar-action-btn" id="sidebarCollapseBtn" title={t('sidebar.collapse')} aria-label={t('sidebar.collapse')} onClick={() => toggleSidebar()}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="15 6 9 12 15 18"></polyline>
                     </svg>
                   </button>
                 </div>
               </div>
-              <button className="sidebar-activity-bar" id="automationBar" onClick={() => togglePanel('automation')}>
+              <button className="sidebar-activity-bar" id="automationBar" aria-label={t('automation.title')} onClick={() => togglePanel('automation')}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>
                   <polyline points="12 6 12 12 16 14"></polyline>
@@ -410,7 +413,7 @@ function App() {
                 <span>{t('automation.title')}</span>
                 <AutomationBadge />
               </button>
-              <button className={`sidebar-activity-bar browser-bg-bar${browserRunning ? '' : ' hidden'}`} id="browserBgBar" title={t('browser.backgroundHint')} onClick={() => window.platform?.openBrowserViewer?.()}>
+              <button className={`sidebar-activity-bar browser-bg-bar${browserRunning ? '' : ' hidden'}`} id="browserBgBar" title={t('browser.backgroundHint')} aria-label={t('browser.backgroundHint')} onClick={() => window.platform?.openBrowserViewer?.()}>
                 <svg className="browser-bg-globe" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>
                   <line x1="2" y1="12" x2="22" y2="12"></line>

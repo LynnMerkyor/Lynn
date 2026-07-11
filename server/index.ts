@@ -9,7 +9,6 @@
  */
 import crypto from "crypto";
 import fs from "fs";
-import { setMaxListeners } from "events";
 import os from "os";
 import path from "path";
 import type { AddressInfo } from "net";
@@ -24,9 +23,9 @@ import { ensureFirstRun } from "../core/first-run.js";
 import { initDebugLog } from "../lib/debug-log.js";
 import { safeJson } from "./hono-helpers.js";
 import { resolveRequestAuthToken } from "./auth-token.js";
+import { isTrustedLocalRequest } from "./request-security.js";
 
 // Pi SDK 的 fetch 请求会累积 AbortSignal listener，提高上限避免无害警告
-setMaxListeners(50);
 
 import { loadLocale } from "./i18n.js";
 import { createChatRoute } from "./routes/chat.js";
@@ -175,9 +174,12 @@ const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 const corsAllowedOrigin = process.env.HANA_CORS_ORIGIN;
 app.use("*", async (c, next) => {
   const origin = c.req.header("origin") || "";
-  const isAllowed = corsAllowedOrigin
-    ? origin === corsAllowedOrigin
-    : /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+  const isAllowed = isTrustedLocalRequest({
+    host: c.req.header("host"),
+    origin,
+    configuredOrigin: corsAllowedOrigin,
+  });
+  if (!isAllowed) return c.json({ error: "forbidden_origin" }, 403 as any);
   if (origin && isAllowed) {
     c.header("Access-Control-Allow-Origin", origin);
   }
@@ -508,6 +510,15 @@ try {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
     if (url.pathname !== "/internal/browser") return; // let Hono handle it
 
+    if (!isTrustedLocalRequest({
+      host: req.headers.host,
+      origin: req.headers.origin,
+      configuredOrigin: corsAllowedOrigin,
+    })) {
+      socket.destroy();
+      return;
+    }
+
     // Read auth token from headers / protocol / cookie without leaking it in URLs.
     const token = resolveRequestAuthToken({
       authorization: req.headers.authorization,
@@ -530,8 +541,16 @@ try {
     // 调试：记录浏览器 WS 消息往返
     const _bwsLogPath = path.join(os.homedir(), ".lynn", "browser-ws.log");
     let _bwsStream: fs.WriteStream | null = null;
-    try { _bwsStream = fs.createWriteStream(_bwsLogPath, { flags: "a" }); } catch { /* debug log is best effort */ }
+    try {
+      _bwsStream = fs.createWriteStream(_bwsLogPath, { flags: "a", mode: 0o600 });
+      fs.chmodSync(_bwsLogPath, 0o600);
+    } catch { /* debug log is best effort */ }
     const _bwsLog = (line: string) => { try { _bwsStream?.write(`${new Date().toISOString()} ${line}\n`); } catch { /* debug log is best effort */ } };
+    const _closeBwsLog = () => {
+      const stream = _bwsStream;
+      _bwsStream = null;
+      try { stream?.end(); } catch { /* debug log is best effort */ }
+    };
     _bwsLog("browser WS connected");
     const origSend = ws.send.bind(ws);
     ws.send = function(data: any, ...args: any[]) {
@@ -543,10 +562,12 @@ try {
     });
 
     ws.on("close", () => {
+      _closeBwsLog();
       if ((bm as any)._transport?._ws === ws) bm.setWsTransport(null);
       console.log("[server] Electron browser control WS disconnected");
     });
     ws.on("error", (err: Error) => {
+      _closeBwsLog();
       console.error("[server] Electron browser control WS error:", err.message);
       if ((bm as any)._transport?._ws === ws) bm.setWsTransport(null);
     });
@@ -587,7 +608,8 @@ try {
         translateRoute: true,
         toolsRoute: true,
       },
-    }));
+    }), { encoding: "utf-8", mode: 0o600 });
+    fs.chmodSync(serverInfoPath, 0o600);
   } catch (e) {
     console.error("[server] 写入 server-info.json 失败:", errMessage(e));
   }

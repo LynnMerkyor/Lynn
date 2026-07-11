@@ -138,7 +138,7 @@ const PROVIDER_DEFS = {
     wire: 'openai',
     cooldown_ms: 60_000,
     default_thinking: true,
-    timeout_ms: positiveEnvNumber('DEEPSEEK_CHAT_TIMEOUT_MS', 25_000),
+    timeout_ms: positiveEnvNumber('DEEPSEEK_CHAT_TIMEOUT_MS', 45_000),
   },
   'deepseek-pro': {
     id: providerId('deepseek-pro'),

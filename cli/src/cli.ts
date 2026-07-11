@@ -1,4 +1,4 @@
-import { parseArgs, hasFlag, getStringFlag, type ParsedArgs } from "./args.js";
+import { findUnknownLongFlags, parseArgs, hasFlag, getStringFlag, suggestLongFlag, type ParsedArgs } from "./args.js";
 import { checkBrainReachable } from "./brain-client.js";
 import { runAgents } from "./commands/agents.js";
 import { runBrain } from "./commands/brain.js";
@@ -15,7 +15,7 @@ import { runSessions } from "./commands/sessions.js";
 import { runVisionCommand } from "./commands/vision.js";
 import { runVoice } from "./commands/voice.js";
 import { runWorker } from "./commands/worker-run.js";
-import { usage } from "./help.js";
+import { commandUsage, usage } from "./help.js";
 import { writeJsonLine } from "./jsonl.js";
 import { renderStartupBanner } from "./startup.js";
 import { installPipeErrorHandler } from "./stdio.js";
@@ -32,6 +32,10 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   installPipeErrorHandler();
 
   if (argv.length === 0) {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      process.stderr.write(`${usage()}\n\n${currentNoInputHint()}\n`);
+      return 1;
+    }
     const providerInfo = await resolveProvidersInfo({ command: "providers", positionals: [], flags: {} }, 500);
     const brainUrl = await resolveDefaultBrainUrl({ command: "chat", positionals: [], flags: {} }, 500);
     const brainReachable = await checkBrainReachable(brainUrl, 500);
@@ -55,16 +59,20 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
       // user back to the shell (which made `Lynn` look like it "doesn't work").
       return runChat(chatArgs, { intro: false, brainReachable });
     }
-    process.stdout.write(`${renderStartupBanner({
-      brainUrl,
-      brainStatus: brainReachable ? "online" : "offline",
-      modelLabel: startupModelLabel(startupInfo, brainReachable),
-      byokLabel: startupInfo.cliProvider?.configured ? t("startup.byok.cliFallback") : undefined,
-      showTips: brainReachable,
-    })}\n`);
-    return 0;
+  }
+  const unknownFlags = findUnknownLongFlags(argv);
+  if (unknownFlags.length) {
+    for (const flag of unknownFlags) {
+      const suggestion = suggestLongFlag(flag);
+      process.stderr.write(`Unknown option: --${flag}${suggestion ? ` (did you mean --${suggestion}?)` : ""}\n`);
+    }
+    return 2;
   }
   const args = parseArgs(argv);
+  if (args.command !== "help" && hasFlag(args.flags, "help", "h")) {
+    process.stdout.write(`${commandUsage(args.command)}\n`);
+    return 0;
+  }
   const json = hasFlag(args.flags, "json", "jsonl");
   await maybePromptForCliUpdate(args, readVersionInfo());
 
@@ -183,6 +191,12 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
       });
     }
   }
+}
+
+function currentNoInputHint(): string {
+  return t("help.noInput") === "help.noInput"
+    ? "非交互模式需要提供问题，例如：Lynn -p \"你好\""
+    : t("help.noInput");
 }
 
 function isImplicitChatInvocation(args: ReturnType<typeof parseArgs>): boolean {

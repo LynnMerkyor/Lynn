@@ -822,7 +822,7 @@ describe("realtime market/weather tools", () => {
       });
       const text = result.content[0].text;
 
-      expect(String(fetchMock.mock.calls[0][0])).toContain("dates=20260625-20260626");
+      expect(String(fetchMock.mock.calls[0][0])).toContain("dates=20260624-20260627");
       expect(text).toContain("dateRange: 20260625-20260626");
       expect(text).toContain("匹配比赛: 6 场");
       expect(text).toContain("Curaçao vs Ivory Coast");
@@ -896,8 +896,8 @@ describe("realtime market/weather tools", () => {
       expect(searchMock.runSearchQuery).not.toHaveBeenCalled();
       expect(result.details.provider).toBe("espn_scoreboard");
       expect(text).toContain("matched: 0");
-      expect(answer).toContain("没有在 FIFA World Cup");
-      expect(answer).toContain("今晚没有这场比赛");
+      expect(answer).toContain("未返回 FIFA World Cup");
+      expect(answer).toContain("不等于赛事数量为 0");
       expect(answer).not.toContain("Spain vs Saudi Arabia");
     } finally {
       vi.useRealTimers();

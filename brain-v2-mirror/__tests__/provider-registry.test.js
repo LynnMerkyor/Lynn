@@ -99,8 +99,8 @@ describe('provider registry', () => {
     });
   });
 
-  it('bounds the production text fallback chain so one candidate cannot consume the whole turn', () => {
-    expect(getProvider('deepseek-chat').timeout_ms).toBe(25_000);
+  it('bounds the production text fallback chain while giving DS V4 enough time to finish long-form answers', () => {
+    expect(getProvider('deepseek-chat').timeout_ms).toBe(45_000);
     expect(getProvider('mimo-token-plan-pro').timeout_ms).toBe(15_000);
     expect(getProvider('apex-spark-i-balanced').timeout_ms).toBe(8_000);
     expect(getProvider('deepseek-pro').timeout_ms).toBe(10_000);

@@ -6,11 +6,21 @@
  */
 
 import path from "path";
+import os from "os";
 
 // ─── 常量 ─────────────────────────────────────
 
 /** lynnHome 根级别被屏蔽的文件 */
-export const BLOCKED_FILES = ["auth.json", "models.json", "added-models.yaml", "crash.log"];
+export const BLOCKED_FILES = [
+  "auth.json",
+  "models.json",
+  "added-models.yaml",
+  "server-info.json",
+  "crash.log",
+];
+
+/** agentDir 根级别禁止模型读取的配置文件 */
+export const BLOCKED_AGENT_FILES = ["config.yaml"];
 
 /** lynnHome 根级别被屏蔽的目录 */
 export const BLOCKED_DIRS = ["browser-data", "playwright-browsers"];
@@ -18,9 +28,39 @@ export const BLOCKED_DIRS = ["browser-data", "playwright-browsers"];
 /** agentDir 下只读的文件 */
 export const READ_ONLY_AGENT_FILES = [
   "ishiki.md",
-  "config.yaml",
   "identity.md",
   "yuan.md",
+];
+
+/** 用户主目录中的常见凭证位置；即使工作区误设到主目录也不开放。 */
+export const SENSITIVE_HOME_PATHS = [
+  ".ssh",
+  ".aws",
+  ".gnupg",
+  ".kube",
+  ".codex",
+  ".docker/config.json",
+  ".config/gcloud",
+  ".config/gh",
+  ".git-credentials",
+  ".netrc",
+  ".npmrc",
+  ".pypirc",
+  ".bash_history",
+  ".zsh_history",
+  "Library/Keychains",
+  "Library/Safari",
+  "Library/Application Support/Google/Chrome",
+  "Library/Application Support/Microsoft Edge",
+  "Library/Application Support/Firefox",
+  ".config/google-chrome",
+  ".config/chromium",
+  ".config/microsoft-edge",
+  ".mozilla",
+  ".local/share/keyrings",
+  "AppData/Local/Google/Chrome/User Data",
+  "AppData/Local/Microsoft/Edge/User Data",
+  "AppData/Roaming/Mozilla/Firefox",
 ];
 
 /** lynnHome 根级别只读的目录 */
@@ -138,6 +178,8 @@ export function deriveSandboxPolicy({
     denyReadPaths: [
       ...BLOCKED_FILES.map((f) => path.join(lynnHome, f)),
       ...BLOCKED_DIRS.map((d) => path.join(lynnHome, d)),
+      ...BLOCKED_AGENT_FILES.map((f) => path.join(agentDir, f)),
+      ...SENSITIVE_HOME_PATHS.map((p) => path.join(os.homedir(), p)),
     ],
 
     // OS 沙盒用：写保护（在可写范围内再限制）

@@ -19,6 +19,67 @@ beforeEach(() => {
   process.env.LYNN_HOME = testLynnHome;
 });
 
+describe("Brain request cancellation", () => {
+  it("propagates a caller abort through the active fetch", async () => {
+    const server = http.createServer(() => {
+      // Keep the response open until the caller aborts it.
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing test server address");
+    const controller = new AbortController();
+    const run = (async () => {
+      for await (const _event of streamBrainChat({
+        brainUrl: `http://127.0.0.1:${address.port}`,
+        prompt: "cancel me",
+        reasoning: { effort: "auto", display: "auto" },
+        signal: controller.signal,
+      })) {
+        // no-op
+      }
+    })();
+    setTimeout(() => controller.abort(new Error("cancelled by test")), 20);
+    await expect(run).rejects.toThrow("cancelled by test");
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it("does not apply the response-header timeout to an active SSE body", async () => {
+    const server = http.createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.flushHeaders();
+      setTimeout(() => {
+        response.end([
+          'data: {"choices":[{"delta":{"content":"slow stream completed"}}]}',
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"));
+      }, 75);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const oldTimeout = process.env.LYNN_CLI_BRAIN_TIMEOUT_MS;
+    process.env.LYNN_CLI_BRAIN_TIMEOUT_MS = "25";
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("missing test server address");
+      const events = [];
+      for await (const event of streamBrainChat({
+        brainUrl: `http://127.0.0.1:${address.port}`,
+        prompt: "wait for the stream",
+        reasoning: { effort: "auto", display: "auto" },
+      })) {
+        events.push(event);
+      }
+      expect(events).toContainEqual({ type: "assistant.delta", text: "slow stream completed" });
+    } finally {
+      if (oldTimeout === undefined) delete process.env.LYNN_CLI_BRAIN_TIMEOUT_MS;
+      else process.env.LYNN_CLI_BRAIN_TIMEOUT_MS = oldTimeout;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+});
+
 afterEach(() => {
   setLang(null);
   if (previousLynnHome === undefined) delete process.env.LYNN_HOME;

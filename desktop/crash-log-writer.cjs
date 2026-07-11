@@ -73,7 +73,8 @@ function createCrashLogWriter({
     try {
       const crashLogPath = path.join(lynnHome, "crash.log");
       fs.mkdirSync(lynnHome, { recursive: true });
-      fs.writeFileSync(crashLogPath, content, "utf-8");
+      fs.writeFileSync(crashLogPath, content, { encoding: "utf-8", mode: 0o600 });
+      try { fs.chmodSync(crashLogPath, 0o600); } catch {}
     } catch (err) {
       console.error("[desktop] 写入 crash.log 失败:", err.message);
     }

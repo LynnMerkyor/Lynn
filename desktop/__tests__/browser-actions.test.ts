@@ -112,23 +112,25 @@ describe("browser-actions: view actions over a fake webContents", () => {
 
 describe("browser-actions: evaluate hardening (P1-3)", () => {
   it("rejects expressions over 4000 chars", async () => {
-    await expect(runBrowserAction("evaluate", { expression: "x".repeat(4001) }, deps(fakeWc())))
+    await expect(runBrowserAction("evaluate", { expression: "x".repeat(4001) }, deps(fakeWc(), { LYNN_BROWSER_ALLOW_EVALUATE: "1" })))
       .rejects.toThrow("Expression too long");
   });
 
-  it("denies sensitive-storage access only when LYNN_BROWSER_EVAL_DENY_SENSITIVE=1", async () => {
+  it("disables arbitrary page JavaScript by default", async () => {
+    await expect(runBrowserAction("evaluate", { expression: "document.title" }, deps(fakeWc())))
+      .rejects.toThrow("disabled by default");
+  });
+
+  it("keeps sensitive browser storage blocked even when evaluate is explicitly enabled", async () => {
     const expr = "document.cookie";
-    await expect(runBrowserAction("evaluate", { expression: expr }, deps(fakeWc(), { LYNN_BROWSER_EVAL_DENY_SENSITIVE: "1" })))
-      .rejects.toThrow("accesses sensitive storage");
-    // default (flag off) → allowed
-    const out = await runBrowserAction("evaluate", { expression: expr }, deps(fakeWc(), {}));
-    expect(out).toEqual({ value: "EXEC_RESULT" });
+    await expect(runBrowserAction("evaluate", { expression: expr }, deps(fakeWc(), { LYNN_BROWSER_ALLOW_EVALUATE: "1" })))
+      .rejects.toThrow("accesses sensitive browser storage");
   });
 
   it("serializes a non-string result as pretty JSON", async () => {
     const wc = fakeWc();
     wc.executeJavaScript = async () => ({ a: 1 });
-    const out = await runBrowserAction("evaluate", { expression: "({a:1})" }, deps(wc));
+    const out = await runBrowserAction("evaluate", { expression: "({a:1})" }, deps(wc, { LYNN_BROWSER_ALLOW_EVALUATE: "1" }));
     expect(out).toEqual({ value: JSON.stringify({ a: 1 }, null, 2) });
   });
 });

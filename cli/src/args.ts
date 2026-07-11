@@ -4,6 +4,59 @@ export interface ParsedArgs {
   flags: Record<string, string | boolean>;
 }
 
+export const KNOWN_LONG_FLAGS = new Set([
+  "agent", "agent-command", "api-base", "api-key", "apply", "approval", "ask", "audio",
+  "base-url", "best", "brain-dir", "brain-url", "brief", "classic", "command", "content",
+  "continue", "cwd", "data-dir", "duration", "end-silence-ms", "endurance", "exhaustive",
+  "expect", "fast", "file", "force-escalate", "force-fail", "help", "id", "idle-timeout",
+  "idle-timeout-ms", "image", "images", "json", "json-boundary-stop", "jsonl", "language",
+  "legacy-tui", "list-tools", "long", "loop", "max-bytes", "max-seconds", "max-steps", "mock",
+  "mock-brain", "mock-escape-output", "mock-fail", "mock-worker-output", "model", "no-ink",
+  "no-route-smoke", "no-save-session", "no-send", "no-session", "no-speak", "offline", "once",
+  "out", "output", "path", "pattern", "plain", "preset", "print", "prompt", "provider", "ptt",
+  "push-to-talk", "query", "reasoning", "record", "resume", "rewind", "sandbox", "save-session",
+  "seconds", "send", "server-url", "session", "shot", "show-reasoning", "silence-rms", "speak",
+  "speech-rms", "speed", "steps", "stop-at-json", "task", "task-class", "text", "text-only",
+  "timeout", "timeout-ms", "title", "tool", "transcribe-only", "tts", "ultra", "ultra-concurrency",
+  "ultra-max-subtasks", "ultra-verify", "version", "voice", "voice-file", "voice-stdin",
+  "worker-repair-rounds", "worktree",
+]);
+
+export function findUnknownLongFlags(argv: readonly string[]): string[] {
+  const unknown = new Set<string>();
+  for (const token of argv) {
+    if (token === "--") break;
+    if (!token.startsWith("--") || token === "--") continue;
+    const body = token.slice(2);
+    const name = flagName(body.includes("=") ? body.slice(0, body.indexOf("=")) : body);
+    if (name && !KNOWN_LONG_FLAGS.has(name)) unknown.add(name);
+  }
+  return [...unknown];
+}
+
+export function suggestLongFlag(unknown: string): string | null {
+  let best: { name: string; distance: number } | null = null;
+  for (const name of KNOWN_LONG_FLAGS) {
+    const distance = editDistance(unknown, name);
+    if (!best || distance < best.distance) best = { name, distance };
+  }
+  return best && best.distance <= Math.max(2, Math.floor(unknown.length / 3)) ? best.name : null;
+}
+
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let diagonal = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const previous = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, diagonal + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diagonal = previous;
+    }
+  }
+  return row[b.length];
+}
+
 function flagName(raw: string): string {
   return raw.replace(/^-+/, "");
 }

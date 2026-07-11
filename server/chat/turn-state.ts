@@ -65,12 +65,6 @@ export interface ChatTurnState extends SessionStreamStateFields {
   effectivePromptText: string;
   hasLocalPrefetchEvidence: boolean;
   pendingToolRetryAttempted: boolean;
-  internalRetryCounts: Record<string, number>;
-  internalRetryPending: boolean;
-  internalRetryInFlight: boolean;
-  internalRetryReason: string;
-  internalRetryOriginalVisibleLen: number;
-  internalRetryHadVisibleBeforeReset: boolean;
   successfulToolCount: number;
   lastSuccessfulTools: ToolSuccessRecord[];
   hasFailedTool: boolean;
@@ -106,7 +100,7 @@ export interface ChatTurnState extends SessionStreamStateFields {
   persistedAssistantTextBaseline: number;
   persistedAssistantMessageBaseline: number;
   activeStreamToken: unknown | null;
-  streamSource: unknown | null;
+  streamSource: "user" | "brain_fallback" | null;
   degenerationAbortRequested: boolean;
   _lastTurnAborted: boolean;
   progressMarkerCount: number;
@@ -146,12 +140,6 @@ export function createChatTurnState(): ChatTurnState {
     effectivePromptText: "",
     hasLocalPrefetchEvidence: false,
     pendingToolRetryAttempted: false,
-    internalRetryCounts: {},
-    internalRetryPending: false,
-    internalRetryInFlight: false,
-    internalRetryReason: "",
-    internalRetryOriginalVisibleLen: 0,
-    internalRetryHadVisibleBeforeReset: false,
     successfulToolCount: 0,
     lastSuccessfulTools: [],
     hasFailedTool: false,

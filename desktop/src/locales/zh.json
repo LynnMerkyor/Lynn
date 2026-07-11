@@ -125,6 +125,7 @@
     "jian": "工作地图",
     "bridge": "接入社交平台",
     "toggle": "侧边栏",
+    "progress": "会话进展",
     "bridgeShort": "接入社交平台",
     "search": "搜索对话...",
     "noResults": "没有找到匹配的对话",
@@ -208,6 +209,7 @@
     "more": "更多",
     "empty": "空",
     "edit": "编辑",
+    "close": "关闭",
     "delete": "删除",
     "editResend": "编辑重发",
     "editResendTitle": "编辑后重发(把这条消息复制到输入框,改完按 Enter 重新发送)"
@@ -277,6 +279,17 @@
     "loading": "加载中...",
     "reconnecting": "重连中",
     "reconnect": "重新连接",
+    "rendererRecovered": "界面发生异常后已自动恢复，对话和后台任务仍然保留。",
+    "model": {
+      "localRunning": "本地 Qwen3.6-27B 正在运行",
+      "localLoading": "本地 Qwen3.6-27B 正在加载",
+      "localSelected": "本地 Qwen3.6-27B 已选择 · 模型未启动",
+      "currentSpeed": "当前 {speed}",
+      "totalTokens": "服务累计处理 {tokens} tokens",
+      "ready": "{kind} {model} · 已就绪",
+      "default": "{kind} 默认模型 · 已备案",
+      "defaultName": "默认模型"
+    },
     "tasksRecovered": "已恢复 {count} 个后台任务",
     "tasksRecoveredRunning": "后台还有 {count} 个任务正在继续",
     "tasksRecoveredWaiting": "后台还有 {count} 个任务正在继续，其中 {waiting} 个在等你确认",
@@ -1467,6 +1480,7 @@
   },
   "activity": {
     "title": "助手活动",
+    "fleet": "智能体任务",
     "empty": "暂时没有活动记录，日常巡检或定时任务执行后会出现在这里",
     "back": "返回",
     "openRecoveredTasks": "查看后台任务",
@@ -1624,6 +1638,8 @@
     "selectChat": "选择一个对话",
     "noSessions": "暂无对话",
     "noMessages": "暂无消息",
+    "user": "你",
+    "agent": "助手",
     "empty": "暂无消息记录",
     "notConfigured": "尚未配置 {platform}",
     "goToSettings": "前往设置",
@@ -2351,7 +2367,10 @@
       "start": "实时对话",
       "endTurn": "完成本轮",
       "interruptListen": "插话",
-      "interrupt": "停止"
+      "interrupt": "停止",
+      "working": "处理中",
+      "stopTitle": "强制停止当前播报或思考",
+      "close": "关闭 Lynn 语音助手"
     },
     "state": {
       "idle": "点一次进入连续语音",
@@ -2365,6 +2384,12 @@
       "listening": "正在听；嘈杂环境说完点“完成本轮”。",
       "thinking": "正在组织回答，完成后会直接语音播报。",
       "speaking": "正在朗读回答，结束后会自动继续听；点“插话”可打断。"
+    },
+    "stats": {
+      "label": "语音连接统计",
+      "rtt": "延迟",
+      "upload": "上行",
+      "download": "下行"
     }
   }
 }

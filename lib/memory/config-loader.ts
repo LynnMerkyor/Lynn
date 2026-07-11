@@ -157,7 +157,8 @@ export function saveConfig(configPath: string, partial: ConfigObject): void {
 
   // atomic write：先写临时文件再 rename，防止写到一半崩溃损坏配置
   const tmpPath = configPath + ".tmp";
-  fs.writeFileSync(tmpPath, yamlStr, "utf-8");
+  fs.writeFileSync(tmpPath, yamlStr, { encoding: "utf-8", mode: 0o600 });
   fs.renameSync(tmpPath, configPath);
+  fs.chmodSync(configPath, 0o600);
   clearConfigCache();
 }

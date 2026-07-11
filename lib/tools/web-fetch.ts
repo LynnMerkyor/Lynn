@@ -19,11 +19,18 @@ const MAX_REDIRECTS = 5;
 const MIN_USEFUL_HTML_TEXT = 280;  // 太短通常说明正文没抓出来
 
 const PRIVATE_IP_RANGES = [
-  /^127\./, /^::1$/, /^0\.0\.0\.0$/, /^0:0:0:0:0:0:0:1$/,    // loopback
+  /^127\./, /^::1$/, /^::$/, /^0\.0\.0\.0$/, /^0:0:0:0:0:0:0:1$/, // loopback / unspecified
   /^10\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./,        // RFC 1918
   /^169\.254\./, /^fe80:/i,                                      // link-local
   /^fc00:/i, /^fd[0-9a-f]{2}:/i,                                // IPv6 ULA
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,                 // carrier-grade NAT
+  /^198\.(18|19)\./,                                            // benchmark networks
+  /^(22[4-9]|23\d|24\d|25[0-5])\./,                            // multicast / reserved
+  /^::ffff:(127|10|192\.168|169\.254)\./i,
+  /^::ffff:172\.(1[6-9]|2\d|3[01])\./i,
 ];
+
+class UnsafeFetchTargetError extends Error {}
 
 type FetchWebContentDetails = Record<string, unknown>;
 
@@ -159,7 +166,7 @@ export async function fetchWebContent(url: string, maxLength = MAX_CONTENT_LENGT
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       const hopParsed = new URL(currentUrl);
       if (await isPrivateHost(hopParsed.hostname)) {
-        throw new Error(t("error.fetchSsrf", { host: hopParsed.hostname }));
+        throw new UnsafeFetchTargetError(t("error.fetchSsrf", { host: hopParsed.hostname }));
       }
 
       res = await fetch(currentUrl, {
@@ -238,6 +245,7 @@ export async function fetchWebContent(url: string, maxLength = MAX_CONTENT_LENGT
       truncated: originalLength > maxLength,
     };
   } catch (err) {
+    if (err instanceof UnsafeFetchTargetError) throw err;
     try {
       const reader = await fetchViaJinaReader(url, maxLength);
       return {

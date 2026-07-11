@@ -2,7 +2,7 @@
  * memory-ticker.js — 记忆调度器（v3）
  *
  * 触发机制改为 turn-based：
- * - 每 6 轮：滚动摘要 + compileToday + assemble
+ * - 默认每 12 轮：滚动摘要 + compileToday + assemble（可通过环境变量调整）
  * - session 结束：final 滚动摘要 + compileToday + assemble
  * - 每天一次（日期变化时触发）：compileWeek + compileLongterm + compileFacts + assemble + deep-memory
  *
@@ -24,7 +24,7 @@ import { extractSessionExperiences } from "../experience-extractor.js";
 import { getLogicalDay } from "../time-utils.js";
 import type { SessionStats } from "./session-stats.js";
 
-const TURNS_PER_SUMMARY = 6;    // 每隔多少轮触发一次滚动摘要
+const TURNS_PER_SUMMARY = Math.max(1, Number(process.env.LYNN_MEMORY_SUMMARY_EVERY_TURNS || 12));
 
 type SessionRole = "user" | "assistant";
 
@@ -298,7 +298,7 @@ export function createMemoryTicker(opts: MemoryTickerOptions): MemoryTicker {
   let _dailyStepsDate: string | null = null;               // 当天已完成步骤所属日期
   const _dailyStepsCompleted = new Set<string>();    // 当天已完成的步骤名（断点续跑）
   const _turnCounts = new Map<string, number>();             // sessionPath → turn count
-  const _endNotified = new Set<string>();            // guard against double notifySessionEnd
+  const _sessionEndInFlight = new Map<string, Promise<void>>();
   const _summaryInProgress = new Set<string>();      // 正在跑滚动摘要的 session
 
   // ── 内部：滚动摘要 ──
@@ -514,15 +514,13 @@ export function createMemoryTicker(opts: MemoryTickerOptions): MemoryTicker {
    */
   async function notifySessionEnd(sessionPath?: string | null): Promise<void> {
     if (!sessionPath) return;
-    // Guard against double invocation for the same session
-    if (_endNotified.has(sessionPath)) return;
-    _endNotified.add(sessionPath);
-    setTimeout(() => _endNotified.delete(sessionPath), 30_000); // allow re-entry after 30s
+    const inFlight = _sessionEndInFlight.get(sessionPath);
+    if (inFlight) return inFlight;
     const count = _turnCounts.get(sessionPath) || 0;
-    _turnCounts.delete(sessionPath);
     if (count === 0) return; // 没有新轮次，无需更新摘要
+    _turnCounts.set(sessionPath, 0);
     if (!_isSessionMemoryOn(sessionPath)) return;
-    try {
+    const work = (async () => { try {
       await _doRollingSummary(sessionPath);
       await _doCompileTodayAndAssemble();
       await _doExtractExperiences(sessionPath);
@@ -594,6 +592,17 @@ export function createMemoryTicker(opts: MemoryTickerOptions): MemoryTicker {
       }
     } catch (err) {
       console.error(`\x1b[90m[memory-ticker] notifySessionEnd 失败: ${errorMessage(err)}\x1b[0m`);
+    } })();
+    _sessionEndInFlight.set(sessionPath, work);
+    try {
+      await work;
+    } finally {
+      if (_sessionEndInFlight.get(sessionPath) === work) _sessionEndInFlight.delete(sessionPath);
+    }
+    // A new turn can land while the final pass is awaiting model work. Drain it
+    // immediately instead of suppressing it with a wall-clock debounce window.
+    if ((_turnCounts.get(sessionPath) || 0) > 0) {
+      await notifySessionEnd(sessionPath);
     }
   }
 

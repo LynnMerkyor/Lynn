@@ -7,6 +7,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
   buildDefaultAgentCommand,
+  buildDefaultAgentInvocation,
   buildWorkerPrompt,
   collectGitDiff,
   externalJsonEvents,
@@ -205,6 +206,15 @@ describe("worker-run · brief parsing & external adapters", () => {
     expect(command).toContain("--dangerously-bypass-approvals-and-sandbox");
     expect(command).not.toContain("--file");
     expect(command).toContain("hello '\\''world'\\'''");
+  });
+
+  it("builds external worker argv without platform-specific shell quoting", () => {
+    const invocation = buildDefaultAgentInvocation("codex-cli", "C:\\task brief.md", "C:\\work tree", "hello 'world'");
+
+    expect(invocation).toMatchObject({ command: "codex" });
+    expect(invocation?.args).toEqual(expect.arrayContaining(["exec", "--cd", "C:\\work tree"]));
+    expect(invocation?.args.at(-1)).toContain("hello 'world'");
+    expect(invocation?.args.some((value) => value.includes("'\\''"))).toBe(false);
   });
 
   it("builds non-interactive Claude, Qwen, and Kimi worker commands", () => {

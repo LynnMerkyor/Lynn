@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../stores';
 import { useI18n } from '../hooks/use-i18n';
 import { renderMarkdown } from '../utils/markdown';
-import { loadChannels, sendChannelMessage } from '../stores/channel-actions';
+import { sendChannelMessage } from '../stores/channel-actions';
 import { resolveChannelMember, formatChannelTime, MemberAvatar } from './channels/ChannelList';
 import type { MemberInfo } from './channels/ChannelList';
 import styles from './channels/Channels.module.css';
@@ -12,14 +12,6 @@ import styles from './channels/Channels.module.css';
 /* eslint-disable @typescript-eslint/no-explicit-any -- isComposing 等 nativeEvent 字段需 as any */
 
 export function ChannelsPanel() {
-  const serverPort = useStore(s => s.serverPort);
-
-  // 启动时加载频道列表
-  useEffect(() => {
-    if (!serverPort) return;
-    loadChannels();
-  }, [serverPort]);
-
   return null;
 }
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { assertWorkspaceBashAllowed, bashTool } from "../src/tools/bash.js";
+import { assertWorkspaceBashAllowed, bashTool, redactBashAuditCommand } from "../src/tools/bash.js";
 
 const check = (command: string) => () => assertWorkspaceBashAllowed(command, "workspace-write");
 
@@ -69,5 +69,24 @@ describe("assertWorkspaceBashAllowed", () => {
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("bash audit redaction", () => {
+  it("removes common API tokens and credentials before commands reach the audit log", () => {
+    const command = [
+      'curl -H "Authorization: Bearer sk-secretvalue123456" https://user:pass@example.com',
+      'GITHUB_TOKEN=ghp_1234567890abcdefghijklmnopqrstuv',
+      'HF_TOKEN=hf_1234567890abcdefghijklmnop',
+      'MS_TOKEN=ms-b93a92a3-a6e7-4025-a163-ab27f13bd85f',
+    ].join(' ');
+    const redacted = redactBashAuditCommand(command);
+
+    expect(redacted).not.toContain('secretvalue123456');
+    expect(redacted).not.toContain('user:pass');
+    expect(redacted).not.toContain('ghp_1234567890');
+    expect(redacted).not.toContain('hf_1234567890');
+    expect(redacted).not.toContain('ms-b93a92a3');
+    expect(redacted).toContain('[REDACTED');
   });
 });

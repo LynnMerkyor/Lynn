@@ -9,14 +9,14 @@
     <title>Lynn 下载 | macOS 与 Windows 安装包</title>
     <meta
       name="description"
-      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.85.10,CLI 当前为 v0.85.10。"
+      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.86.0,CLI 当前为 v0.86.0。"
     />
     <meta name="theme-color" content="#f7f1e6" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Lynn 下载 | macOS 与 Windows 安装包" />
     <meta
       property="og:description"
-      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.85.10,CLI 当前为 v0.85.10。"
+      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.86.0,CLI 当前为 v0.86.0。"
     />
     <meta property="og:image" content="../.github/assets/screenshot-main-20260407-v3.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -47,9 +47,9 @@
             <span class="eyebrow">Lynn 下载页</span>
             <h1>选择适合你设备的版本</h1>
             <p class="lead">
-              客户端 GUI 当前为 <strong id="gui-release-version">0.85.10</strong>,
-              CLI 当前为 <strong id="cli-release-version">0.85.10</strong>。
-              GUI 下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作和显式启用的本地模型；CLI 可独立安装,也可作为 Fleet worker 或 manager。V0.85.10 更新会话进度、回合状态隔离、工具暴露和多模型兜底链路,并让打包流程强制经过 GUI100/CLI100 门禁。
+              客户端 GUI 当前为 <strong id="gui-release-version">0.86.0</strong>,
+              CLI 当前为 <strong id="cli-release-version">0.86.0</strong>。
+              GUI 下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作和显式启用的本地模型；CLI 可独立安装,也可作为 Fleet worker 或 manager。V0.86.0 加固浏览器、IPC、沙箱和本地服务边界，并修复 Windows 27B 启动、CLI 中断和会话并发问题。
             </p>
             <div class="platform-callout" id="platform-callout">
               系统识别中…
@@ -62,7 +62,7 @@
             <span class="eyebrow">Lynn CLI / Lynn Code</span>
             <h2>给开发者和其他智能体的安装方式</h2>
             <p>
-              Lynn CLI 当前最新为 <strong>v0.85.10</strong>。它是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、Markdown 渲染、流式输出、工具调用和长任务续跑。
+              Lynn CLI 当前最新为 <strong>v0.86.0</strong>。它是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、Markdown 渲染、流式输出、工具调用和长任务续跑。
               一行命令装好,不用克隆仓库、不用编译;也可以被 Claude Code、Codex CLI、Kimi Code、Qwen CLI、CI 或 Lynn GUI Fleet 以无交互方式调用。
             </p>
           </div>
@@ -94,7 +94,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
             </div>
             <div class="code-copy-block">
               <button class="copy-button" type="button" data-copy-target="cli-install">复制</button>
-              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.10.tgz</code></pre>
+              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz</code></pre>
             </div>
           </div>
           <div class="cli-install-card">
@@ -108,7 +108,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
               <pre><code id="cli-start">Lynn                 # 交互式聊天 TUI
 Lynn code            # 编码 agent TUI
 Lynn manager run -p "拆分并验收这个长任务" --jsonl
-Lynn --version       # 应输出 0.85.10
+Lynn --version       # 应输出 0.86.0
 Lynn agents          # 输出可复制的 Fleet / 其他 CLI 调用方式
 
 # 无交互编码 worker 示例
@@ -128,7 +128,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill">推荐给 Apple Silicon Mac</span>
               <h2>macOS Apple Silicon</h2>
             </div>
-            <p>适用于 Apple Silicon 芯片的 Mac。V0.85.10 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
+            <p>适用于 Apple Silicon 芯片的 Mac。V0.86.0 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
               <li>签名状态：Developer ID 签名</li>
@@ -138,7 +138,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="macArm"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.10-macOS-arm64.dmg"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.86.0-macOS-arm64.dmg"
               target="_blank"
               rel="noreferrer"
             >下载 Apple Silicon 版</a>
@@ -149,7 +149,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill pill-soft">适用于 Intel Mac</span>
               <h2>macOS Intel</h2>
             </div>
-            <p>适用于 Intel 芯片的 Mac。V0.85.10 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
+            <p>适用于 Intel 芯片的 Mac。V0.86.0 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
               <li>签名状态：Developer ID 签名</li>
@@ -159,7 +159,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="macIntel"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.10-macOS-x64.dmg"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.86.0-macOS-x64.dmg"
               target="_blank"
               rel="noreferrer"
             >下载 Intel 版</a>
@@ -170,7 +170,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill pill-warm">Windows 安装版</span>
               <h2>Windows</h2>
             </div>
-            <p>正式发布提供代码签名的 `Setup.exe` 安装包。客户端 GUI v0.85.10 Windows 安装包已同步到镜像站。</p>
+            <p>正式发布提供代码签名的 `Setup.exe` 安装包。客户端 GUI v0.86.0 Windows 安装包已同步到镜像站。</p>
             <ul>
               <li>文件格式：`.exe`</li>
               <li>安装方式：图形安装向导</li>
@@ -180,7 +180,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="windows"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.85.10-Windows-Setup.exe"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.86.0-Windows-Setup.exe"
               target="_blank"
               rel="noreferrer"
             >下载 Windows 版</a>
@@ -231,9 +231,9 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
 
         <section class="section release-summary">
           <div class="release-card">
-            <h2>V0.85.10:会话进度与 Agent 可靠性更新</h2>
+            <h2>V0.86.0:安全边界与运行时可靠性更新</h2>
             <p>
-              V0.85.10 让右侧会话进度更容易找到内容，并统一清理每轮工具、重试和解析状态。Brain 候选各自有时限，普通写作和规划不再误触搜索或文件工具。
+              V0.86.0 加固模型浏览器、IPC、OS 沙箱与本地服务信任边界，并修复 Windows 27B 启动、CLI 中断、会话双发与断线重放问题。
               默认端侧模型仍是公开 27B Coding Q4 imatrix MTP；低配设备不主动弹安装引导，仍可手动选择 9B / 4B 降级。
             </p>
             <ul>
@@ -271,6 +271,6 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
       </footer>
     </div>
 
-    <script src="./app.js?v=0.85.10-cli"></script>
+    <script src="./app.js?v=0.86.0-cli"></script>
   </body>
 </html>

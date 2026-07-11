@@ -34,9 +34,10 @@ import { argsForChatVoiceLaunch, parseChatVoiceLaunchCommand } from "../voice-co
 import { isLocalExitText, parseLocalReadOnlyCommand, renderLocalReadOnlyBlocked, renderLocalReadOnlyResult, runLocalReadOnlyCommand } from "../local-command.js";
 import { assistantToolCallsForMessages, codeToolDefinitions, createStreamingToolCallAccumulator, parseCodeToolRequests, toolRequestsFromCollectedCalls, type CodeToolRequest } from "../code-tool-protocol.js";
 import { formatDangerousToolPreview, renderClientToolResult, renderClientToolStart, resolveToolApproval } from "../code-tool-render.js";
-import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
+import { runClientTool } from "../tools/registry.js";
 import type { ClientToolResult } from "../tools/types.js";
 import { applyChatRewind, beginChatRewindTurn, createChatRewindState, finishChatRewindTurn, maybeRecordChatRewindSnapshot, parseChatRewindCommand, renderChatRewind } from "../chat-rewind.js";
+import { renderLocalToolList } from "./chat-tool-list.js";
 
 export const CHAT_SLASH_COMMANDS = [
   "/yolo",
@@ -327,6 +328,9 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
 
   async function sendUserMessage(displayText: string, content: ChatMessage["content"]): Promise<"continue"> {
     const checkpoint = beginChatRewindTurn(rewindState, displayText, messages.length);
+    const turnAbort = new AbortController();
+    const onSigint = () => turnAbort.abort(new Error(t("chat.cancelled")));
+    process.once("SIGINT", onSigint);
     messages.push({ role: "user", content });
     try {
       renderChatCompaction(compactChatMessages(messages));
@@ -369,6 +373,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
               runtimeMetrics,
               spinner,
               color,
+              signal: turnAbort.signal,
             });
             latestUsage = round.latestUsage || latestUsage;
             // One record per ROUND (final frame only) — session totals + cache-hit sampling.
@@ -418,7 +423,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
         } catch (error) {
           spinner.stop();
           messages.pop();
-          output.write(`\n${formatChatError(error)}\n\n`);
+          output.write(`\n${turnAbort.signal.aborted ? t("chat.cancelled") : formatChatError(error)}\n\n`);
           return "continue";
         } finally {
           spinner.stop();
@@ -447,6 +452,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
       })}\n\n`);
       return "continue";
     } finally {
+      process.removeListener("SIGINT", onSigint);
       finishChatRewindTurn(rewindState, checkpoint);
     }
   }
@@ -461,6 +467,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
     runtimeMetrics: ReturnType<typeof createRuntimeMetrics>;
     spinner: TerminalSpinner;
     color: boolean;
+    signal: AbortSignal;
   }): Promise<{ assistant: string; toolRequests: CodeToolRequest[]; structuredToolCalls: boolean; latestUsage: string | null; lastUsageRaw: unknown; decodeTps: string | null }> {
     let assistant = "";
     let latestUsage: string | null = null;
@@ -478,6 +485,7 @@ export async function runChat(args: ParsedArgs, options: { intro?: boolean; brai
         reasoning: inputData.reasoning,
         fallbackProvider: inputData.cliProvider?.profile,
         tools: codeToolDefinitions(),
+        signal: inputData.signal,
       })) {
         if (event.type === "tool_call.delta") {
           toolAccumulator.append(event);
@@ -826,15 +834,6 @@ function renderInteractiveModeChange(message: string, mode: ChatMode, color: boo
     ].join("\n");
   }
   return `${green("✓", color)} ${message}\nmode: ${dim(renderMode(mode), color)}\n\n`;
-}
-
-function renderLocalToolList(color: boolean): string {
-  return CLIENT_TOOL_DEFINITIONS
-    .map((tool) => {
-      const suffix = tool.dangerous ? t("tool.approval.suffix") : "";
-      return `${tool.name}${suffix}: ${dim(tool.description, color)}`;
-    })
-    .join("\n");
 }
 
 export function applyReasoningCommand(current: ReturnType<typeof parseReasoningOptions>, raw: string): { reasoning: ReturnType<typeof parseReasoningOptions>; message: string } {

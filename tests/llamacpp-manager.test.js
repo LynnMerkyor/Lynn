@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { LlamaCppManager, DEFAULT_CONFIG } from "../desktop/llamacpp-manager.cjs";
+import { LlamaCppManager, DEFAULT_CONFIG, systemBinaryCandidates } from "../desktop/llamacpp-manager.cjs";
 
 function makeTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -48,6 +48,37 @@ describe("LlamaCppManager path and spawn safety", () => {
     await manager.spawnServer();
 
     expect(spawnOptions).toMatchObject({ windowsHide: true });
+  });
+
+  it("discovers a Windows llama-server installed on PATH with where.exe", () => {
+    const expected = "C:\\llama.cpp\\llama-server.exe";
+    const spawnCalls = [];
+    const spawnSyncFn = (command, args, options) => {
+      spawnCalls.push({ command, args, options });
+      return { stdout: `${expected}\r\n` };
+    };
+    const manager = new LlamaCppManager({
+      platform: "win32",
+      lynnHome: "C:\\Users\\test\\.lynn",
+      fsModule: { existsSync: (candidate) => candidate === expected },
+      spawnSyncFn,
+    });
+
+    expect(manager.resolveBinaryPath()).toBe(expected);
+    expect(spawnCalls).toEqual([
+      expect.objectContaining({ command: "where.exe", args: ["llama-server"] }),
+    ]);
+  });
+
+  it("keeps every valid Windows PATH match so an unavailable first result can fall through", () => {
+    const candidates = systemBinaryCandidates("win32", () => ({
+      stdout: "C:\\old\\llama-server.exe\r\nD:\\tools\\llama-server.exe\r\n",
+    }));
+
+    expect(candidates).toEqual([
+      "C:\\old\\llama-server.exe",
+      "D:\\tools\\llama-server.exe",
+    ]);
   });
 
   it("keeps MTP launch flags for the default 27B profile when the binary supports them", () => {
