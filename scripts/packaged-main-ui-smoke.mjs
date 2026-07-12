@@ -350,11 +350,7 @@ async function main() {
       const bottomBar = document.querySelector('[class*="input-bottom-bar"]');
       const modelButton = document.querySelector('[class*="model-pill"]');
       const taskButton = Array.from(document.querySelectorAll('button')).find((el) => (el.textContent || '').includes('自动'));
-      const deepResearch = Array.from(document.querySelectorAll('button')).find((el) => (el.textContent || '').includes('深研'));
-      const execMode = Array.from(document.querySelectorAll('button')).find((el) => {
-        const text = el.textContent || '';
-        return text.includes('执行模式') || text.includes('security.mode.');
-      });
+      const moreButton = document.querySelector('button[aria-label="更多输入选项"]');
       const sendButton = document.querySelector('button[class*="send-btn"]');
       return {
         viewport: { width: window.innerWidth, height: window.innerHeight },
@@ -366,8 +362,7 @@ async function main() {
         bottomBar: rectOf(bottomBar),
         modelButton: rectOf(modelButton),
         taskButton: rectOf(taskButton),
-        deepResearch: rectOf(deepResearch),
-        execMode: rectOf(execMode),
+        moreButton: rectOf(moreButton),
         sendButton: rectOf(sendButton),
         hasAttach: !!document.querySelector('button[class*="attach-btn"]'),
         hasVoice: !!document.querySelector('button[aria-label*="语音"]'),
@@ -391,8 +386,7 @@ async function main() {
     within("bottomBar", baseLayout.bottomBar, { minWidth: 300, minHeight: 38 });
     within("modelButton", baseLayout.modelButton, { minWidth: 80, minHeight: 28 });
     within("taskButton", baseLayout.taskButton, { minWidth: 60, minHeight: 20 });
-    within("deepResearch", baseLayout.deepResearch, { minWidth: 54, minHeight: 20 });
-    within("execMode", baseLayout.execMode, { minWidth: 70, minHeight: 20 });
+    within("moreButton", baseLayout.moreButton, { minWidth: 28, minHeight: 28 });
     within("sendButton", baseLayout.sendButton, { minWidth: 34, minHeight: 34 });
     if (!baseLayout.hasAttach) failures.push("attach button missing");
     if (!baseLayout.hasVoice) failures.push("voice button missing");
@@ -400,6 +394,42 @@ async function main() {
       throw new Error(`main layout assertions failed:\n- ${failures.join("\n- ")}\ntext=${baseLayout.text}`);
     }
     await cdp.screenshot(path.join(outputDir, "main-layout.png"));
+
+    const openedMore = await cdp.evaluate(`(() => {
+      const button = document.querySelector('button[aria-label="更多输入选项"]');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    assertOk(openedMore, "more input options button was not clickable");
+    const moreSnapshot = await waitFor(cdp, `(() => {
+      const menu = document.querySelector('[role="menu"][aria-label="更多输入选项"]');
+      if (!menu) return null;
+      const rectOf = (el) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+      };
+      const deepResearch = Array.from(menu.querySelectorAll('button')).find((el) => (el.textContent || '').includes('深度调研'));
+      const execMode = Array.from(menu.querySelectorAll('button')).find((el) => {
+        const text = el.textContent || '';
+        return text.includes('执行模式') || text.includes('security.mode.');
+      });
+      if (!deepResearch || !execMode) return null;
+      return {
+        menu: rectOf(menu),
+        deepResearch: rectOf(deepResearch),
+        execMode: rectOf(execMode),
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+      };
+    })()`, 15000, "composer more menu controls");
+    for (const [name, rect] of [["moreMenu", moreSnapshot.menu], ["deepResearch", moreSnapshot.deepResearch], ["execMode", moreSnapshot.execMode]]) {
+      assertOk(rect && rect.width >= 28 && rect.height >= 20, `${name} missing or too small: ${JSON.stringify(rect)}`);
+      assertOk(rect.left >= -2 && rect.right <= moreSnapshot.viewport.width + 2, `${name} clipped horizontally: ${JSON.stringify(rect)}`);
+      assertOk(rect.top >= -2 && rect.bottom <= moreSnapshot.viewport.height + 2, `${name} clipped vertically: ${JSON.stringify(rect)}`);
+    }
+    await cdp.screenshot(path.join(outputDir, "composer-more-menu.png"));
+    await cdp.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
 
     const typed = await cdp.evaluate(`(() => {
       const el = document.querySelector('#inputBox');
@@ -442,7 +472,7 @@ async function main() {
     }
     await cdp.screenshot(path.join(outputDir, "model-dropdown.png"));
 
-    const popoverSnapshot = await cdp.evaluate(`(() => {
+    const popoverSnapshot = await cdp.evaluate(`(async () => {
       const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
       document.dispatchEvent(escape);
       const clickText = (...needles) => {
@@ -455,11 +485,13 @@ async function main() {
         return true;
       };
       const clickedTask = clickText('自动');
+      const moreButton = document.querySelector('button[aria-label="更多输入选项"]');
+      if (moreButton) moreButton.click();
+      await new Promise((resolve) => setTimeout(resolve, 150));
       const clickedExec = clickText('执行模式', 'security.mode.');
-      return new Promise((resolve) => setTimeout(() => {
-        const text = document.body.innerText || '';
-        resolve({ clickedTask, clickedExec, text });
-      }, 300));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const text = document.body.innerText || '';
+      return { clickedTask, clickedExec, text };
     })()`);
     assertOk(popoverSnapshot.clickedTask, "task mode button was not clickable");
     assertOk(popoverSnapshot.clickedExec, "execution mode button was not clickable");
