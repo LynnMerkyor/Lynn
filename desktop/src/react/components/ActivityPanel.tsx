@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../stores';
+import { switchSession } from '../stores/session-actions';
 import { hanaFetch, hanaUrl } from '../hooks/use-hana-fetch';
 import { formatSessionDate, injectCopyButtons, parseMoodFromContent } from '../utils/format';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
@@ -38,6 +39,7 @@ interface DetailState {
   agentId: string;
   agentName: string;
   messages: DetailMessage[];
+  sessionFile?: string;
 }
 
 export function ActivityPanel() {
@@ -53,7 +55,21 @@ export function ActivityPanel() {
   const [detail, setDetail] = useState<DetailState | null>(null);
   const [hbEnabled, setHbEnabled] = useState(true);
   const [auditLog, setAuditLog] = useState<Array<{ operation: string; path: string; ts: string }> | null>(null);
-  const translate = useCallback((p: string) => (window.t ? window.t(p) : p), []);
+  const translate = useCallback((key: string) => {
+    const translated = window.t?.(key);
+    if (translated && translated !== key) return translated;
+    const fallback: Record<string, string> = {
+      'activity.heartbeat': '巡检',
+      'activity.delegate': '委派',
+      'activity.plan': '计划',
+      'activity.reviewFollowUp': '复核跟进',
+      'activity.cron': '自动任务',
+      'activity.fleet': '并行任务',
+      'activity.openSession': '打开会话',
+      'common.close': '关闭',
+    };
+    return fallback[key] || key;
+  }, []);
 
   // 打开面板时加载活动 + 巡检状态
   useEffect(() => {
@@ -104,6 +120,7 @@ export function ActivityPanel() {
         agentId: activity.agentId || currentAgentId || '',
         agentName: activity.agentName || agentName,
         messages: messages || [],
+        sessionFile: activity.sessionFile,
       });
     } catch (err) {
       console.warn('[activity] failed to open activity detail:', err);
@@ -143,6 +160,18 @@ export function ActivityPanel() {
                 </svg>
               </button>
               <DetailHeader detail={detail} />
+              {detail.sessionFile && (
+                <button
+                  type="button"
+                  className={fp.floatingPanelBack}
+                  onClick={() => {
+                    close();
+                    void switchSession(detail.sessionFile!);
+                  }}
+                >
+                  {translate('activity.openSession')}
+                </button>
+              )}
               <button className={fp.floatingPanelClose} onClick={close} aria-label={translate('common.close')}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" />

@@ -27,6 +27,12 @@ export function updateLayout(): void {
   const contentWidth = windowWidth - leftWidth - rightWidth - previewWidth;
 
   if (contentWidth < CHAT_MIN_WIDTH) {
+    // Preview keeps its collapsed rail and can be reopened explicitly. On narrow
+    // windows it yields before navigation so the conversation stays usable.
+    if (state.previewOpen && windowWidth < 1180) {
+      useStore.setState({ previewOpen: false });
+      return;
+    }
     if (state.jianOpen) {
       useStore.setState({ jianOpen: false, jianAutoCollapsed: true });
       const contentWithoutDesk = windowWidth - (state.sidebarOpen ? getSidebarWidth() : 0) - previewWidth;

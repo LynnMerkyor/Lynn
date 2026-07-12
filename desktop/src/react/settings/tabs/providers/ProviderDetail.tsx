@@ -27,6 +27,13 @@ import {
 
 const platform = typeof window !== 'undefined' ? window.platform : undefined;
 
+function formatDownloadEta(seconds?: number | null) {
+  if (!seconds || !Number.isFinite(seconds) || seconds <= 0) return '';
+  if (seconds < 60) return `${Math.ceil(seconds)} 秒`;
+  if (seconds < 3600) return `${Math.ceil(seconds / 60)} 分钟`;
+  return `${Math.floor(seconds / 3600)} 小时 ${Math.ceil((seconds % 3600) / 60)} 分钟`;
+}
+
 export function ProviderDetail({ providerId, summary, providerConfig, isPresetSetup, presetInfo, onRefresh }: {
   providerId: string;
   summary: ProviderSummary;
@@ -258,9 +265,11 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     || defaultDownload.fileName === LOCAL_QWEN_DEFAULT_MODEL_FILE;
   const defaultDownloadActive = defaultDownloadForDefault
     && (defaultDownloadState === 'downloading' || defaultDownloadState === 'verifying');
+  const defaultDownloadCanPause = defaultDownloadForDefault && defaultDownloadState === 'downloading';
+  const defaultDownloadPaused = defaultDownloadForDefault && defaultDownloadState === 'paused';
   const defaultDownloadDone = defaultDownloadForDefault && defaultDownloadState === 'done';
   const defaultDownloadError = defaultDownloadForDefault && defaultDownloadState === 'error';
-  const defaultDownloadPercent = Math.max(0, Math.min(100, Number(defaultDownload.percent || 0)));
+  const defaultDownloadPercent = Math.max(0, Math.min(100, Number(defaultDownload.overallPercent ?? defaultDownload.percent ?? 0)));
   const defaultDownloadTotalBytes = Number(defaultDownload.totalBytes || 0)
     || (defaultDownloadDone ? LOCAL_QWEN_DEFAULT_EXPECTED_SIZE : 0);
   const defaultDownloadBytesTransferred = Number(defaultDownload.bytesTransferred || 0)
@@ -526,6 +535,31 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     }
   };
 
+  const toggleRecommendedDownload = async (option: LocalUpgradeOption, paused: boolean) => {
+    const modelId = option.id || 'qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix';
+    try {
+      const res = paused
+        ? await llamaState.startDownload({ modelId })
+        : await llamaState.pauseDownload();
+      if (!res?.ok) throw new Error(res?.reason || (paused ? 'resume-download-failed' : 'pause-download-failed'));
+      setActionStatus({ kind: 'info', text: paused ? '下载已继续，将从已有分片恢复。' : '下载已暂停，已完成的分片会保留。' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(`${paused ? '继续' : '暂停'}下载失败：${msg}`, 'error');
+    }
+  };
+
+  const removeDownloadedModel = async (modelId: string, label: string) => {
+    if (!window.confirm(`删除本机的 ${label}？模型文件会被移除，之后可以重新下载。`)) return;
+    const res = await llamaState.removeModel({ modelId });
+    if (!res?.ok) {
+      showToast(`删除失败：${res?.reason || '无法移除模型文件'}`, 'error');
+      return;
+    }
+    setActionStatus({ kind: 'success', text: `已删除 ${label}${res.bytesFreed ? `，释放 ${formatBytes(res.bytesFreed)}` : ''}。` });
+    await loadStatus(true);
+  };
+
   const openModelFolder = async () => {
     const res = await platform?.llamacppOpenModelDir?.(modelPath || null);
     setActionStatus({
@@ -647,12 +681,14 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         <span>{plan.base_url || 'http://127.0.0.1:18099/v1'}</span>
       </div>
 
-      {(defaultDownloadActive || defaultDownloadDone || defaultDownloadError) && (
+      {(defaultDownloadActive || defaultDownloadPaused || defaultDownloadDone || defaultDownloadError) && (
         <div className={styles['pv-local-qwen-progress']}>
           <div className={styles['pv-local-qwen-progress-row']}>
             <span>
               {defaultDownloadState === 'verifying'
                 ? '正在校验默认 27B'
+                : defaultDownloadPaused
+                  ? '默认 27B 下载已暂停'
                 : defaultDownloadDone
                   ? '默认 27B 已下载完成'
                   : defaultDownloadError
@@ -672,6 +708,23 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
               <span>{defaultDownloadSizeText.length > 1 ? defaultDownloadSizeText.join(' / ') : defaultDownloadSizeText[0]}</span>
             )}
             {defaultDownload.target && <span title={defaultDownload.target}>{defaultDownload.fileName || LOCAL_QWEN_DEFAULT_MODEL_FILE}</span>}
+            {!!defaultDownload.bytesPerSecond && <span>{formatBytes(defaultDownload.bytesPerSecond)}/s</span>}
+            {!!defaultDownload.etaSeconds && <span>剩余 {formatDownloadEta(defaultDownload.etaSeconds)}</span>}
+            {!!defaultDownload.fileCount && defaultDownload.fileCount > 1 && <span>文件 {defaultDownload.fileIndex || 1}/{defaultDownload.fileCount}</span>}
+          </div>
+          <div className={styles['pv-local-qwen-upgrade-actions']}>
+            {(defaultDownloadCanPause || defaultDownloadPaused) && (
+              <button type="button" className={styles['pv-verify-connection-btn']} onClick={() => defaultDownloadPaused
+                ? void llamaState.startDownload({ modelId: LOCAL_QWEN_DEFAULT_MODEL_ID })
+                : void llamaState.pauseDownload()}>
+                {defaultDownloadPaused ? '继续下载' : '暂停下载'}
+              </button>
+            )}
+            {(defaultDownloadPaused || defaultDownloadDone) && (
+              <button type="button" className={styles['pv-verify-connection-btn']} onClick={() => void removeDownloadedModel(LOCAL_QWEN_DEFAULT_MODEL_ID, '默认 27B 模型')}>
+                删除模型
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -699,10 +752,12 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
             const download = llamaState.download;
             const isThisDownload = download.modelId === optionId
               || (!!option.file_name && download.fileName === option.file_name);
-            const isDownloading = isThisDownload && (download.state === 'downloading' || download.state === 'verifying');
+            const isDownloading = isThisDownload && download.state === 'downloading';
+            const isVerifying = isThisDownload && download.state === 'verifying';
+            const isPaused = isThisDownload && download.state === 'paused';
             const isDownloaded = isThisDownload && download.state === 'done' && !!download.target;
             const downloadErrored = isThisDownload && download.state === 'error';
-            const downloadPercent = Math.max(0, Math.min(100, Number(download.percent || 0)));
+            const downloadPercent = Math.max(0, Math.min(100, Number(download.overallPercent ?? download.percent ?? 0)));
             const downloadedText = formatBytes(download.bytesTransferred);
             const totalText = formatBytes(download.totalBytes);
             return (
@@ -718,19 +773,21 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
                     </div>
                   )}
                   <span>{option.reason || '24GB+ 设备可试高能力本地模型。'}</span>
-                  {(isDownloading || isDownloaded || downloadErrored) && (
+                  {(isDownloading || isVerifying || isPaused || isDownloaded || downloadErrored) && (
                     <div className={styles['pv-local-qwen-upgrade-progress']}>
                       <div className={styles['pv-local-qwen-upgrade-progress-row']}>
                         <span>
                           {download.state === 'verifying'
                             ? '正在校验文件'
+                            : isPaused
+                              ? '下载已暂停，可从已有分片继续'
                             : isDownloaded
                               ? '下载完成，可启动'
                               : downloadErrored
                                 ? `下载失败：${download.lastError || '请重试'}`
                                 : `${download.activeSource || '正在下载'}${download.parallelSegments && download.parallelSegments > 1 ? ` · ${download.parallelSegments} 路` : ''}`}
                         </span>
-                        {(isDownloading || isDownloaded) && <strong>{downloadPercent.toFixed(0)}%</strong>}
+                        {(isDownloading || isVerifying || isDownloaded) && <strong>{downloadPercent.toFixed(0)}%</strong>}
                       </div>
                       <div className={styles['pv-local-qwen-progress-track']} aria-label={`${option.label || '推荐模型'}下载进度`}>
                         <div
@@ -741,6 +798,9 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
                       {(downloadedText || totalText) && (
                         <div className={styles['pv-local-qwen-progress-meta']}>
                           <span>{downloadedText || '0 B'}{totalText ? ` / ${totalText}` : ''}</span>
+                          {!!download.bytesPerSecond && <span>{formatBytes(download.bytesPerSecond)}/s</span>}
+                          {!!download.etaSeconds && <span>剩余 {formatDownloadEta(download.etaSeconds)}</span>}
+                          {!!download.fileCount && download.fileCount > 1 && <span>文件 {download.fileIndex || 1}/{download.fileCount}</span>}
                           {download.target && <span title={download.target}>{download.fileName || option.file_name || 'GGUF'}</span>}
                         </div>
                       )}
@@ -752,9 +812,9 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
                     type="button"
                     className={styles['pv-local-qwen-upgrade-download-btn']}
                     onClick={() => isDownloaded && download.target ? startGgufPath(download.target) : startRecommendedDownload(option)}
-                    disabled={isDownloading || customStarting || upgradeStartingId === optionId}
+                    disabled={isDownloading || isVerifying || isPaused || customStarting || upgradeStartingId === optionId}
                   >
-                    {isDownloading
+                    {isDownloading || isVerifying
                       ? '下载中'
                       : isDownloaded
                         ? (customStarting ? '启动中' : '启动此模型')
@@ -765,11 +825,21 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
                   <button
                     type="button"
                     className={styles['pv-local-qwen-upgrade-action-btn']}
-                    onClick={() => isDownloading ? cancelRecommendedDownload(option) : chooseGgufModel()}
-                    disabled={customStarting}
+                    onClick={() => isDownloading || isPaused ? toggleRecommendedDownload(option, isPaused) : chooseGgufModel()}
+                    disabled={customStarting || isVerifying}
                   >
-                    {isDownloading ? '取消下载' : customStarting ? '启动中' : '导入本机 GGUF'}
+                    {isVerifying ? '正在校验' : isDownloading ? '暂停下载' : isPaused ? '继续下载' : customStarting ? '启动中' : '导入本机 GGUF'}
                   </button>
+                  {(isDownloading || isPaused) && (
+                    <button type="button" className={styles['pv-local-qwen-upgrade-action-btn']} onClick={() => cancelRecommendedDownload(option)}>
+                      取消
+                    </button>
+                  )}
+                  {(isPaused || isDownloaded) && (
+                    <button type="button" className={styles['pv-local-qwen-upgrade-action-btn']} onClick={() => void removeDownloadedModel(optionId, option.label || '本地模型')}>
+                      删除
+                    </button>
+                  )}
                 </div>
               </div>
             );

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeSlashInput } from "../src/completion.js";
-import { inputDisplayRows, slashHint, slashPalette, slashPaletteItems } from "../src/ink-input-line.js";
+import { editInputBuffer, inputDisplayRows, slashHint, slashPalette, slashPaletteItems, stripBracketedPasteMarkers } from "../src/ink-input-line.js";
 
 describe("Ink input slash hints", () => {
   it("shows command candidates when the user starts slash input", () => {
@@ -63,5 +63,22 @@ describe("Ink input slash hints", () => {
     expect(rows[1].hint).toBe("");
     expect(rows[0].pad).toBe(0);
     expect(rows[1].pad).toBe(0);
+  });
+
+  it("edits text at the cursor instead of only appending", () => {
+    expect(editInputBuffer("helo", 3, { type: "insert", text: "l" })).toEqual({ value: "hello", cursor: 4 });
+    expect(editInputBuffer("hello", 4, { type: "backspace" })).toEqual({ value: "helo", cursor: 3 });
+    expect(editInputBuffer("hello", 1, { type: "delete" })).toEqual({ value: "hllo", cursor: 1 });
+  });
+
+  it("moves the cursor by Unicode code point", () => {
+    expect(editInputBuffer("你a", 2, { type: "left" })).toEqual({ value: "你a", cursor: 1 });
+    expect(editInputBuffer("你a", 0, { type: "right" })).toEqual({ value: "你a", cursor: 1 });
+    expect(editInputBuffer("你a", 1, { type: "end" })).toEqual({ value: "你a", cursor: 2 });
+  });
+
+  it("strips bracketed-paste markers before they reach the input buffer", () => {
+    expect(stripBracketedPasteMarkers('\u001b[200~第一行\n第二行\u001b[201~')).toBe('第一行\n第二行');
+    expect(stripBracketedPasteMarkers('[200~内容[201~')).toBe('内容');
   });
 });

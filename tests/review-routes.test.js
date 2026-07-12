@@ -363,6 +363,149 @@ describe('review route', () => {
     expect(callText.mock.calls.some(([options]) => options.provider === 'deepseek' && options.model === 'deepseek-chat')).toBe(false);
   });
 
+  it('escalates a high-stakes DS V4 concern to one MiMo second opinion', async () => {
+    engine.currentModel = { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' };
+    let resolveMimo;
+    const mimoResult = new Promise((resolve) => {
+      resolveMimo = resolve;
+    });
+    callText
+      .mockResolvedValueOnce('DS concern.\n```json\n{"summary":"Dose claim needs verification.","verdict":"concerns","findings":[{"severity":"high","title":"Unverified dose","detail":"The answer states a dose without a source."}]}\n```')
+      .mockImplementationOnce(() => mimoResult);
+
+    const res = await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context: 'Review this medical answer.',
+        sourceResponse: 'Take a fixed dose when the credential store is unavailable.',
+        autoReview: true,
+        reviewMode: 'background',
+        triggerReasons: ['high_stakes_domain'],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const preliminaryMsg = await waitForBroadcast(
+      broadcast,
+      (msg) => msg.type === 'review_result' && msg.secondOpinion?.status === 'pending',
+    );
+    expect(preliminaryMsg).toBeTruthy();
+    expect(preliminaryMsg.structured).toEqual(expect.objectContaining({
+      verdict: 'concerns',
+      secondOpinion: expect.objectContaining({ status: 'pending' }),
+    }));
+    expect(preliminaryMsg.reviewerModelLabel).not.toContain('MiMo 2.5 Pro');
+
+    resolveMimo('MiMo arbitration.\n```json\n{"summary":"The concern is valid.","verdict":"blocker","findings":[{"severity":"high","title":"Do not present a dose as settled","detail":"Ask a clinician or pharmacist."}]}\n```');
+    const resultMsg = await waitForBroadcast(
+      broadcast,
+      (msg) => msg.type === 'review_result' && msg.secondOpinion?.status === 'completed',
+    );
+    expect(resultMsg).toBeTruthy();
+    expect(callText).toHaveBeenCalledTimes(2);
+    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-flash' }));
+    expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({ provider: 'mimo', model: 'mimo-v2.5-pro', maxTokens: 1200 }));
+    expect(resultMsg.structured).toEqual(expect.objectContaining({
+      verdict: 'blocker',
+      workflowGate: 'hold',
+      secondOpinion: expect.objectContaining({ verdict: 'blocker', agreement: false }),
+    }));
+    expect(resultMsg.structured.findings.some((finding) => finding.title.startsWith('[MiMo 仲裁]'))).toBe(true);
+    expect(resultMsg.reviewerModelLabel).toContain('MiMo 2.5 Pro');
+  });
+
+  it('keeps the DS V4 result when MiMo arbitration times out and never starts a third model', async () => {
+    engine.currentModel = { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' };
+    callText
+      .mockResolvedValueOnce('DS concern.\n```json\n{"summary":"Current fact needs verification.","verdict":"concerns","findings":[{"severity":"medium","title":"Source needed"}]}\n```')
+      .mockRejectedValueOnce(new Error('request timeout'));
+
+    await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context: 'Review this current financial answer.',
+        sourceResponse: 'The current price is fixed.',
+        autoReview: true,
+        reviewMode: 'background',
+        triggerReasons: ['time_sensitive_or_market'],
+      }),
+    });
+
+    const resultMsg = await waitForBroadcast(
+      broadcast,
+      (msg) => msg.type === 'review_result' && msg.secondOpinion?.status === 'timeout',
+    );
+    expect(resultMsg.structured.verdict).toBe('concerns');
+    expect(resultMsg.structured.secondOpinion.reason).toContain('保留 DS V4');
+    expect(callText).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the DS V4 result when MiMo credential resolution throws', async () => {
+    engine.currentModel = { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' };
+    const resolveCredentials = engine.resolveProviderCredentials;
+    engine.resolveProviderCredentials = (provider) => {
+      if (provider === 'mimo') throw new Error('credential store unavailable');
+      return resolveCredentials(provider);
+    };
+    callText.mockResolvedValueOnce('DS concern.\n```json\n{"summary":"Medical claim needs verification.","verdict":"concerns","findings":[{"severity":"high","title":"Source needed"}]}\n```');
+
+    await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context: 'Review this medical answer.',
+        sourceResponse: 'Take a fixed dose.',
+        autoReview: true,
+        reviewMode: 'background',
+        triggerReasons: ['high_stakes_domain'],
+      }),
+    });
+
+    const resultMsg = await waitForBroadcast(
+      broadcast,
+      (msg) => msg.type === 'review_result' && msg.secondOpinion?.status === 'unavailable',
+    );
+    expect(resultMsg).toBeTruthy();
+    expect(resultMsg.content).toContain('DS concern');
+    expect(resultMsg.structured.verdict).toBe('concerns');
+    expect(callText).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the signed Brain arbitration lane when no local MiMo credential exists', async () => {
+    engine.currentModel = { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' };
+    engine.availableModels = engine.availableModels
+      .filter((model) => model.provider !== 'mimo')
+      .concat({ id: 'lynn-brain-router', name: 'Default Brain', provider: 'brain' });
+    callText
+      .mockResolvedValueOnce('DS concern.\n```json\n{"summary":"Legal claim needs review.","verdict":"concerns","findings":[{"severity":"medium","title":"Check jurisdiction"}]}\n```')
+      .mockResolvedValueOnce('MiMo arbitration.\n```json\n{"summary":"Jurisdiction is missing.","verdict":"concerns","findings":[]}\n```');
+
+    await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        context: 'Review this legal answer.',
+        sourceResponse: 'The contract is always invalid.',
+        autoReview: true,
+        reviewMode: 'background',
+        triggerReasons: ['high_stakes_domain'],
+      }),
+    });
+
+    const resultMsg = await waitForBroadcast(
+      broadcast,
+      (msg) => msg.type === 'review_result' && msg.secondOpinion?.status === 'completed',
+    );
+    expect(resultMsg).toBeTruthy();
+    expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({
+      provider: 'brain',
+      model: 'lynn-brain-router',
+      requestHeaders: { 'X-Lynn-Review-Arbitration': 'mimo-token-plan-pro' },
+    }));
+  });
+
   it('bootstraps a missing reviewer agent when the requested reviewer kind has no candidate', async () => {
     engine.currentAgentId = 'agent-butter';
     engine._agents.splice(0, engine._agents.length, ...[

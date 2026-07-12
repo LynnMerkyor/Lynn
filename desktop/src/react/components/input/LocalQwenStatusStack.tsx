@@ -34,6 +34,7 @@ export interface LocalQwenStatusStackProps {
   onStart: () => void;
   onOpenSettings: () => void;
   onSnooze: () => void;
+  onDismissForever: () => void;
   onSetPanelOpen: (open: boolean) => void;
 }
 
@@ -49,13 +50,6 @@ export function LocalQwenStatusStack(props: LocalQwenStatusStackProps) {
                 <strong>{props.warmupTitle}</strong>
                 <span>{props.warmupCopy}</span>
               </div>
-            </div>
-            <div className={styles['local-model-status-meta']}>
-              <span>llama.cpp</span>
-              {props.tpsSummary && <span>{props.tpsSummary}</span>}
-              <span>{props.metricSummary}</span>
-              {props.slotSummary && <span>{props.slotSummary}</span>}
-              <span>{props.endpoint.replace(/^https?:\/\//, '')}</span>
             </div>
             <div className={styles['local-model-status-actions']}>
               {props.canSwitch && (
@@ -84,16 +78,19 @@ export function LocalQwenStatusStack(props: LocalQwenStatusStackProps) {
                 </div>
                 <button type="button" onClick={() => props.onSetPanelOpen(false)} aria-label="收起本地模型状态">×</button>
               </div>
-              <div className={styles['local-model-status-panel-grid']}>
-                <span><b>端点</b>{props.endpoint}</span>
-                <span><b>进程</b>{props.status?.runtime?.pid ? `PID ${props.status.runtime.pid}` : props.loading ? '加载中' : '运行中'}</span>
-                <span><b>速度</b>{props.tpsSummary || '等待下一次采样'}</span>
-                <span><b>任务槽</b>{props.endpointOccupied ? '非默认端点' : (props.slotSummary || '可用 1/1')}</span>
-                <span><b>统计</b>{props.metricSummary}</span>
-                {props.endpointOccupied && (
-                  <span><b>当前模型</b>{props.servedModelIds.join(', ') || '非 27B'}</span>
-                )}
-              </div>
+              <details>
+                <summary>诊断详情</summary>
+                <div className={styles['local-model-status-panel-grid']}>
+                  <span><b>端点</b>{props.endpoint}</span>
+                  <span><b>进程</b>{props.status?.runtime?.pid ? `PID ${props.status.runtime.pid}` : props.loading ? '加载中' : '运行中'}</span>
+                  <span><b>速度</b>{props.tpsSummary || '等待下一次采样'}</span>
+                  <span><b>任务槽</b>{props.endpointOccupied ? '非默认端点' : (props.slotSummary || '可用 1/1')}</span>
+                  <span><b>统计</b>{props.metricSummary}</span>
+                  {props.endpointOccupied && (
+                    <span><b>当前模型</b>{props.servedModelIds.join(', ') || '非 27B'}</span>
+                  )}
+                </div>
+              </details>
               <p>{props.endpointOccupied
                 ? '这不是默认 27B 引导模型。需要启用默认 27B 时，先停止当前本地端点。'
                 : '退出 Lynn 时会自动停止本地模型；需要马上释放内存时点“停止”。'}</p>
@@ -147,7 +144,8 @@ export function LocalQwenStatusStack(props: LocalQwenStatusStackProps) {
           </div>
           <div className={styles['local-model-status-actions']}>
             <button type="button" onClick={props.onStart}>安装并启动</button>
-            <button type="button" onClick={props.onSnooze}>稍后</button>
+            <button type="button" onClick={props.onSnooze}>7 天后提醒</button>
+            <button type="button" onClick={props.onDismissForever}>不再提醒</button>
           </div>
         </div>
       )}

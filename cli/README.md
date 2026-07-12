@@ -1,6 +1,6 @@
 # @lynn/cli
 
-Terminal and worker-runner interface for Lynn v0.86.0.
+Terminal and worker-runner interface for Lynn v0.86.1.
 
 This package is intentionally thin. It handles terminal UX, worker JSONL, local
 file/shell orchestration, and headless agent contracts. Model routing defaults
@@ -15,14 +15,12 @@ Voice follows the same primary-chain rule: inside the `Lynn` chat, `/voice` and
 live waveform. File/record transcription and `--speak` TTS are auxiliary
 utilities, not the main voice experience.
 
-v0.86.0 keeps Lynn's self-built core on the main route: GUI and CLI share
-the same evidence-first runtime, StepFun 3.7 Flash summarizes grounded evidence
-quickly, and fallback routes are used only when the primary chain needs help.
-Explicit local file reads now stay anchored to the requested path, `file://`
-explanation questions no longer trigger fake directory prefetch, and follow-up
-turns no longer inherit stale file-task context. The Session Progress rail keeps
-branch-from-current-session and large-session health markers, while CLI keeps
-the same Brain V2 contract for headless work.
+v0.86.1 keeps the v0.86 security and runtime baseline while tightening daily
+terminal interaction: Ctrl+C cancels the active turn without killing the REPL,
+settled history remains stable, streaming output is batched, tool start/result
+events share one row, and the input line has a visible movable cursor. The PTY
+release gate exercises the real Ink renderer, cancellation, bracketed paste,
+follow-up input, and clean exit.
 
 ## Quick start
 
@@ -44,7 +42,7 @@ winget install OpenJS.NodeJS.LTS
 Install from the Lynn Tencent mirror:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz"
 ```
 
 The package installs the `Lynn` command. If you installed an older preview that
@@ -63,7 +61,7 @@ If npm dependency downloads are slow in mainland China, keep the Lynn tarball UR
 as-is and add a registry mirror for third-party dependencies:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz" \
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz" \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -71,7 +69,7 @@ Release maintainers can smoke-test the exact CDN tarball before inviting
 external testers:
 
 ```bash
-LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz" \
+LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz" \
   npm run test:cli-install:remote
 ```
 
@@ -191,7 +189,7 @@ Agent quick contract:
 # Requires Node.js 20 LTS or 22 LTS with npm.
 
 # Install/update.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz"
 
 # Human launch commands.
 Lynn

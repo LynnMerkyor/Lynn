@@ -23,9 +23,9 @@ env.update({
   "TERM_PROGRAM": "Apple_Terminal",
   "LYNN_CLI_UPDATE_CHECK": "0",
   "LYNN_LANG": "zh",
+  "LYNN_CLI_MOCK_DELAY_MS": "3000",
+  "LYNN_CLI_APPLE_TERMINAL_FULL_TUI": "1",
 })
-if os.environ.get("LYNN_CLI_PTY_FULL_TUI") == "1":
-  env["LYNN_CLI_APPLE_TERMINAL_FULL_TUI"] = "1"
 
 pid, fd = pty.fork()
 if pid == 0:
@@ -35,6 +35,7 @@ if pid == 0:
 output = b""
 stage = 0
 stage_started = time.time()
+paste_ready_at = None
 deadline = time.time() + (timeout_ms / 1000.0)
 exit_code = None
 long_paste = "第一段: Lynn PTY paste gate\n第二段: 确认长粘贴会收敛成粘贴块\n第三段: 提交后仍完整进入模型"
@@ -74,21 +75,33 @@ try:
       if "模拟回复:" in text or "模拟回复：" in text:
         raise RuntimeError("empty enter submitted a prompt")
       if time.time() - stage_started > 0.4:
-        payload = "\x1b[200~" + long_paste + "\x1b[201~"
-        os.write(fd, payload.encode("utf-8"))
+        os.write(fd, "请取消当前回答\r".encode("utf-8"))
         stage = 2
         stage_started = time.time()
-    elif stage == 2 and "粘贴块" in text:
-      os.write(fd, b"\r")
+    elif stage == 2 and time.time() - stage_started > 0.2:
+      os.write(fd, b"\x03")
       stage = 3
       stage_started = time.time()
-    elif stage == 3 and ("模拟回复:" in text or "模拟回复：" in text) and "第三段" in text:
-      os.write(fd, "你好世界\r".encode("utf-8"))
-      stage = 4
-      stage_started = time.time()
-    elif stage == 4 and ("模拟回复:你好世界" in text or "模拟回复：你好世界" in text):
-      os.write(fd, b"/exit\r")
+    elif stage == 3 and "已取消当前请求" in text:
+        payload = "\x1b[200~" + long_paste + "\x1b[201~"
+        os.write(fd, payload.encode("utf-8"))
+        stage = 4
+        stage_started = time.time()
+    elif stage == 3 and time.time() - stage_started > 1.0:
+      raise RuntimeError("Ctrl+C did not cancel the active Ink turn within 1 second")
+    elif stage == 4 and paste_ready_at is None and "粘贴块" in text and "第三段" in text:
+      paste_ready_at = time.time() + 0.2
+    elif stage == 4 and paste_ready_at is not None and time.time() >= paste_ready_at:
+      os.write(fd, b"\r")
       stage = 5
+      stage_started = time.time()
+    elif stage == 5 and ("模拟回复:" in text or "模拟回复：" in text) and "第三段" in text:
+      os.write(fd, "你好世界\r".encode("utf-8"))
+      stage = 6
+      stage_started = time.time()
+    elif stage == 6 and ("模拟回复:你好世界" in text or "模拟回复：你好世界" in text):
+      os.write(fd, b"/exit\r")
+      stage = 7
 
   if exit_code is None:
     try:
@@ -100,7 +113,7 @@ try:
   text = plain()
   if exit_code != 0:
     raise RuntimeError(f"Lynn exited {exit_code}")
-  if stage < 5:
+  if stage < 7:
     raise RuntimeError(f"Lynn exited before completing the PTY smoke, stage={stage}")
   if any(marker in text for marker in ["Uncaught", "TypeError", "ReferenceError", "setRawMode", "Cannot find module"]):
     raise RuntimeError("detected crash-like output")

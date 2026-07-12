@@ -180,13 +180,28 @@ export const ExecutionTraceBlock = memo(function ExecutionTraceBlock({ tools }: 
             ? (tool.success ? styles.executionTraceStatusDone : styles.executionTraceStatusFailed)
             : styles.executionTraceStatusRunning;
           const elapsed = formatElapsed(tool.startedAt);
+          const resultPreview = tool.summary?.searchSummary || tool.summary?.outputPreview || '';
+          const sourceItems = (tool.summary?.searchSources || []).flatMap((source) => source.items || []).slice(0, 6);
           return (
             <div key={`${tool.name}-${index}-${tool.startedAt || index}`} className={styles.executionTraceItem}>
-              <span className={`${styles.executionTraceStatus} ${statusClass}`}>
-                {tool.done ? (tool.success ? '✓' : '✗') : '•'}
-              </span>
-              <span className={styles.executionTraceText}>{buildToolTraceLine(tool, zh)}</span>
-              {elapsed && <span className={styles.executionTraceElapsed}>{elapsed}</span>}
+              <div className={styles.executionTraceItemRow}>
+                <span className={`${styles.executionTraceStatus} ${statusClass}`}>
+                  {tool.done ? (tool.success ? '✓' : '✗') : '•'}
+                </span>
+                <span className={styles.executionTraceText}>{buildToolTraceLine(tool, zh)}</span>
+                {elapsed && <span className={styles.executionTraceElapsed}>{elapsed}</span>}
+              </div>
+              {tool.done && (resultPreview || sourceItems.length > 0) && (
+                <details className={styles.executionTraceResult}>
+                  <summary>{zh ? '查看结果与来源' : 'View result and sources'}</summary>
+                  {resultPreview && <p>{resultPreview}</p>}
+                  {sourceItems.map((item, sourceIndex) => item.url ? (
+                    <a key={`${item.url}-${sourceIndex}`} href={item.url} target="_blank" rel="noreferrer">
+                      {item.title || item.url}
+                    </a>
+                  ) : null)}
+                </details>
+              )}
             </div>
           );
         })}

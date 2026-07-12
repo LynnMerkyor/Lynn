@@ -12,6 +12,7 @@ export interface ToolRunContext {
   approval: "ask" | "on-failure" | "never" | "yolo";
   sandbox?: "read-only" | "workspace-write" | "danger-full-access";
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 export interface ClientToolDefinition {

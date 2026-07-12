@@ -2219,11 +2219,39 @@
 
 .executionTraceItem {
     display: flex;
-    align-items: center;
-    gap: 0.55rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
     min-width: 0;
     color: var(--text-muted);
     font-size: 0.8rem;
+}
+
+.executionTraceItemRow {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+}
+
+.executionTraceResult {
+    margin-left: 1.5rem;
+    color: var(--text-secondary);
+    font-size: 0.74rem;
+}
+
+.executionTraceResult summary {
+    width: fit-content;
+    color: var(--accent);
+}
+
+.executionTraceResult p,
+.executionTraceResult a {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
 }
 
 .executionTraceStatus {

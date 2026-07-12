@@ -104,6 +104,15 @@ export interface StructuredReview {
   findings: ReviewFinding[];
   nextStep?: string;
   workflowGate: 'clear' | 'follow_up' | 'hold';
+  secondOpinion?: {
+    status: 'pending' | 'completed' | 'unavailable' | 'timeout' | 'circuit_open';
+    modelLabel: string;
+    verdict?: 'pass' | 'concerns' | 'blocker' | string;
+    summary?: string;
+    agreement?: boolean;
+    latencyMs?: number;
+    reason?: string;
+  };
 }
 
 export interface ReviewFollowUpTaskState {
@@ -149,7 +158,7 @@ export type ContentBlock =
       content: string;
       error?: string;
       status: 'loading' | 'done';
-      stage?: 'packing_context' | 'reviewing' | 'structuring' | 'done';
+      stage?: 'packing_context' | 'reviewing' | 'structuring' | 'arbitrating' | 'done';
       findingsCount?: number;
       verdict?: StructuredReview['verdict'];
       workflowGate?: StructuredReview['workflowGate'];

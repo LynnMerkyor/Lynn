@@ -50,6 +50,73 @@ function managerStartResult(state, payload = {}) {
   });
 }
 
+function activeDownloadMatchesProfile(downloadState, profile) {
+  return !!profile?.modelId && String(downloadState?.modelId || "") === String(profile.modelId);
+}
+
+function runtimeUsesProfile(runtimeState, modelRoot, profile) {
+  if (!runtimeState || !profile) return false;
+  if (String(runtimeState.modelId || "") === String(profile.modelId || "")) return true;
+  const runtimePath = typeof runtimeState.modelPath === "string" ? path.resolve(runtimeState.modelPath) : "";
+  if (!runtimePath) return false;
+  const files = Array.isArray(profile.files) && profile.files.length > 0 ? profile.files : [profile];
+  return files.some((file) => (
+    runtimePath === path.resolve(modelRoot, file.fileName || profile.fileName)
+  ));
+}
+
+function requiredDownloadFilesForProfile(profile) {
+  const files = Array.isArray(profile.files) && profile.files.length > 0
+    ? profile.files
+    : [profile];
+  return files.map((file, index) => ({
+    fileName: file.fileName || profile.fileName,
+    expectedSize: file.expectedSize || profile.expectedSize,
+    expectedSha256: file.expectedSha256 || (files.length === 1 ? profile.expectedSha256 : ""),
+    sources: Array.isArray(file.sources) && file.sources.length > 0 ? file.sources : profile.sources,
+    parallelSegments: file.parallelSegments || profile.parallelSegments,
+    fileIndex: index + 1,
+    fileCount: files.length,
+  }));
+}
+
+function findResumableDownloadState(lynnHome, profiles = listLlamacppDownloadProfiles()) {
+  const modelRoot = path.join(lynnHome, "models");
+  for (const profile of profiles) {
+    for (const file of requiredDownloadFilesForProfile(profile)) {
+      const target = path.join(modelRoot, file.fileName);
+      const partPath = `${target}.part`;
+      let partBytes = 0;
+      try { partBytes = fs.statSync(partPath).size; } catch {}
+
+      let segmentBytes = 0;
+      try {
+        const prefix = `${path.basename(target)}.part.seg`;
+        for (const name of fs.readdirSync(path.dirname(target))) {
+          if (!name.startsWith(prefix)) continue;
+          try { segmentBytes += fs.statSync(path.join(path.dirname(target), name)).size; } catch {}
+        }
+      } catch {}
+
+      if (partBytes <= 0 && segmentBytes <= 0) continue;
+      const bytesTransferred = segmentBytes > 0 ? segmentBytes : partBytes;
+      const totalBytes = Number(file.expectedSize || profile.expectedSize || 0);
+      return decorateDownloadState({ ...profile, fileName: file.fileName }, {
+        state: "paused",
+        target,
+        partPath,
+        bytesTransferred,
+        totalBytes,
+        percent: totalBytes > 0 ? Math.floor((bytesTransferred / totalBytes) * 100) : 0,
+        parallelSegments: file.parallelSegments || profile.parallelSegments,
+        fileIndex: file.fileIndex,
+        fileCount: file.fileCount,
+      });
+    }
+  }
+  return null;
+}
+
 function createLocalModelController(deps) {
   const {
     BrowserWindow,
@@ -82,6 +149,7 @@ const LOCAL_MODEL_IPC = Object.freeze({
   startDownload: "llamacpp:start-download",
   pauseDownload: "llamacpp:pause-download",
   cancelDownload: "llamacpp:cancel-download",
+  removeModel: "llamacpp:remove-model",
   sources: "llamacpp:sources",
   openModelDir: "llamacpp:open-model-dir",
   startCustomModel: "llamacpp:start-custom-model",
@@ -110,21 +178,6 @@ function parseStartDownloadPayload(payload) {
 function validateLocalModelId(modelId) {
   if (!/^[A-Za-z0-9_.-]{1,96}$/.test(modelId)) return ipcError("invalid-model-id");
   return { ok: true, modelId };
-}
-
-function requiredDownloadFilesForProfile(profile) {
-  const files = Array.isArray(profile.files) && profile.files.length > 0
-    ? profile.files
-    : [profile];
-  return files.map((file, index) => ({
-    fileName: file.fileName || profile.fileName,
-    expectedSize: file.expectedSize || profile.expectedSize,
-    expectedSha256: file.expectedSha256 || (files.length === 1 ? profile.expectedSha256 : ""),
-    sources: Array.isArray(file.sources) && file.sources.length > 0 ? file.sources : profile.sources,
-    parallelSegments: file.parallelSegments || profile.parallelSegments,
-    fileIndex: index + 1,
-    fileCount: files.length,
-  }));
 }
 
 function parseGgufModelPathPayload(payload, key = "modelPath") {
@@ -374,6 +427,10 @@ wrapIpcHandler(LOCAL_MODEL_IPC.startDownload, async (event, payload = {}) => {
       });
       // eslint-disable-next-line no-await-in-loop
       const result = await downloader.start();
+      if (result?.reason === "paused" || result?.reason === "cancelled") {
+        if (activeModelDownloader === downloader) activeModelDownloader = null;
+        return;
+      }
       if (!result?.ok) {
         throw new Error(result?.reason || "download-failed");
       }
@@ -432,6 +489,76 @@ wrapIpcHandler(LOCAL_MODEL_IPC.cancelDownload, () => {
   }
   activeModelDownloader = null;
   return ipcOk();
+});
+
+wrapIpcHandler(LOCAL_MODEL_IPC.removeModel, async (event, payload = {}) => {
+  const parsedPayload = parseStartDownloadPayload(payload);
+  if (!parsedPayload.ok) return parsedPayload;
+  const resolvedProfile = resolveLlamacppDownloadProfile(parsedPayload.modelId);
+  if (!resolvedProfile.known) return ipcError("unknown-model-id");
+
+  try {
+    const profile = resolvedProfile.profile;
+    if (activeModelDownloader && activeDownloadMatchesProfile(lastModelDownloadState, profile)) {
+      try { activeModelDownloader.cancel(); } catch {}
+      activeModelDownloader = null;
+      // Drain teardown callbacks before deleting resumable segments. A cancelled
+      // downloader can still have one queued file write in the current tick.
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    const modelRoot = path.resolve(lynnHome, "models");
+    const runtimeState = llamacpp?.getStatus?.() || lastLlamacppState;
+    if (runtimeUsesProfile(runtimeState, modelRoot, profile)) {
+      try { stopLlamacpp(); } catch {}
+    }
+
+    const files = requiredDownloadFilesForProfile(profile);
+    let bytesFreed = 0;
+    const removed = [];
+    for (const file of files) {
+      const target = path.resolve(modelRoot, file.fileName);
+      if (!isPathInsideRoot(target, modelRoot)) return ipcError("invalid-model-path");
+      const candidates = [target, `${target}.part`];
+      try {
+        const prefix = `${path.basename(target)}.part.seg`;
+        for (const name of fs.readdirSync(path.dirname(target))) {
+          if (name.startsWith(prefix)) candidates.push(path.join(path.dirname(target), name));
+        }
+      } catch {}
+      for (const candidate of candidates) {
+        try {
+          const stat = fs.statSync(candidate);
+          if (stat.isFile()) bytesFreed += stat.size;
+          fs.rmSync(candidate, { force: true });
+          removed.push(candidate);
+        } catch (err) {
+          if (err?.code !== "ENOENT") throw err;
+        }
+      }
+    }
+    if (activeDownloadMatchesProfile(lastModelDownloadState, profile)) {
+      // One final pass covers a write that raced the first cleanup.
+      await new Promise((resolve) => setImmediate(resolve));
+      for (const file of files) {
+        const target = path.resolve(modelRoot, file.fileName);
+        try { fs.rmSync(`${target}.part`, { force: true }); } catch {}
+        try {
+          const prefix = `${path.basename(target)}.part.seg`;
+          for (const name of fs.readdirSync(path.dirname(target))) {
+            if (name.startsWith(prefix)) fs.rmSync(path.join(path.dirname(target), name), { force: true });
+          }
+        } catch {}
+      }
+    }
+    if (activeDownloadMatchesProfile(lastModelDownloadState, profile)) {
+      lastModelDownloadState = { state: "idle" };
+      broadcastToAllWindows(LOCAL_MODEL_IPC.downloadState, lastModelDownloadState);
+    }
+    return ipcOk({ modelId: profile.modelId, bytesFreed, removed });
+  } catch (err) {
+    return ipcError(err?.message || err);
+  }
 });
 
 wrapIpcHandler(LOCAL_MODEL_IPC.sources, () => ({
@@ -585,20 +712,17 @@ function stopManagedQwen35LlamaServer() {
 
   function emitResumeHint() {
     try {
-      const modelsDir = path.join(lynnHome, "models");
-      const partFiles = (fs.existsSync(modelsDir) ? fs.readdirSync(modelsDir) : [])
-        .filter((f) => f.endsWith(".part"));
-      if (partFiles.length > 0) {
-        const stats = partFiles.map((f) => {
-          try {
-            const s = fs.statSync(path.join(modelsDir, f));
-            return { fileName: f, size: s.size, mtimeMs: s.mtimeMs };
-          } catch { return null; }
-        }).filter(Boolean);
-        setImmediate(() => {
-          broadcastToAllWindows("llamacpp:resume-hint", { partFiles: stats });
-        });
-      }
+      const resumeState = findResumableDownloadState(lynnHome);
+      if (!resumeState) return;
+      lastModelDownloadState = resumeState;
+      setImmediate(() => {
+        broadcastToAllWindows(LOCAL_MODEL_IPC.downloadState, resumeState);
+        broadcastToAllWindows("llamacpp:resume-hint", { partFiles: [{
+          fileName: resumeState.fileName,
+          size: resumeState.bytesTransferred,
+          mtimeMs: Date.now(),
+        }] });
+      });
     } catch (err) {
       console.warn("[resume-hint] check failed:", err?.message || err);
     }
@@ -613,4 +737,10 @@ function stopManagedQwen35LlamaServer() {
   };
 }
 
-module.exports = { createLocalModelController, managerStartResult };
+module.exports = {
+  createLocalModelController,
+  managerStartResult,
+  activeDownloadMatchesProfile,
+  runtimeUsesProfile,
+  findResumableDownloadState,
+};

@@ -9,7 +9,7 @@ import WebSocket from "ws";
 import { resolveBetterSqliteRuntime } from "./native-node-runtime.mjs";
 
 import { DIALOGUE_PROMPTS } from "./dialogue-scenario-bank.mjs";
-import { additionalDialogueQualityReason, requiresFreshEvidenceForDialogue } from "./dialogue-quality-rules.mjs";
+import { additionalDialogueQualityReason, claimsFreshToolEvidence, requiresFreshEvidenceForDialogue } from "./dialogue-quality-rules.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -522,10 +522,6 @@ function buildReactReview(result) {
   };
 }
 
-function claimsFreshToolEvidence(text) {
-  return /根据(?:最新|真实)?(?:查询结果|搜索结果|工具结果|检索结果|返回结果|工具返回)|实时(?:天气|行情|比分|赛程|价格|新闻|汇率|金价)|(?:搜索|检索|查询)(?:结果|显示|到)|搜索结果|工具结果/.test(text);
-}
-
 function deniesAvailableToolCapability(text) {
   const normalized = String(text || "").replace(/\s+/g, "");
   return /(?:工具集|工具箱|工具列表|当前工具|可用工具|CLI工具|LynnCLI工具).{0,24}(?:没有|未包含|不包含|缺少|暂无|不支持).{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问)/iu.test(normalized)
@@ -1029,10 +1025,17 @@ try {
     console.log(`[${index}/${PROMPTS.length}] ${category}: ${prompt}`);
     let result = await runPromptWithFreshWs(config, index, category, prompt, args.timeoutMs);
     if (isEmptyTransportTimeout(result)) {
+      const firstAttempt = result;
       console.log(`  -> retry empty transport timeout after ${EMPTY_TIMEOUT_RETRY_MS}ms`);
       await new Promise((resolve) => setTimeout(resolve, EMPTY_TIMEOUT_RETRY_MS));
-      result = await runPromptWithFreshWs(config, index, category, prompt, args.timeoutMs);
-      result.retriedAfterEmptyTimeout = true;
+      const retry = await runPromptWithFreshWs(config, index, category, prompt, args.timeoutMs);
+      // The first user-visible turn remains the gate result. Retrying records
+      // diagnostics, but cannot turn an empty timeout into a green case.
+      result = {
+        ...firstAttempt,
+        retriedAfterEmptyTimeout: true,
+        retryOutcome: { status: retry.status, reason: retry.reason, elapsedMs: retry.elapsedMs },
+      };
     }
     results.push(result);
     await fs.writeFile(outputPath, JSON.stringify({ outputPath, generatedAt: new Date().toISOString(), results }, null, 2), "utf8");
@@ -1057,6 +1060,7 @@ try {
   }, {});
   const toolRuns = results.filter((item) => item.tools.length > 0).length;
   const stepExecuteRuns = results.filter((item) => item.tools.some((tool) => tool.name === "step_execute")).length;
+  const emptyTimeoutRetries = results.filter((item) => item.retriedAfterEmptyTimeout).length;
   const avgMs = Math.round(results.reduce((sum, item) => sum + item.elapsedMs, 0) / Math.max(1, results.length));
   const failures = results.filter((item) => item.status !== "ok");
   const summary = {
@@ -1067,6 +1071,7 @@ try {
     providerCounts,
     toolRuns,
     stepExecuteRuns,
+    emptyTimeoutRetries,
     avgMs,
     failures: failures.map((item) => ({
       index: item.index,

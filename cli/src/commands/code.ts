@@ -575,9 +575,9 @@ export async function runCodeTaskWithEvents(
   args: ParsedArgs,
   task: string,
   onEvent: (event: CodeAgentEvent) => void,
-  options: { requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny"> } = {},
+  options: { requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny">; signal?: AbortSignal } = {},
 ): Promise<number> {
-  return runCodeTask(args, task, false, { compact: true, onEvent, requestApproval: options.requestApproval });
+  return runCodeTask(args, task, false, { compact: true, onEvent, requestApproval: options.requestApproval, signal: options.signal });
 }
 
 async function runCodeTask(
@@ -588,6 +588,7 @@ async function runCodeTask(
     compact?: boolean;
     onEvent?: (event: CodeAgentEvent) => void;
     requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny">;
+    signal?: AbortSignal;
   } = {},
 ): Promise<number> {
   if (bestEnabled(args)) {
@@ -694,6 +695,7 @@ async function runCodeTask(
     approval: mode.approval,
     sandbox: mode.sandbox,
     timeoutMs: timeoutMs(args),
+    signal: options.signal,
   };
   if (ultraEnabled(args)) {
     return runUltraCodeBranch({
@@ -752,6 +754,7 @@ async function runCodeTask(
       options.onEvent?.(event);
     },
     requestApproval: options.requestApproval,
+    signal: options.signal,
     onCheckpoint: saveSession && liveSessionPath
       ? async (line) => {
           liveSessionPath = await appendSessionLine({

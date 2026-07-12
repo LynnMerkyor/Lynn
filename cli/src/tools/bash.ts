@@ -91,6 +91,13 @@ export async function bashTool(ctx: ToolRunContext, command: string): Promise<Cl
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let aborted = false;
+    const onAbort = () => {
+      aborted = true;
+      child.kill("SIGTERM");
+    };
+    if (ctx.signal?.aborted) onAbort();
+    else ctx.signal?.addEventListener("abort", onAbort, { once: true });
     const timeout = setTimeout(() => {
       timedOut = true;
       child.kill("SIGTERM");
@@ -99,10 +106,11 @@ export async function bashTool(ctx: ToolRunContext, command: string): Promise<Cl
     child.stderr?.on("data", (chunk) => { stderr = appendLimited(stderr, String(chunk)); });
     child.on("close", (code) => {
       clearTimeout(timeout);
+      ctx.signal?.removeEventListener("abort", onAbort);
       resolve({
-        ok: code === 0 && !timedOut,
+        ok: code === 0 && !timedOut && !aborted,
         tool: "bash",
-        output: { command, exitCode: code ?? null, timedOut, stdout, stderr },
+        output: { command, exitCode: code ?? null, timedOut, aborted, stdout, stderr },
       });
     });
   });

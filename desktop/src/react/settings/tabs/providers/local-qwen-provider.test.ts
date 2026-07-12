@@ -142,14 +142,14 @@ describe('Local Qwen provider UX guards', () => {
     expect(constants).toContain("providerName: 'local-qwen35-9b-q4km-imatrix'");
     expect(constants).toContain("defaultModelId: 'qwen36-27b-dsv4pro-coding-q4-mtp'");
     expect(onboardingStep).toContain('/api/local-qwen35-9b/status');
-    expect(onboardingStep).toContain('llamacppStartDownload');
+    expect(onboardingStep).toContain('llamaState.startDownload');
     expect(onboardingStep).toContain('/api/local-qwen35-9b/setup');
     expect(onboardingStep).toContain('canEnableDefault');
     expect(onboardingStep).toContain('hardwareNotRecommended');
     expect(badge).toContain('/api/local-qwen35-9b/status');
     expect(badge).toContain('/api/local-qwen35-9b/setup');
     expect(badge).not.toContain("LLAMACPP_PROVIDER_ID = 'llamacpp'");
-    expect(onboardingStep).not.toContain('useLlamacppState');
+    expect(onboardingStep).toContain('useLlamacppState');
   });
 
   it('keeps the status endpoint on the Python-free desktop downloader path', () => {

@@ -39,6 +39,7 @@ const lynnBridge = {
   llamacppStop: () => ipcRenderer.invoke("llamacpp:stop"),
   llamacppPauseDownload: () => ipcRenderer.invoke("llamacpp:pause-download"),
   llamacppCancelDownload: () => ipcRenderer.invoke("llamacpp:cancel-download"),
+  llamacppRemoveModel: (payload) => ipcRenderer.invoke("llamacpp:remove-model", payload || {}),
   llamacppGetSources: () => ipcRenderer.invoke("llamacpp:sources"),
   llamacppOpenModelDir: (targetPath) => ipcRenderer.invoke("llamacpp:open-model-dir", { targetPath }),
   llamacppStartCustomModel: (modelPath) => ipcRenderer.invoke("llamacpp:start-custom-model", { modelPath }),

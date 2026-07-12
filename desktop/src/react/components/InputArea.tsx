@@ -710,8 +710,9 @@ function InputAreaInner() {
   const handleStop = useCallback(() => {
     const ws = getWebSocket();
     if (!isStreaming || !ws) return;
+    setInlineNotice('正在停止当前回答…');
     ws.send(JSON.stringify({ type: 'abort', sessionPath: useStore.getState().currentSessionPath }));
-  }, [isStreaming]);
+  }, [isStreaming, setInlineNotice]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (atMenuOpen) {

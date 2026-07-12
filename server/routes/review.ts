@@ -12,6 +12,7 @@
  * GET /api/review/agents
  */
 
+import crypto from "node:crypto";
 import fs from "fs";
 import path from "path";
 import { Hono } from "hono";
@@ -19,7 +20,7 @@ import { runAgentSession, type AgentSessionRound, type RunAgentSessionOptions } 
 import { callText } from "../../shared/llm-client.js";
 import type { LLMApi, ModelId, ProviderId } from "../../core/types.js";
 import { getLocale } from "../i18n.js";
-import { buildReviewFollowUp, parseStructuredReview } from "../review-result.js";
+import { buildReviewFollowUp, computeReviewWorkflowGate, parseStructuredReview } from "../review-result.js";
 import { buildReviewFollowUpTaskPrompt, buildReviewFollowUpTaskTitle } from "../review-follow-up.js";
 import {
   getRoleDefaultModelRefs,
@@ -28,7 +29,7 @@ import {
 } from "../../shared/assistant-role-models.js";
 
 export type ReviewerKind = "hanako" | "butter";
-type ReviewProgressStage = "packing_context" | "reviewing" | "structuring" | "done";
+type ReviewProgressStage = "packing_context" | "reviewing" | "structuring" | "arbitrating" | "done";
 type ReviewVerdict = "pass" | "concerns" | "blocker";
 type JsonRecord = Record<string, unknown>;
 
@@ -203,6 +204,7 @@ interface DirectReviewModelConfig {
   apiKey: string;
   baseUrl: string;
   label: string | null;
+  requestHeaders?: Record<string, string> | null;
 }
 
 interface StructuredReviewFinding {
@@ -219,6 +221,17 @@ interface StructuredReviewLike extends JsonRecord {
   findings?: StructuredReviewFinding[];
   nextStep?: string;
   workflowGate?: string;
+  secondOpinion?: ReviewSecondOpinion;
+}
+
+interface ReviewSecondOpinion {
+  status: "pending" | "completed" | "unavailable" | "timeout" | "circuit_open";
+  modelLabel: string;
+  verdict?: string;
+  summary?: string;
+  agreement?: boolean;
+  latencyMs?: number;
+  reason?: string;
 }
 
 interface SessionContextPack {
@@ -305,7 +318,7 @@ interface SessionMessageRecord extends JsonRecord {
 
 const REVIEWER_YUANS = new Set<ReviewerKind>(["hanako", "butter"]);
 const BUILT_IN_REVIEWER_IDS = new Set(["hanako", "butter"]);
-const REVIEW_PROGRESS_STAGES: ReviewProgressStage[] = ["packing_context", "reviewing", "structuring", "done"];
+const REVIEW_PROGRESS_STAGES: ReviewProgressStage[] = ["packing_context", "reviewing", "structuring", "arbitrating", "done"];
 const MAX_CONTEXT_PREVIEW_CHARS = 2200;
 const MAX_SESSION_LINES = 120;
 const MAX_TOOL_ITEMS = 10;
@@ -320,6 +333,14 @@ const AUTO_REVIEW_CHAIN_TIMEOUT_MS = Math.max(
 const AUTO_REVIEW_MAX_OUTPUT_TOKENS = Math.max(1200, Math.min(2400, Number(process.env.LYNN_AUTO_REVIEW_MAX_TOKENS || 2000)));
 const AUTO_REVIEW_MODEL_LABEL = "Hanako · DS V4";
 const AUTO_REVIEW_FALLBACK_LABEL = "Hanako · DS V4/GLM/Brain";
+const MIMO_SECOND_OPINION_LABEL = "MiMo 2.5 Pro 仲裁";
+const MIMO_SECOND_OPINION_MODEL = "mimo-v2.5-pro";
+const MIMO_SECOND_OPINION_TIMEOUT_MS = Math.max(3_000, Math.min(20_000, Number(process.env.LYNN_REVIEW_SECOND_OPINION_TIMEOUT_MS || 15_000)));
+const MIMO_SECOND_OPINION_MAX_TOKENS = Math.max(600, Math.min(1_600, Number(process.env.LYNN_REVIEW_SECOND_OPINION_MAX_TOKENS || 1_200)));
+const MIMO_SECOND_OPINION_PROVIDERS = new Set(["mimo", "xiaomi", "xiaomi-mimo", "token-plan"]);
+const MIMO_SECOND_OPINION_CACHE_TTL_MS = Math.max(30_000, Number(process.env.LYNN_REVIEW_SECOND_OPINION_CACHE_TTL_MS || 10 * 60_000));
+const MIMO_SECOND_OPINION_BREAKER_MS = Math.max(60_000, Number(process.env.LYNN_REVIEW_SECOND_OPINION_BREAKER_MS || 15 * 60_000));
+const MIMO_SECOND_OPINION_FAILURE_LIMIT = Math.max(1, Number(process.env.LYNN_REVIEW_SECOND_OPINION_FAILURE_LIMIT || 3));
 const AUTO_REVIEW_FALLBACK_PROVIDERS = new Set(["deepseek", "zhipu", "zhipu-coding", "brain"]);
 const AUTO_REVIEW_DEEPSEEK_PROVIDERS = new Set(["deepseek"]);
 const AUTO_REVIEW_GLM_PROVIDERS = new Set(["zhipu", "zhipu-coding"]);
@@ -328,6 +349,9 @@ const AUTO_REVIEW_GLM_MAX_CONCURRENCY = Math.max(1, Number(process.env.LYNN_AUTO
 const reviewExecutionQueues = new Map<string, Promise<void>>();
 let activeAutoReviewGlmCalls = 0;
 const autoReviewGlmWaiters: Array<() => void> = [];
+const mimoSecondOpinionCache = new Map<string, { expiresAt: number; value: ReviewSecondOpinion; structured: StructuredReviewLike | null }>();
+let mimoSecondOpinionFailures = 0;
+let mimoSecondOpinionDisabledUntil = 0;
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -900,7 +924,7 @@ async function runDirectReviewerModel(
   reviewer: ReviewCandidate,
   config: DirectReviewModelConfig,
   prompt: string,
-  options: { autoReview?: boolean; reviewMode?: string | null; timeoutMs?: number; signal?: AbortSignal } = {},
+  options: { autoReview?: boolean; reviewMode?: string | null; timeoutMs?: number; signal?: AbortSignal; maxTokens?: number } = {},
 ): Promise<string> {
   const timeoutMs = options.timeoutMs || (options.autoReview ? AUTO_REVIEW_EXEC_TIMEOUT_MS : REVIEW_EXEC_TIMEOUT_MS);
   const releaseSlot = await reserveAutoReviewModelSlot(config, options.autoReview, options.signal);
@@ -917,14 +941,217 @@ async function runDirectReviewerModel(
       }),
       messages: [{ role: "user", content: prompt }],
       temperature: 0.2,
-      maxTokens: options.autoReview ? AUTO_REVIEW_MAX_OUTPUT_TOKENS : 1800,
+      maxTokens: options.maxTokens || (options.autoReview ? AUTO_REVIEW_MAX_OUTPUT_TOKENS : 1800),
       timeoutMs,
       signal: options.signal,
+      requestHeaders: config.requestHeaders || null,
       reasoning: false,
       quirks: ["enable_thinking"],
     });
   } finally {
     releaseSlot();
+  }
+}
+
+function secondOpinionEnabled(): boolean {
+  return !/^(?:0|false|off|no)$/i.test(String(process.env.LYNN_REVIEW_SECOND_OPINION ?? ""));
+}
+
+function shouldEscalateToMimo(
+  structured: StructuredReviewLike | null,
+  input: { autoReview: boolean; reviewMode: string | null; triggerReasons: string[]; errorCode: string | null },
+): boolean {
+  if (!secondOpinionEnabled() || !input.autoReview || input.reviewMode !== "background") return false;
+  if (input.errorCode === "review_deterministic_fallback") return false;
+  if (!structured || (structured.verdict !== "concerns" && structured.verdict !== "blocker")) return false;
+  if (input.triggerReasons.includes("tool_failed") || input.triggerReasons.includes("empty_answer_guard")) return false;
+  return input.triggerReasons.includes("high_stakes_domain")
+    || input.triggerReasons.includes("time_sensitive_or_market");
+}
+
+async function resolveMimoSecondOpinionConfig(
+  engine: ReviewRouteEngine,
+  reviewer: ReviewCandidate,
+): Promise<DirectReviewModelConfig | null> {
+  const directModel = (engine.availableModels || []).find((model) => (
+    normalizeModelId(model?.id) === MIMO_SECOND_OPINION_MODEL
+    && MIMO_SECOND_OPINION_PROVIDERS.has(normalizeProviderId(model?.provider))
+  ));
+  if (directModel) {
+    const direct = await resolveDirectReviewModelConfig(engine, reviewer, directModel, directModel.id, directModel.provider);
+    if (direct) return { ...direct, label: MIMO_SECOND_OPINION_LABEL };
+  }
+
+  const brainModel = (engine.availableModels || []).find((model) => (
+    normalizeProviderId(model?.provider) === "brain"
+    && normalizeModelId(model?.id) === "lynn-brain-router"
+  ));
+  if (!brainModel) return null;
+  const brain = await resolveDirectReviewModelConfig(engine, reviewer, brainModel, brainModel.id, brainModel.provider);
+  return brain ? {
+    ...brain,
+    label: MIMO_SECOND_OPINION_LABEL,
+    requestHeaders: { "X-Lynn-Review-Arbitration": "mimo-token-plan-pro" },
+  } : null;
+}
+
+function secondOpinionCacheKey(sourceResponse: string, triggerReasons: string[]): string {
+  return crypto.createHash("sha256")
+    .update(sourceResponse)
+    .update("\n")
+    .update([...triggerReasons].sort().join(","))
+    .digest("hex");
+}
+
+function readSecondOpinionCache(key: string): { metadata: ReviewSecondOpinion; structured: StructuredReviewLike | null } | null {
+  const cached = mimoSecondOpinionCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    mimoSecondOpinionCache.delete(key);
+    return null;
+  }
+  return { metadata: cached.value, structured: cached.structured };
+}
+
+async function raceWithAbortSignal<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return work;
+  if (signal.aborted) throw signal.reason || makeAbortError();
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason || makeAbortError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
+
+function mergeReviewWithSecondOpinion(
+  primary: StructuredReviewLike,
+  second: StructuredReviewLike,
+  metadata: ReviewSecondOpinion,
+): StructuredReviewLike {
+  const primaryFindings = Array.isArray(primary.findings) ? primary.findings : [];
+  const secondFindings = Array.isArray(second.findings)
+    ? second.findings.slice(0, 3).map((finding) => ({
+        ...finding,
+        title: finding.title ? `[MiMo 仲裁] ${finding.title}` : "[MiMo 仲裁] 复核发现",
+      }))
+    : [];
+  const verdict: ReviewVerdict = primary.verdict === "blocker" || second.verdict === "blocker"
+    ? "blocker"
+    : primary.verdict === "concerns" || second.verdict === "concerns"
+      ? "concerns"
+      : "pass";
+  const merged: StructuredReviewLike = {
+    ...primary,
+    verdict,
+    findings: [...primaryFindings, ...secondFindings],
+    secondOpinion: metadata,
+  };
+  merged.workflowGate = computeReviewWorkflowGate(merged as Parameters<typeof computeReviewWorkflowGate>[0]);
+  return merged;
+}
+
+async function runMimoSecondOpinion(
+  engine: ReviewRouteEngine,
+  reviewer: ReviewCandidate,
+  prompt: string,
+  primaryContent: string,
+  primary: StructuredReviewLike,
+  sourceResponse: string,
+  triggerReasons: string[],
+): Promise<{ metadata: ReviewSecondOpinion; structured: StructuredReviewLike | null }> {
+  const now = Date.now();
+  if (mimoSecondOpinionDisabledUntil > now) {
+    return {
+      metadata: {
+        status: "circuit_open",
+        modelLabel: MIMO_SECOND_OPINION_LABEL,
+        reason: "MiMo 仲裁熔断中，保留 DS V4 结论。",
+      },
+      structured: null,
+    };
+  }
+
+  const cacheKey = secondOpinionCacheKey(sourceResponse || prompt, triggerReasons);
+  const cached = readSecondOpinionCache(cacheKey);
+  if (cached) return cached;
+
+  let config: DirectReviewModelConfig | null = null;
+  try {
+    config = await resolveMimoSecondOpinionConfig(engine, reviewer);
+  } catch {
+    return {
+      metadata: {
+        status: "unavailable",
+        modelLabel: MIMO_SECOND_OPINION_LABEL,
+        reason: "MiMo Token Plan Pro 配置读取失败，保留 DS V4 结论。",
+      },
+      structured: null,
+    };
+  }
+  if (!config) {
+    return {
+      metadata: {
+        status: "unavailable",
+        modelLabel: MIMO_SECOND_OPINION_LABEL,
+        reason: "MiMo Token Plan Pro 当前不可用，保留 DS V4 结论。",
+      },
+      structured: null,
+    };
+  }
+
+  const arbitrationPrompt = [
+    prompt.slice(0, 16_000),
+    "",
+    "[DS V4 一审结果]",
+    primaryContent.slice(0, 5_000),
+    "",
+    "[MiMo 异构仲裁要求]",
+    "只判断一审指出的问题是否成立、是否遗漏重大风险。不要重写原回答。输出一个 JSON：summary, verdict(pass|concerns|blocker), findings[], nextStep。",
+  ].join("\n");
+  const startedAt = Date.now();
+  try {
+    const content = await runDirectReviewerModel(engine, reviewer, config, arbitrationPrompt, {
+      autoReview: true,
+      reviewMode: "background",
+      timeoutMs: MIMO_SECOND_OPINION_TIMEOUT_MS,
+      maxTokens: MIMO_SECOND_OPINION_MAX_TOKENS,
+      signal: AbortSignal.timeout(MIMO_SECOND_OPINION_TIMEOUT_MS),
+    });
+    const structured = parseStructuredReview(stripThinkTags(content || "")) as StructuredReviewLike | null;
+    if (!structured) throw createReviewNoOutputError();
+    mimoSecondOpinionFailures = 0;
+    const metadata: ReviewSecondOpinion = {
+      status: "completed",
+      modelLabel: MIMO_SECOND_OPINION_LABEL,
+      verdict: structured.verdict,
+      summary: structured.summary,
+      agreement: structured.verdict === primary.verdict,
+      latencyMs: Date.now() - startedAt,
+    };
+    const value = { metadata, structured };
+    mimoSecondOpinionCache.set(cacheKey, {
+      expiresAt: Date.now() + MIMO_SECOND_OPINION_CACHE_TTL_MS,
+      value: metadata,
+      structured,
+    });
+    return value;
+  } catch (error) {
+    mimoSecondOpinionFailures += 1;
+    if (mimoSecondOpinionFailures >= MIMO_SECOND_OPINION_FAILURE_LIMIT) {
+      mimoSecondOpinionDisabledUntil = Date.now() + MIMO_SECOND_OPINION_BREAKER_MS;
+      mimoSecondOpinionFailures = 0;
+    }
+    return {
+      metadata: {
+        status: isTimeoutLikeError(error) ? "timeout" : "unavailable",
+        modelLabel: MIMO_SECOND_OPINION_LABEL,
+        latencyMs: Date.now() - startedAt,
+        reason: isTimeoutLikeError(error)
+          ? "MiMo 仲裁未在时限内完成，保留 DS V4 结论。"
+          : "MiMo 仲裁暂时不可用，保留 DS V4 结论。",
+      },
+      structured: null,
+    };
   }
 }
 
@@ -952,19 +1179,22 @@ async function runDirectReviewerSessionWithFallback(
   if (timing.autoReview) {
     const candidates = buildAutoReviewFallbackCandidates(engine, originalModel, reviewerModel);
     for (const candidate of candidates) {
+      if (timing.signal?.aborted) throw timing.signal.reason || makeAbortError();
       const config = await resolveDirectReviewModelConfig(engine, reviewer, candidate, candidate?.id, candidate?.provider);
       if (!config) continue;
       if (config.label) attemptedModels.push(config.label);
       try {
-        const content = await runDirectReviewerModel(engine, reviewer, config, prompt, {
-          autoReview: true,
-          reviewMode: timing.reviewMode,
-          timeoutMs: AUTO_REVIEW_EXEC_TIMEOUT_MS,
-          // Automatic Hanako reviews may queue behind the GLM single-flight
-          // guard. The model execution timeout still applies inside callText;
-          // do not spend that budget while merely waiting for the queue.
-          signal: undefined,
-        });
+        const content = await raceWithAbortSignal(
+          runDirectReviewerModel(engine, reviewer, config, prompt, {
+            autoReview: true,
+            reviewMode: timing.reviewMode,
+            timeoutMs: AUTO_REVIEW_EXEC_TIMEOUT_MS,
+            // The chain signal races the whole candidate loop. The per-model
+            // timeout starts only when the candidate actually runs.
+            signal: undefined,
+          }),
+          timing.signal,
+        );
         if (!hasMeaningfulReviewOutput(content)) {
           throw createReviewNoOutputError();
         }
@@ -1586,8 +1816,85 @@ export async function startReviewRun(
 
       emitProgress("structuring", { autoReview, reviewMode, triggerReasons, reviewerModelLabel, reviewerModelId, reviewerModelProvider });
       const cleanedContent = stripThinkTags(reviewRun.content || "");
-      const structured = parseStructuredReview(cleanedContent);
-      const followUpPrompt = structured ? buildReviewFollowUp(structured) : null;
+      let structured = parseStructuredReview(cleanedContent) as StructuredReviewLike | null;
+      let secondOpinion: ReviewSecondOpinion | null = null;
+      let finalReviewerModelLabel = reviewRun.usedModelLabel || AUTO_REVIEW_MODEL_LABEL;
+      if (shouldEscalateToMimo(structured, {
+        autoReview,
+        reviewMode,
+        triggerReasons,
+        errorCode: reviewRun.errorCode,
+      })) {
+        const pendingSecondOpinion: ReviewSecondOpinion = {
+          status: "pending",
+          modelLabel: MIMO_SECOND_OPINION_LABEL,
+          reason: "MiMo 正在核对 DS V4 的复查结论。",
+        };
+        const preliminaryStructured: StructuredReviewLike = {
+          ...structured!,
+          secondOpinion: pendingSecondOpinion,
+        };
+        const preliminaryFollowUpPrompt = buildReviewFollowUp(
+          preliminaryStructured as Parameters<typeof buildReviewFollowUp>[0],
+        );
+        emitProgress("arbitrating", {
+          verdict: preliminaryStructured.verdict || null,
+          findingsCount: preliminaryStructured.findings?.length || 0,
+          workflowGate: preliminaryStructured.workflowGate || "clear",
+          autoReview,
+          reviewMode,
+          triggerReasons,
+          reviewerModelLabel: finalReviewerModelLabel,
+          reviewerModelId: reviewRun.usedModelId || reviewerModelId,
+          reviewerModelProvider: reviewRun.usedModelProvider || reviewerModelProvider,
+          secondOpinion: pendingSecondOpinion,
+        });
+        // The DS V4 result is already useful. Show it immediately and update this
+        // same card when the bounded MiMo arbitration comes back.
+        broadcast({
+          type: "review_result",
+          reviewId,
+          sessionPath,
+          reviewerName,
+          reviewerAgent: reviewer.id,
+          reviewerAgentName: reviewer.name,
+          reviewerYuan: reviewer.yuan,
+          reviewerHasAvatar: reviewer.hasAvatar,
+          reviewerModelLabel: finalReviewerModelLabel,
+          reviewerModelId: reviewRun.usedModelId || null,
+          reviewerModelProvider: reviewRun.usedModelProvider || null,
+          content: cleanedContent,
+          structured: preliminaryStructured,
+          secondOpinion: pendingSecondOpinion,
+          contextPack,
+          followUpPrompt: preliminaryFollowUpPrompt,
+          fallbackNote: reviewRun.fallbackNote || null,
+          errorCode: reviewRun.errorCode || null,
+          autoReview,
+          reviewMode,
+          triggerReasons,
+          sourceResponse: request.sourceResponse || null,
+        });
+        const arbitration = await runMimoSecondOpinion(
+          engine,
+          reviewer,
+          prompt,
+          cleanedContent,
+          structured!,
+          String(request.sourceResponse || ""),
+          triggerReasons,
+        );
+        secondOpinion = arbitration.metadata;
+        structured = arbitration.structured
+          ? mergeReviewWithSecondOpinion(structured!, arbitration.structured, arbitration.metadata)
+          : { ...structured!, secondOpinion: arbitration.metadata };
+        if (arbitration.metadata.status === "completed") {
+          finalReviewerModelLabel = `${finalReviewerModelLabel} + ${MIMO_SECOND_OPINION_LABEL}`;
+        }
+      }
+      const followUpPrompt = structured
+        ? buildReviewFollowUp(structured as Parameters<typeof buildReviewFollowUp>[0])
+        : null;
 
       emitProgress("done", {
         verdict: structured?.verdict || null,
@@ -1596,9 +1903,10 @@ export async function startReviewRun(
         autoReview,
         reviewMode,
         triggerReasons,
-        reviewerModelLabel,
-        reviewerModelId,
-        reviewerModelProvider,
+        reviewerModelLabel: finalReviewerModelLabel,
+        reviewerModelId: reviewRun.usedModelId || reviewerModelId,
+        reviewerModelProvider: reviewRun.usedModelProvider || reviewerModelProvider,
+        secondOpinion,
       });
 
       broadcast({
@@ -1610,11 +1918,12 @@ export async function startReviewRun(
         reviewerAgentName: reviewer.name,
         reviewerYuan: reviewer.yuan,
         reviewerHasAvatar: reviewer.hasAvatar,
-        reviewerModelLabel: reviewRun.usedModelLabel || AUTO_REVIEW_MODEL_LABEL,
+        reviewerModelLabel: finalReviewerModelLabel,
         reviewerModelId: reviewRun.usedModelId || null,
         reviewerModelProvider: reviewRun.usedModelProvider || null,
         content: cleanedContent,
         structured,
+        secondOpinion,
         contextPack,
         followUpPrompt,
         fallbackNote: reviewRun.fallbackNote || null,

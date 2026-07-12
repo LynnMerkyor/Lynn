@@ -30,7 +30,14 @@ export interface AutoReviewDecision {
 
 const AUTO_REVIEW_DISABLED = /^(?:0|false|off|no)$/i;
 const AUTO_REVIEW_HIGH_RISK_TOOL_RE = /\b(?:web[_-]?search|web[_-]?fetch|stock[_-]?market|sports[_-]?score|search|fetch|stock|quote|market|sports|score|weather|news|live|research|bash|write|edit|create_report|create_poster|browser)\b/i;
-const AUTO_REVIEW_HIGH_RISK_TEXT_RE = /(?:行情|股价|金价|黄金|比分|赛程|世界杯|NBA|天气|新闻|最新|今天|今晚|昨日|昨晚|收盘|价格|搜索|访问|来源|文件|执行|写入|删除|修改|预测|概率|赔率|夺冠|热门|私董会|会费|收费标准|人数规模|会员人数|主要机构|机构名单|机构对比|榜单|排名|调研)/i;
+const AUTO_REVIEW_HIGH_RISK_ZH_TEXT_RE = /(?:行情|股价|金价|黄金|比分|赛程|世界杯|NBA|天气|新闻|最新|今天|今晚|昨日|昨晚|收盘|价格|预测|概率|赔率|夺冠|热门|私董会|会费|收费标准|人数规模|会员人数|主要机构|机构名单|机构对比|榜单|排名|调研)/i;
+const AUTO_REVIEW_HIGH_RISK_EN_TEXT_RE = /(?:\b(?:today|tonight|yesterday)\b|\b(?:latest|current)\s+(?:weather|forecast|news|price|market|stock|gold|score|schedule|exchange\s+rate|quote)\b|\b(?:stock|gold|weather|news|score|schedule|forecast|market|price|exchange\s+rate)\b)/i;
+const AUTO_REVIEW_HIGH_STAKES_TEXT_RE = /(?:医疗|就医|诊断|症状|用药|药品|急诊|法律|法规|合同|仲裁|诉讼|辞退|裁员|社保|个税|金融|投资|理财|贷款|保险|medical|health|diagnosis|symptom|medicine|medication|emergency|legal|law|contract|lawsuit|arbitration|tax|financial|investment|loan|insurance)/i;
+
+function hasTimeSensitiveOrMarketText(value: string): boolean {
+  return AUTO_REVIEW_HIGH_RISK_ZH_TEXT_RE.test(value)
+    || AUTO_REVIEW_HIGH_RISK_EN_TEXT_RE.test(value);
+}
 
 function autoReviewEnabled(): boolean {
   return !AUTO_REVIEW_DISABLED.test(String(process.env.LYNN_AUTO_REVIEW ?? ""));
@@ -93,7 +100,8 @@ export function decideAutoReviewTurn({
   if (failedNames.length || ss?.hasFailedTool) reasons.push("tool_failed");
   if (successfulTools.length || ss?.hasToolCall || ss?.hasPrefetchToolCall || Number(ss?.successfulToolCount || 0) > 0) reasons.push("tool_evidence");
   if (AUTO_REVIEW_HIGH_RISK_TOOL_RE.test(toolText)) reasons.push("high_risk_tool");
-  if (AUTO_REVIEW_HIGH_RISK_TEXT_RE.test(`${answer}\n${toolText}`)) reasons.push("time_sensitive_or_market");
+  if (hasTimeSensitiveOrMarketText(`${answer}\n${toolText}`)) reasons.push("time_sensitive_or_market");
+  if (AUTO_REVIEW_HIGH_STAKES_TEXT_RE.test(`${answer}\n${toolText}`)) reasons.push("high_stakes_domain");
   if (!answer && requestedMode === "fallback") reasons.push("empty_answer_guard");
   if (autoReviewAlways()) reasons.push("forced");
 
@@ -102,6 +110,7 @@ export function decideAutoReviewTurn({
     r === "tool_failed" ||
     r === "high_risk_tool" ||
     r === "time_sensitive_or_market" ||
+    r === "high_stakes_domain" ||
     r === "empty_answer_guard" ||
     r === "fallback_visible_answer"
   ));

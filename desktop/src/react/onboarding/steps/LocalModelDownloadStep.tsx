@@ -13,6 +13,7 @@ import type { OnboardingFetch } from '../onboarding-actions';
 import { StepContainer, Multiline } from '../onboarding-ui';
 import { useOnboardingI18n } from '../use-onboarding-i18n';
 import { QUICK_LOCAL_PROVIDER } from '../constants';
+import { useLlamacppState } from '../../hooks/use-llamacpp-state';
 import {
   BRAIN_PROVIDER_ID,
   BRAIN_PROVIDER_BASE_URL,
@@ -92,11 +93,45 @@ function hasModelAndRuntime(status: LocalSetupStatus | null): boolean {
   return !!(status?.plan?.observed?.gguf && status?.plan?.observed?.llama_server);
 }
 
+function formatBytes(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let amount = value;
+  let unit = 0;
+  while (amount >= 1024 && unit < units.length - 1) {
+    amount /= 1024;
+    unit += 1;
+  }
+  return `${amount.toFixed(unit >= 3 ? 1 : 0)} ${units[unit]}`;
+}
+
+function formatDuration(seconds: number | null | undefined): string | null {
+  if (!Number.isFinite(seconds) || !seconds || seconds <= 0) return null;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return `约 ${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? `约 ${hours} 小时 ${rest} 分钟` : `约 ${hours} 小时`;
+}
+
+function localModelErrorText(reason: string | null | undefined): string {
+  const code = String(reason || '').trim();
+  if (!code) return '本地模型准备失败，请重试。';
+  if (code.includes('insufficient-disk-space')) return '磁盘空间不足，请释放至少 22GB 后重试。';
+  if (code.includes('binary-not-found') || code.includes('needs-binary')) return '没有找到本地推理运行时，请在设置里重新安装。';
+  if (code.includes('port-in-use')) return '本地模型端口正被其他程序占用，请关闭对应程序后重试。';
+  if (code.includes('checksum')) return '模型文件校验失败，Lynn 会在重试时重新下载损坏部分。';
+  if (code.includes('all-sources-failed') || code.includes('request-timeout')) return '下载源暂时不可用，请检查网络后继续。';
+  if (code.includes('cancel')) return '下载已取消。';
+  return '本地模型准备失败，请重试或暂时使用云端模型。';
+}
+
 export function LocalModelDownloadStep({
   preview, onboardingFetch, goToStep, showError, onProviderReady,
   nextStep, backStep,
 }: LocalModelDownloadStepProps) {
   const { t } = useOnboardingI18n();
+  const llamaState = useLlamacppState();
   const [status, setStatus] = useState<LocalSetupStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [setupStarted, setSetupStarted] = useState(false);
@@ -121,9 +156,13 @@ export function LocalModelDownloadStep({
     void refreshStatus();
   }, [refreshStatus]);
 
-  const ready = endpointReady(status);
-  const busy = endpointLoading(status);
-  const modelPrepared = hasModelAndRuntime(status);
+  const ready = endpointReady(status) || llamaState.healthy || llamaState.status === 'ready';
+  const downloadActive = llamaState.download.state === 'downloading'
+    || llamaState.download.state === 'verifying';
+  const downloadCanPause = llamaState.download.state === 'downloading';
+  const downloadPaused = llamaState.download.state === 'paused';
+  const busy = endpointLoading(status) || downloadActive || llamaState.status === 'starting';
+  const modelPrepared = hasModelAndRuntime(status) || !!(llamaState.modelPath && llamaState.binaryPath);
   const jobRunning = status?.job?.status === 'running';
   const jobFailed = status?.job?.status === 'failed';
   const progress = status?.job?.progress || null;
@@ -132,10 +171,14 @@ export function LocalModelDownloadStep({
   const hardBlockers: string[] = status?.plan?.hardware?.blockers || [];
   const canEnableDefault = status?.plan?.hardware?.can_enable === true;
   const hardwareBlocked = status?.plan?.hardware?.can_enable === false;
-  const canStart = !busy && !ready && canEnableDefault;
-  const progressPercent = typeof progress?.percent === 'number'
-    ? Math.max(0, Math.min(100, progress.percent))
-    : ready ? 100 : busy ? 45 : 0;
+  const canStart = !busy && !downloadPaused && !ready && canEnableDefault;
+  const progressPercent = ready
+    ? 100
+    : downloadActive || downloadPaused || llamaState.download.state === 'done'
+      ? Math.max(0, Math.min(100, Number(llamaState.download.overallPercent ?? llamaState.download.percent ?? 0)))
+      : typeof progress?.percent === 'number'
+        ? Math.max(0, Math.min(100, progress.percent))
+        : 0;
 
   useEffect(() => {
     if (!busy && !jobRunning) return undefined;
@@ -189,7 +232,7 @@ export function LocalModelDownloadStep({
     setSetupStarted(true);
     setError(null);
     try {
-      const managerStart = await window.platform?.llamacppStartDownload?.({
+      const managerStart = await llamaState.startDownload({
         modelId: QUICK_LOCAL_PROVIDER.defaultModelId,
         startAfterDownload: true,
       });
@@ -232,13 +275,13 @@ export function LocalModelDownloadStep({
       setStatus((prev) => ({ ...(prev || {}), job: data.job }));
       window.setTimeout(() => void refreshStatus(), 900);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = localModelErrorText(err instanceof Error ? err.message : String(err));
       setError(msg);
       showError(msg);
     } finally {
       setLoading(false);
     }
-  }, [goToStep, nextStep, onboardingFetch, preview, refreshStatus, showError]);
+  }, [goToStep, llamaState, nextStep, onboardingFetch, preview, refreshStatus, showError]);
 
   const fallbackToBrain = useCallback(async () => {
     if (preview) { goToStep(nextStep); return; }
@@ -265,12 +308,22 @@ export function LocalModelDownloadStep({
   const statusLine = useMemo(() => {
     if (error) return error;
     if (ready) return t('onboarding.localModel.spawnReady');
-    if (jobFailed) return t('onboarding.localModel.spawnFailed', { reason: status?.job?.progress?.message || 'setup_failed' });
+    if (jobFailed || llamaState.download.state === 'error') {
+      return localModelErrorText(status?.job?.progress?.message || llamaState.download.lastError);
+    }
+    if (downloadPaused) return '下载已暂停，可以稍后从这里继续。';
+    if (llamaState.download.state === 'verifying') return '下载完成，正在校验模型文件。';
+    if (downloadActive) {
+      const fileProgress = llamaState.download.fileCount && llamaState.download.fileCount > 1
+        ? `第 ${llamaState.download.fileIndex || 1}/${llamaState.download.fileCount} 个文件`
+        : '模型文件';
+      return `正在下载${fileProgress}`;
+    }
     if (busy) return progress?.message || progress?.phase || t('onboarding.localModel.spawning');
     if (modelPrepared) return t('onboarding.localModel.modelPreparedHint');
     if (!canEnableDefault) return t('onboarding.localModel.hardwareNotRecommended');
     return t('onboarding.localModel.subtitle');
-  }, [busy, canEnableDefault, error, jobFailed, modelPrepared, progress?.message, progress?.phase, ready, status?.job?.progress?.message, t]);
+  }, [busy, canEnableDefault, downloadActive, downloadPaused, error, jobFailed, llamaState.download, modelPrepared, progress?.message, progress?.phase, ready, status?.job?.progress?.message, t]);
 
   return (
     <StepContainer>
@@ -282,13 +335,39 @@ export function LocalModelDownloadStep({
         <div className="local-model-progress-bar">
           <div
             className="local-model-progress-fill"
-            style={{ width: `${Math.max(2, progressPercent)}%` }}
+            style={{ width: `${progressPercent}%` }}
           />
         </div>
         <div className="local-model-progress-meta">
-          <span>{ready ? '100%' : busy ? `${Math.round(progressPercent)}%` : modelPrepared ? t('onboarding.localModel.statusReady') : t('onboarding.localModel.statusWaiting')}</span>
+          <span>{ready
+            ? '100%'
+            : downloadPaused
+              ? `已暂停 · ${Math.round(progressPercent)}%`
+              : busy
+                ? `${Math.round(progressPercent)}%`
+                : modelPrepared
+                  ? t('onboarding.localModel.statusReady')
+                  : t('onboarding.localModel.statusWaiting')}</span>
           <span>{status?.plan?.hardware?.recommended_runtime?.label || t('onboarding.localModel.runtimeLocalDefault')}</span>
         </div>
+        {(downloadActive || downloadPaused) && (
+          <div className="local-model-progress-meta">
+            <span>
+              {formatBytes(llamaState.download.bytesTransferred)} / {formatBytes(llamaState.download.totalBytes)}
+              {llamaState.download.fileCount && llamaState.download.fileCount > 1
+                ? ` · 文件 ${llamaState.download.fileIndex || 1}/${llamaState.download.fileCount}`
+                : ''}
+            </span>
+            <span>
+              {llamaState.download.bytesPerSecond
+                ? `${formatBytes(llamaState.download.bytesPerSecond)}/s`
+                : '正在连接下载源'}
+              {formatDuration(llamaState.download.etaSeconds)
+                ? ` · 剩余 ${formatDuration(llamaState.download.etaSeconds)}`
+                : ''}
+            </span>
+          </div>
+        )}
         <div className={`local-model-progress-substatus${error || jobFailed ? ' is-error' : ''}`}>
           {statusLine}
         </div>
@@ -332,7 +411,7 @@ export function LocalModelDownloadStep({
           <button className="ob-btn ob-btn-primary" disabled={savingProvider} onClick={() => void persistAndAdvance()}>
             {t('onboarding.localModel.next')}
           </button>
-        ) : (
+        ) : downloadPaused ? null : (
           <button className="ob-btn ob-btn-primary" disabled={!canStart || loading} onClick={() => void startSetup()}>
             {busy || loading
               ? t('onboarding.localModel.spawning')
@@ -341,16 +420,26 @@ export function LocalModelDownloadStep({
                 : t('onboarding.localModel.startBtn')}
           </button>
         )}
-        {/* #24: download-in-progress cancel UX — if download is busy, allow user to cancel/skip */}
-        {busy && !ready && (
+        {downloadCanPause && !ready && (
           <button
             className="ob-btn ob-btn-secondary"
-            onClick={() => {
-              const platform = (window as unknown as { platform?: { llamacppCancelDownload?: () => Promise<unknown> } }).platform;
-              try {
-                void platform?.llamacppCancelDownload?.();
-              } catch { /* best-effort */ }
-            }}
+            onClick={() => void llamaState.pauseDownload()}
+          >
+            暂停下载
+          </button>
+        )}
+        {downloadPaused && !ready && (
+          <button
+            className="ob-btn ob-btn-primary"
+            onClick={() => void startSetup()}
+          >
+            继续下载
+          </button>
+        )}
+        {(downloadActive || downloadPaused) && !ready && (
+          <button
+            className="ob-btn ob-btn-secondary"
+            onClick={() => void llamaState.cancelDownload()}
             title={t('onboarding.localModel.cancelBtn')}
           >
             {t('onboarding.localModel.cancelBtn')}

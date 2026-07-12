@@ -24,6 +24,7 @@ export interface ToolRunInput {
 }
 
 export async function runClientTool(ctx: ToolRunContext, input: ToolRunInput): Promise<ClientToolResult> {
+  ctx.signal?.throwIfAborted();
   if (ctx.sandbox === "read-only" && CLIENT_TOOL_DEFINITIONS.some((tool) => tool.name === input.name && tool.dangerous)) {
     throw new Error(`${input.name} is blocked by read-only sandbox`);
   }

@@ -85,16 +85,27 @@ export function renderBrainEventForHuman(
     return;
   }
   if (event.type === "review_result") {
-    const title = event.error ? "Hanako review failed" : "Hanako review";
-    const body = event.error
-      ? [event.error]
-      : event.content
-        ? [oneLine(event.content, 360)]
-        : undefined;
+    const model = event.reviewerModelLabel ? ` · ${event.reviewerModelLabel}` : "";
+    const title = event.error ? "Hanako review failed" : `Hanako review${model}`;
+    const structured = event.structured || {};
+    const second = event.secondOpinion || (structured.secondOpinion && typeof structured.secondOpinion === "object"
+      ? structured.secondOpinion as Record<string, unknown>
+      : null);
+    const body = event.error ? [event.error] : [
+      typeof structured.verdict === "string"
+        ? `verdict: ${structured.verdict}${typeof structured.workflowGate === "string" ? ` · gate: ${structured.workflowGate}` : ""}`
+        : "",
+      typeof structured.summary === "string" ? oneLine(structured.summary, 280) : "",
+      second && typeof second.status === "string"
+        ? `MiMo: ${typeof second.verdict === "string" ? second.verdict : second.status}${typeof second.summary === "string" ? ` · ${oneLine(second.summary, 220)}` : typeof second.reason === "string" ? ` · ${oneLine(second.reason, 220)}` : ""}`
+        : "",
+      event.fallbackNote ? oneLine(event.fallbackNote, 240) : "",
+      !structured.summary && event.content ? oneLine(event.content, 360) : "",
+    ].filter(Boolean);
     stream.write(`${renderCard({
       kind: event.error ? "error" : "ok",
       title,
-      body,
+      body: body.length ? body : undefined,
     }, color)}\n`);
     return;
   }

@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/LynnMerkyor/Lynn/releases"><img src="https://img.shields.io/badge/App-0.86.0-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/LynnMerkyor/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.86.0-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/LynnMerkyor/Lynn/releases"><img src="https://img.shields.io/badge/App-0.86.1-brightgreen" alt="App Version"></a>
+  <a href="https://github.com/LynnMerkyor/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.86.1-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/LynnMerkyor/Lynn/stargazers"><img src="https://img.shields.io/github/stars/LynnMerkyor/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/LynnMerkyor/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF"><img src="https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d" alt="HuggingFace Models"></a>
@@ -112,12 +112,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI; 输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.86.0
+Lynn --version  # should print 0.86.1
 Lynn agents     # copyable headless worker commands for other agents
 ```
 
@@ -163,7 +163,28 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 ## 🆕 近期更新
 
 <details open>
-<summary><strong>Lynn v0.86.0</strong> · 2026-07-12 · 安全边界与全链路可靠性更新 <em>(最新)</em></summary>
+<summary><strong>Lynn v0.86.1</strong> · 2026-07-12 · GUI / CLI 交互与端侧模型管理更新 <em>(最新)</em></summary>
+
+**v0.86.1 体验与可靠性更新**:
+- **CLI Ink 退出链路修复**:忙碌时 Ctrl+C 只取消当前轮，REPL 保持可用；完整 Ink PTY 门禁要求 1 秒内取消并最终零退出。
+- **CLI 质感与长会话稳定性**:历史输出改用 `Static` 保留，不再因固定条数截断；流式 Markdown 40ms 合批，工具开始/完成合并为同一行，输入框支持可见光标、左右移动和行首/行尾。
+- **端侧 27B 下载可管理**:默认 Q4 imatrix MTP 下载显示真实总进度、分片、速度和剩余时间，支持暂停、断点继续、取消与删除；切到云端不再锁死安装流程。
+- **本地模型提示不再每天打扰**:硬件不足仍不主动推荐，符合条件的设备可选择“7 天后提醒”或“不再提醒”；PID、端点和槽位收进诊断详情。
+- **GUI 更容易找到内容**:会话搜索默认可见，长对话提供回到最新消息按钮；输入区低频功能收进“更多”，停止操作立即显示反馈。
+- **错误与主题可读性**:网络、认证、超时和本地运行时错误统一显示人话；暖纸/深色主题提高次要文字对比度，并补齐跨主题语义变量。
+- **高风险回答采用异构复核**:DS V4 Flash 继续异步快速复核；仅当医疗、法律、金融或时效事实回答被判为有疑点时，再由 MiMo 2.5 Pro Token Plan 做一次限时仲裁。仲裁不阻塞原回答、不触发自动重答，GUI 和 CLI 都会显示结构化结论。
+- **V0.86 安全基线完整保留**:自动浏览器权限、OS 沙箱、IPC/SSRF、本地服务鉴权、会话互斥、工具取消和跨轮污染修复继续受安全测试与 Agent 回归门禁保护。
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz"
+```
+
+[完整 Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.1)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.86.0</strong> · 2026-07-12 · 安全边界与全链路可靠性更新</summary>
 
 **v0.86.0 安全、运行时与体验更新**:
 - **自动浏览器默认拒绝敏感权限**:模型访问的网页不能静默获取麦克风、摄像头、定位或通知；所有导航和子资源请求都经过 DNS/SSRF 校验。
@@ -1334,11 +1355,11 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.dmg`，版本记录见 [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases)。V0.86.0 的 Apple Silicon / Intel DMG 会完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。
+**macOS（Apple Silicon / Intel）**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.dmg`，版本记录见 [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases)。V0.86.1 的 Apple Silicon / Intel DMG 会完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。
 
 **Windows**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.exe`，直接运行；版本记录见 [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases)。
 
-> **Windows SmartScreen 提示：** V0.86.0 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
+> **Windows SmartScreen 提示：** V0.86.1 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
 Linux 版本计划中。
 
@@ -1406,8 +1427,8 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（V0.85.6 notarized DMG） |
-| macOS (Intel) | 已支持（V0.85.6 notarized DMG） |
+| macOS (Apple Silicon) | 已支持（V0.86.1 notarized DMG） |
+| macOS (Intel) | 已支持（V0.86.1 notarized DMG） |
 | Windows x64 | Beta |
 | Linux | 计划中 |
 | 移动端 (PWA) | 计划中 |

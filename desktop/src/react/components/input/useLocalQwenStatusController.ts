@@ -12,6 +12,8 @@ import {
   LOCAL_QWEN_SHORT_NAME,
   LOCAL_QWEN_PROMPT_DELAY_MS,
   LOCAL_QWEN_PROMPT_DISMISS_KEY,
+  LOCAL_QWEN_PROMPT_NEVER_KEY,
+  LOCAL_QWEN_PROMPT_SNOOZE_UNTIL_KEY,
   LOCAL_QWEN_PROMPT_SHOWN_KEY,
   isLocalQwenPromptSnoozed,
   todayKey,
@@ -416,13 +418,26 @@ export function useLocalQwenStatusController({
 
   const snoozePrompt = useCallback(() => {
     try {
-      localStorage.setItem(LOCAL_QWEN_PROMPT_DISMISS_KEY, todayKey());
+      localStorage.setItem(LOCAL_QWEN_PROMPT_SNOOZE_UNTIL_KEY, String(Date.now() + 7 * 24 * 60 * 60 * 1000));
+      localStorage.removeItem(LOCAL_QWEN_PROMPT_DISMISS_KEY);
     } catch {
       // ignore unavailable storage
     }
     setSnoozed(true);
     setDismissed(true);
-    showSidebarToast('今天不再提醒本地模型安装。你仍可在“设置 > 模型”里随时启动。', 3600, 'info', 'local-qwen-snoozed');
+    showSidebarToast('7 天内不再提醒。你仍可在“设置 > 模型”里随时安装。', 3600, 'info', 'local-qwen-snoozed');
+  }, []);
+
+  const dismissPromptForever = useCallback(() => {
+    try {
+      localStorage.setItem(LOCAL_QWEN_PROMPT_NEVER_KEY, '1');
+      localStorage.removeItem(LOCAL_QWEN_PROMPT_SNOOZE_UNTIL_KEY);
+    } catch {
+      // ignore unavailable storage
+    }
+    setSnoozed(true);
+    setDismissed(true);
+    showSidebarToast('不再显示本地模型推荐。你仍可在“设置 > 模型”里安装。', 3600, 'info', 'local-qwen-dismissed');
   }, []);
 
   return {
@@ -459,6 +474,7 @@ export function useLocalQwenStatusController({
     start,
     openSettings,
     snoozePrompt,
+    dismissPromptForever,
     setPanelOpen,
   };
 }

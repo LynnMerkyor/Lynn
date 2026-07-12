@@ -50,7 +50,7 @@ interface Props {
   error?: string;
   errorCode?: string | null;
   status: 'loading' | 'done';
-  stage?: 'packing_context' | 'reviewing' | 'structuring' | 'done';
+  stage?: 'packing_context' | 'reviewing' | 'structuring' | 'arbitrating' | 'done';
   findingsCount?: number;
   verdict?: StructuredReview['verdict'];
   workflowGate?: StructuredReview['workflowGate'];
@@ -67,6 +67,7 @@ const STAGE_LABELS: Record<NonNullable<Props['stage']>, string> = {
   packing_context: 'Packing context',
   reviewing: 'Reviewing',
   structuring: 'Structuring findings',
+  arbitrating: 'MiMo arbitration',
   done: 'Done',
 };
 
@@ -74,6 +75,7 @@ const STAGE_LABELS_ZH: Record<NonNullable<Props['stage']>, string> = {
   packing_context: '整理上下文',
   reviewing: '复查中',
   structuring: '整理结论',
+  arbitrating: 'MiMo 仲裁中',
   done: '完成',
 };
 
@@ -99,6 +101,11 @@ function reviewStageHint(stage: Props['stage'], zh: boolean): string {
       ? '主体复查已经完成，正在把结论整理成更易读的发现、建议和继续条件。'
       : 'The main review is done. Now organizing the verdict into readable findings, suggestions, and next steps.';
   }
+  if (stage === 'arbitrating') {
+    return zh
+      ? 'DS V4 初审结论已生成，正在由 MiMo 做一次限时异构仲裁。'
+      : 'The DS V4 verdict is ready. MiMo is running one time-bounded heterogeneous arbitration.';
+  }
   return zh
     ? 'Hanako 正在逐段检查这次回答与改动。你现在可以继续聊天，结果会自动回填到这里。'
     : 'Hanako is checking the reply and changes step by step. You can keep chatting while the result fills in here automatically.';
@@ -111,12 +118,15 @@ function reviewStageSupportText(stage: Props['stage'], zh: boolean): string {
   if (stage === 'structuring') {
     return zh ? '已经接近完成，马上会给出可继续或建议暂停的结论。' : 'Almost done. A continue/hold recommendation is coming next.';
   }
+  if (stage === 'arbitrating') {
+    return zh ? '原回答和 DS V4 初审都不受阻塞。' : 'Neither the original answer nor the DS V4 result is blocked.';
+  }
   return zh ? '你不用停在这里等，复查完成后会自动显示。' : 'No need to wait here. The review will appear automatically when it finishes.';
 }
 
 function reviewStageSteps(stage: Props['stage'], zh: boolean): Array<{ label: string; state: 'done' | 'active' | 'pending' }> {
   const current = stage || 'reviewing';
-  const order: Array<NonNullable<Props['stage']>> = ['packing_context', 'reviewing', 'structuring'];
+  const order: Array<NonNullable<Props['stage']>> = ['packing_context', 'reviewing', 'structuring', 'arbitrating'];
   const currentIndex = Math.max(order.indexOf(current), 0);
   return order.map((step, index) => ({
     label: zh ? STAGE_LABELS_ZH[step] : STAGE_LABELS[step],
@@ -276,6 +286,8 @@ export const ReviewCard = memo(function ReviewCard({
   const followUpTaskBusy = isFollowUpTaskActive(followUpTask);
   const followUpTaskDetail = normalizeFollowUpTaskDetail(followUpTask, zh);
   const effectiveSummary = structured?.summary || stripReviewThinkTags(content);
+  const secondOpinion = structured?.secondOpinion;
+  const secondOpinionPending = secondOpinion?.status === 'pending';
   const effectiveError = useMemo(() => normalizeReviewErrorMessage(error, errorCode, zh), [error, errorCode, zh]);
   const loadingSteps = useMemo(() => reviewStageSteps(stage, zh), [stage, zh]);
   const loadingHint = useMemo(() => reviewStageHint(stage, zh), [stage, zh]);
@@ -405,7 +417,7 @@ export const ReviewCard = memo(function ReviewCard({
         <div className={styles.reviewCardIdentity}>
           <span className={styles.reviewCardTitle}>{t('review.cardTitle') || 'Review'}</span>
           <span className={styles.reviewCardMeta}>{reviewerMetaText}</span>
-          {(status === 'loading' || autoReviewLabel || verdictText || gateText || findingsText || packText || followUpPrompt || fallbackNote) && (
+          {(status === 'loading' || autoReviewLabel || verdictText || gateText || findingsText || packText || followUpPrompt || fallbackNote || secondOpinion) && (
             <div className={styles.reviewCardSignals}>
               {autoReviewLabel && (
                 <span className={`${styles.reviewBadge} ${reviewMode === 'fallback' ? styles.reviewVerdictConcerns : styles.reviewBadgeStage}`} title={reviewReasonTitle}>
@@ -445,6 +457,18 @@ export const ReviewCard = memo(function ReviewCard({
               {fallbackNote && status === 'done' && (
                 <span className={`${styles.reviewBadge} ${styles.reviewBadgeContext}`} title={fallbackNote}>
                   {zh ? '已自动切换模型完成' : 'finished on fallback'}
+                </span>
+              )}
+              {secondOpinion && status === 'done' && (
+                <span
+                  className={`${styles.reviewBadge} ${secondOpinion.status === 'completed' ? styles.reviewBadgeAction : styles.reviewBadgeContext}`}
+                  title={secondOpinion.summary || secondOpinion.reason}
+                >
+                  {secondOpinion.status === 'pending'
+                    ? (zh ? 'MiMo 仲裁中' : 'MiMo arbitration in progress')
+                    : secondOpinion.status === 'completed'
+                    ? (zh ? `MiMo 仲裁：${secondOpinion.verdict || '完成'}` : `MiMo: ${secondOpinion.verdict || 'done'}`)
+                    : (zh ? 'MiMo 仲裁未完成' : 'MiMo unavailable')}
                 </span>
               )}
             </div>
@@ -488,6 +512,14 @@ export const ReviewCard = memo(function ReviewCard({
             <>
               {fallbackNote && (
                 <div className={styles.reviewNextStep}>{fallbackNote}</div>
+              )}
+              {secondOpinion && (
+                <div className={styles.reviewNextStep}>
+                  <strong>{secondOpinion.modelLabel}：</strong>
+                  {secondOpinion.summary || secondOpinion.reason || (secondOpinionPending
+                    ? (zh ? '正在进行异构仲裁，DS V4 初审结论已先显示。' : 'Arbitration is running; the DS V4 result is already shown.')
+                    : (zh ? '已完成异构仲裁。' : 'Heterogeneous review completed.'))}
+                </div>
               )}
               <div className={styles.reviewSummaryBlock}>
                 <div className={styles.reviewSectionLabel}>{zh ? '结论' : 'Summary'}</div>
@@ -605,7 +637,7 @@ export const ReviewCard = memo(function ReviewCard({
                     <button
                       className={styles.reviewTaskBtn}
                       onClick={createFollowUpTask}
-                      disabled={creatingTask || followUpTaskBusy}
+                      disabled={creatingTask || followUpTaskBusy || secondOpinionPending}
                     >
                       {creatingTask
                         ? (zh ? '创建中…' : 'Creating…')

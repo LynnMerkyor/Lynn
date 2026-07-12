@@ -46,6 +46,7 @@ export interface CodeAgentLoopInput {
   onCheckpoint?: (line: { type: "user" | "assistant" | "tool"; content: string; data?: Record<string, unknown> }) => Promise<void>;
   onEvent?: (event: CodeAgentEvent) => void;
   requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny">;
+  signal?: AbortSignal;
 }
 
 export interface CodeAgentApprovalRequest {
@@ -210,6 +211,7 @@ function completedToolCallsAfter(messages: readonly ChatMessage[], assistantInde
 }
 
 export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgentLoopResult> {
+  inputData.signal?.throwIfAborted();
   const frames = buildCodeRuntimeFrames(inputData);
   const initialPrompt = buildCodePrompt(inputData.task, inputData.context, inputData.imagePaths);
   const initialContent = inputData.imagePaths?.length
@@ -242,6 +244,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
   let selfVerifyPasses = 0;
   let workingCheckpoint = "";
   for (let step = 0; step < inputData.maxSteps; step += 1) {
+    inputData.signal?.throwIfAborted();
     const label = step === 0 ? t("spinner.coding") : t("spinner.reviewing");
     inputData.onEvent?.({ type: "step.started", step, label });
     // Pin the working checkpoint (if any) as the freshest, last thing the model
@@ -259,6 +262,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
       label,
       danger: inputData.toolCtx.approval === "yolo" || inputData.toolCtx.sandbox === "danger-full-access",
       onEvent: inputData.onEvent,
+      signal: inputData.signal,
     });
     const assistantText = result.text;
     latestUsageSummary = result.usageSummary || latestUsageSummary;
@@ -336,6 +340,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
           danger: inputData.toolCtx.approval === "yolo" || inputData.toolCtx.sandbox === "danger-full-access",
           noTools: true,
           onEvent: inputData.onEvent,
+          signal: inputData.signal,
         });
         const verdict = parseSelfVerifyVerdict(review.text);
         if (inputData.json) writeJsonLine({ type: "code.self_verify", ts: nowIso(), pass: verdict.pass });
@@ -354,6 +359,7 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
     const toolLedgerEntries: ToolLedgerEntry[] = [];
     const atomicPlan = planAtomicToolStep(toolRequests);
     for (let toolIndex = 0; toolIndex < toolRequests.length; toolIndex += 1) {
+      inputData.signal?.throwIfAborted();
       const toolRequest = toolRequests[toolIndex];
       if (atomicPlan.deferredIndexes.has(toolIndex)) {
         const section = deferredAtomicToolSection(toolRequest);
@@ -722,6 +728,7 @@ async function collectBrainText(inputData: {
   danger?: boolean;
   noTools?: boolean;
   onEvent?: (event: CodeAgentEvent) => void;
+  signal?: AbortSignal;
 }): Promise<BrainTextResult> {
   let text = "";
   let usageSummary: string | null = null;
@@ -748,6 +755,7 @@ async function collectBrainText(inputData: {
       messages: inputData.messages,
       fallbackProvider: inputData.fallbackProvider,
       tools: inputData.noTools ? undefined : codeToolDefinitions(),
+      signal: inputData.signal,
     })) {
       const renderReasoning = shouldRenderReasoning(inputData.reasoning.display, inputData.json);
       if (eventWritesHumanOutput(event, renderReasoning, !!inputData.json || !!inputData.onEvent)) {

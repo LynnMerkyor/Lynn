@@ -4,6 +4,8 @@ import {
   LOCAL_QWEN35_MODEL_ID,
   LOCAL_QWEN35_PROVIDER_ID,
   LOCAL_QWEN_PROMPT_DISMISS_KEY,
+  LOCAL_QWEN_PROMPT_NEVER_KEY,
+  LOCAL_QWEN_PROMPT_SNOOZE_UNTIL_KEY,
   LOCAL_QWEN_PROMPT_SHOWN_KEY,
   isLocalQwenPromptSnoozed,
   type LocalQwen35RuntimeStatus,
@@ -56,11 +58,25 @@ describe('local Qwen status derivation', () => {
 
   it('does not hide the install recommendation just because it was shown today', () => {
     const today = '2026-06-27';
+    const now = Date.parse(`${today}T12:00:00Z`);
     const values = new Map<string, string>([[LOCAL_QWEN_PROMPT_SHOWN_KEY, today]]);
     const storage = { getItem: (key: string) => values.get(key) || null };
-    expect(isLocalQwenPromptSnoozed(storage, today)).toBe(false);
+    expect(isLocalQwenPromptSnoozed(storage, now)).toBe(false);
 
     values.set(LOCAL_QWEN_PROMPT_DISMISS_KEY, today);
-    expect(isLocalQwenPromptSnoozed(storage, today)).toBe(true);
+    expect(isLocalQwenPromptSnoozed(storage, now)).toBe(true);
+  });
+
+  it('supports a seven-day snooze and a permanent opt-out', () => {
+    const now = Date.parse('2026-06-27T12:00:00Z');
+    const values = new Map<string, string>();
+    const storage = { getItem: (key: string) => values.get(key) || null };
+
+    values.set(LOCAL_QWEN_PROMPT_SNOOZE_UNTIL_KEY, String(now + 7 * 24 * 60 * 60 * 1000));
+    expect(isLocalQwenPromptSnoozed(storage, now)).toBe(true);
+    expect(isLocalQwenPromptSnoozed(storage, now + 8 * 24 * 60 * 60 * 1000)).toBe(false);
+
+    values.set(LOCAL_QWEN_PROMPT_NEVER_KEY, '1');
+    expect(isLocalQwenPromptSnoozed(storage, now + 365 * 24 * 60 * 60 * 1000)).toBe(true);
   });
 });

@@ -16,7 +16,8 @@ import { displayCwd } from "./startup.js";
 import { CHAT_SLASH_COMMANDS, applyModeCommand, applyReasoningCommand, chatRouteLabel, renderMode, type ChatMode } from "./commands/chat.js";
 import { InkMarkdown } from "./ink-markdown.js";
 import { handleInkProviderCommand } from "./ink-provider-commands.js";
-import { InkInputLine } from "./ink-input-line.js";
+import { editInputBuffer, InkInputLine, stripBracketedPasteMarkers, type InputEditAction } from "./ink-input-line.js";
+import { splitInkStaticHistory } from "./ink-static-history.js";
 import { refreshCliRuntimeSystemMessage, resetCliRuntimeMessages } from "./runtime-context.js";
 import { isLocalRuntimeQuestion, localeForText, renderLocalRuntimeAnswer } from "./runtime-answer.js";
 import { analyzePastedContext, appendPastedText, parseImagePromptCommand, summarizeImageRefs, summarizePastedContext } from "./pasted-context.js";
@@ -82,8 +83,12 @@ export async function runInkChat(args: ParsedArgs): Promise<number> {
       initialReasoning,
       initialMode,
       fallbackProvider,
-    }));
-    await instance.waitUntilExit();
+    }), { exitOnCtrlC: false });
+    try {
+      await instance.waitUntilExit();
+    } finally {
+      instance.unmount();
+    }
     // cast: TS can't see that waitUntilExit() let the /voice handler mutate the module var.
     const pending = pendingVoiceLaunch as ChatVoiceLaunch | null;
     if (!pending) return 0;
@@ -114,6 +119,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
   const app = useApp();
   const profile = useMemo(() => terminalTuiProfile(), []);
   const [input, setInput] = useState("");
+  const [cursorIndex, setCursorIndex] = useState(0);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
   const [frame, setFrame] = useState(0);
@@ -134,15 +140,24 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
   const placeholderFrame = Math.floor(frame / 43);
 
   useEffect(() => {
-    // Always animate (not only while busy) so the top flowing-light banner keeps flowing. Gated by
-    // profile.animation → safe/dumb terminals (and LYNN_CLI_NO_TUI_ANIMATION=1) get a static banner.
-    if (!profile.animation) return;
-    const timer = setInterval(() => setFrame((value) => value + 1), 140);
+    if (!busy || !profile.animation) return;
+    const timer = setInterval(() => setFrame((value) => value + 1), 100);
     return () => clearInterval(timer);
-  }, [profile.animation]);
+  }, [busy, profile.animation]);
+
+  const replaceInput = (next: string) => {
+    setInput(next);
+    setCursorIndex(Array.from(next).length);
+  };
+  const editInput = (action: InputEditAction) => {
+    const next = editInputBuffer(input, cursorIndex, action);
+    setInput(next.value);
+    setCursorIndex(next.cursor);
+  };
 
   useInput((value, key) => {
-    if (key.ctrl && value === "c") {
+    value = stripBracketedPasteMarkers(value);
+    if ((key.ctrl && value === "c") || value === "\u0003") {
       if (busy && activeAbortRef.current && !activeAbortRef.current.signal.aborted) {
         activeAbortRef.current.abort(new Error(t("chat.cancelled")));
         return;
@@ -157,7 +172,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
       if (!lines.slice(1).some((line) => line.length > 0)) {
         void submitInput({
           text: `${input}${lines[0] || ""}`,
-          setInput,
+          setInput: replaceInput,
           setTurns,
           setBusy,
           setProvider,
@@ -180,17 +195,23 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
         });
         return;
       }
-      setInput((current) => appendPastedText(current, value));
+      const pasted = cursorIndex === Array.from(input).length
+        ? appendPastedText(input, value).slice(input.length)
+        : value.replace(/\r\n?/g, "\n");
+      editInput({ type: "insert", text: pasted });
       return;
     }
     if (key.return && (key.shift || key.meta)) {
       const prefix = newlineIndex >= 0 ? value.slice(0, newlineIndex) : "";
-      setInput((current) => `${current}${prefix}\n`);
+      editInput({ type: "insert", text: `${prefix}\n` });
       return;
     }
     if (key.return && input.endsWith("\\")) {
       const prefix = newlineIndex >= 0 ? value.slice(0, newlineIndex) : "";
-      setInput((current) => `${current.slice(0, -1)}${prefix}\n`);
+      const withoutSlash = editInputBuffer(input, cursorIndex, { type: "backspace" });
+      const next = editInputBuffer(withoutSlash.value, withoutSlash.cursor, { type: "insert", text: `${prefix}\n` });
+      setInput(next.value);
+      setCursorIndex(next.cursor);
       return;
     }
     if (key.return) {
@@ -199,7 +220,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
       void emitThumbnails(submitted, effectiveCwd, setThumbs, profile.inlineImages);
       void submitInput({
         text: submitted,
-        setInput,
+        setInput: replaceInput,
         setTurns,
         setBusy,
         setProvider,
@@ -222,16 +243,36 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
       });
       return;
     }
-    if (key.backspace || key.delete) {
-      setInput((current) => Array.from(current).slice(0, -1).join(""));
+    if (key.ctrl && value === "a") {
+      editInput({ type: "home" });
+      return;
+    }
+    if (key.ctrl && value === "e") {
+      editInput({ type: "end" });
+      return;
+    }
+    if (key.leftArrow) {
+      editInput({ type: "left" });
+      return;
+    }
+    if (key.rightArrow) {
+      editInput({ type: "right" });
+      return;
+    }
+    if (key.backspace) {
+      editInput({ type: "backspace" });
+      return;
+    }
+    if (key.delete) {
+      editInput({ type: "delete" });
       return;
     }
     if (key.upArrow) {
-      setInput((current) => history.prev(current));
+      replaceInput(history.prev(input));
       return;
     }
     if (key.downArrow) {
-      setInput(history.next());
+      replaceInput(history.next());
       return;
     }
     if (key.tab) {
@@ -241,41 +282,39 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
         if (completion.matches.length > 1) {
           setTurns((current) => [...current, { id: Date.now(), role: "system", text: completion.matches.slice(0, 12).join("  "), meta: "completions" }]);
         }
-        setInput(completion.completed);
+        replaceInput(completion.completed);
         return;
       }
       const completion = completeSlash(input, CHAT_SLASH_COMMANDS);
       if (completion.matches.length > 1) {
         setTurns((current) => [...current, { id: Date.now(), role: "system", text: completion.matches.join("  "), meta: "completions" }]);
       }
-      setInput(completion.completed);
+      replaceInput(completion.completed);
       return;
     }
-    if (value) setInput((current) => current + value);
+    if (value) editInput({ type: "insert", text: value });
   });
 
-  const recentTurns = turns.slice(-8);
+  const { settledItems: settledTurns, activeItems: activeTurns } = splitInkStaticHistory(turns);
   return React.createElement(Box, { flexDirection: "column", paddingX: 1 },
+    turns.length === 0 ? React.createElement(Box, { flexDirection: "column", marginBottom: 1 },
+      React.createElement(Text, { bold: true }, `Lynn CLI · ${provider}`),
+      React.createElement(Text, { color: "gray" }, `${renderMode(mode)} · ${displayCwd(effectiveCwd)} · ${t("chat.voice.hint")}`),
+    ) : null,
+    thumbs.map((thumb) => React.createElement(Box, { key: thumb.id, height: 8 }, React.createElement(Text, null, thumb.esc))),
     React.createElement(Static, {
-      items: thumbs,
-      children: (item: unknown) => {
-        const thumb = item as Thumb;
-        return React.createElement(Box, { key: thumb.id, height: 8 }, React.createElement(Text, null, thumb.esc));
-      },
+      items: settledTurns,
+      children: (item: unknown) => React.createElement(TurnView, {
+        key: (item as Turn).id,
+        turn: item as Turn,
+      }),
     }),
-    React.createElement(InkTopBanner, { width: (process.stdout.columns || 80) - 4, frame, animated: profile.animation }),
-    React.createElement(Box, { borderStyle: "round", borderColor: "gray", paddingX: 1, flexDirection: "column" },
-      React.createElement(Text, { bold: true }, "Lynn CLI"),
-      React.createElement(Text, null, `模型: ${provider}`),
-      React.createElement(Text, null, `权限: ${renderMode(mode)}   Shift+Tab / /yolo / /ask`),
-      React.createElement(Text, null, `Brain: ${props.brainUrl}`),
-      React.createElement(Text, null, t("chat.voice.hint")),
-      React.createElement(Text, null, `目录: ${displayCwd(effectiveCwd)}   cd / --cwd 切换`),
-    ),
     React.createElement(Box, { marginTop: 1, flexDirection: "column" },
-      recentTurns.length
-        ? recentTurns.map((turn) => React.createElement(TurnView, { key: turn.id, turn }))
-        : React.createElement(Text, { color: "gray" }, t("chat.placeholder")),
+      activeTurns.length
+        ? activeTurns.map((turn) => React.createElement(TurnView, { key: turn.id, turn }))
+        : settledTurns.length === 0
+          ? React.createElement(Text, { color: "gray" }, t("chat.placeholder"))
+          : null,
     ),
     busy
       ? profile.animation
@@ -289,6 +328,7 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
     React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${decodeTps ? ` · decode ${decodeTps}` : ""}${usage ? ` · ${usage}` : ""}`),
     React.createElement(InkInputLine, {
       value: input,
+      cursorIndex,
       placeholder: profile.dynamicPlaceholders ? rotatingPlaceholder("chat", placeholderFrame) : t("chat.placeholder"),
       danger: mode.approval === "yolo" || mode.sandbox === "danger-full-access",
       commands: CHAT_SLASH_COMMANDS,
@@ -362,35 +402,6 @@ function InkSweep({ width, frame }: { width: number; frame: number }): React.Rea
       if (distance <= 3) return React.createElement(Text, { key: index, color: "gray" }, "─");
       return React.createElement(Text, { key: index }, " ");
     }),
-  );
-}
-
-// kimi-code-style flowing-light header. Pure render, gated by profile.animation (static fallback
-// on safe/dumb terminals). Reuses the shared `frame` counter — no extra timers.
-const BANNER_GRADIENT = ["cyan", "cyanBright", "blueBright", "blue", "magentaBright", "magenta", "blueBright", "cyanBright"];
-
-function InkTopBanner({ width, frame, animated }: { width: number; frame: number; animated: boolean }): React.ReactElement {
-  const barWidth = Math.max(16, Math.min(Number.isFinite(width) ? width : 72, 72));
-  const title = Array.from("◆ LYNN");
-  const head = (frame % (barWidth + 10)) - 5;
-  return React.createElement(Box, { flexDirection: "column", marginBottom: 1 },
-    React.createElement(Text, null,
-      ...title.map((ch, i) => React.createElement(Text, {
-        key: i,
-        color: animated ? BANNER_GRADIENT[(i + frame) % BANNER_GRADIENT.length] : "cyan",
-        bold: true,
-      }, ch)),
-      React.createElement(Text, { color: "gray" }, "  实时语音 · 编码 · 调研"),
-    ),
-    React.createElement(Text, null,
-      ...Array.from({ length: barWidth }, (_, i) => {
-        if (!animated) return React.createElement(Text, { key: i, color: "gray" }, "─");
-        const color = BANNER_GRADIENT[(i + frame) % BANNER_GRADIENT.length];
-        const distance = Math.abs(i - head);
-        const char = distance <= 1 ? "━" : "─";
-        return React.createElement(Text, { key: i, color, bold: distance === 0 }, char);
-      }),
-    ),
   );
 }
 
@@ -686,20 +697,42 @@ async function submitChatTurn(inputData: {
   inputData.messages.push({ role: "user", content: inputData.userContent });
   inputData.setBusy(true);
   inputData.setDecodeTps(null);
+  const abort = new AbortController();
+  inputData.activeAbortRef.current = abort;
 
   if (inputData.props.mockBrain) {
-    const answer = t("mock.response", { text: inputData.promptText });
-    inputData.messages.push({ role: "assistant", content: answer });
-    inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, text: answer, pending: false, meta: "mock Brain" } : turn));
-    inputData.setBusy(false);
+    try {
+      const mockDelay = Math.max(0, Number.parseInt(process.env.LYNN_CLI_MOCK_DELAY_MS || "0", 10) || 0);
+      if (mockDelay) await waitForMockDelay(mockDelay, abort.signal);
+      const answer = t("mock.response", { text: inputData.promptText });
+      inputData.messages.push({ role: "assistant", content: answer });
+      inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, text: answer, pending: false, meta: "mock Brain" } : turn));
+    } catch {
+      inputData.messages.pop();
+      inputData.setTurns((current) => current.map((turn) => turn.id === assistantId
+        ? { ...turn, text: t("chat.cancelled"), pending: false, error: true }
+        : turn));
+    } finally {
+      if (inputData.activeAbortRef.current === abort) inputData.activeAbortRef.current = null;
+      inputData.setBusy(false);
+    }
     return;
   }
 
   let assistant = "";
+  let renderedAssistant = "";
+  let renderTimer: ReturnType<typeof setTimeout> | null = null;
+  const flushAssistant = () => {
+    if (renderTimer) clearTimeout(renderTimer);
+    renderTimer = null;
+    if (renderedAssistant === assistant) return;
+    renderedAssistant = assistant;
+    inputData.setTurns((current) => current.map((turn) => turn.id === assistantId
+      ? { ...turn, text: renderedAssistant, pending: true }
+      : turn));
+  };
   const startedAt = Date.now();
   const decodeTracker = createDecodeSpeedTracker(startedAt);
-  const abort = new AbortController();
-  inputData.activeAbortRef.current = abort;
   try {
     for await (const event of streamBrainChat({
       brainUrl: inputData.props.brainUrl,
@@ -715,24 +748,38 @@ async function submitChatTurn(inputData: {
         inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, trace: appendReasoningTrace(turn.trace, event.text) } : turn));
       }
       if (event.type === "tool_progress") {
-        inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, pending: false, trace: updateToolTrace(turn.trace, event) } : turn));
+        inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, pending: true, trace: updateToolTrace(turn.trace, event) } : turn));
         continue;
       }
       if (event.type !== "assistant.delta") continue;
       assistant += event.text;
       const nextDecodeTps = decodeTracker.add(event.text);
       if (nextDecodeTps) inputData.setDecodeTps(nextDecodeTps);
-      inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, text: assistant, pending: false } : turn));
+      if (!renderTimer) renderTimer = setTimeout(flushAssistant, 40);
     }
+    flushAssistant();
     inputData.messages.push({ role: "assistant", content: assistant });
+    inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, text: assistant, pending: false } : turn));
   } catch (error) {
+    flushAssistant();
     inputData.messages.pop();
     const message = abort.signal.aborted
       ? t("chat.cancelled")
       : error instanceof Error ? error.message : String(error);
     inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, text: message, pending: false, error: true } : turn));
   } finally {
+    if (renderTimer) clearTimeout(renderTimer);
     if (inputData.activeAbortRef.current === abort) inputData.activeAbortRef.current = null;
     inputData.setBusy(false);
   }
+}
+
+function waitForMockDelay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => {
+      clearTimeout(timer);
+      reject(signal.reason || new Error('aborted'));
+    }, { once: true });
+  });
 }

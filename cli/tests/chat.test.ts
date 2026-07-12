@@ -833,6 +833,7 @@ os.close(slave)
 buf = b""
 sent_exit = False
 deadline = time.time() + 45
+ready_at = None
 while time.time() < deadline:
     readable, _, _ = select.select([master], [], [], 0.1)
     if readable:
@@ -844,9 +845,11 @@ while time.time() < deadline:
             break
         buf += chunk
         text = buf.decode("utf-8", errors="replace")
-        if (not sent_exit) and "Lynn CLI" in text:
-            os.write(master, b"/exit\\r")
-            sent_exit = True
+        if (not sent_exit) and ready_at is None and "Lynn CLI" in text and "›" in text:
+            ready_at = time.time() + 0.2
+    if (not sent_exit) and ready_at is not None and time.time() >= ready_at:
+        os.write(master, b"/exit\\r")
+        sent_exit = True
     if sent_exit and proc.poll() is not None:
         break
 if proc.poll() is None:

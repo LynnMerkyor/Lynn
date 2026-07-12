@@ -231,13 +231,12 @@ function SessionListInner() {
 
   return (
     <>
-      {searchOpen && (
-        <div className={styles.sessionSearchBar}>
+      <div className={styles.sessionSearchBar}>
           <input
             ref={searchRef}
             className={styles.sessionSearchInput}
             type="text"
-            placeholder={t('sidebar.search') || 'Search...'}
+            placeholder={t('sidebar.search') || '搜索会话、标签和内容'}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
@@ -245,7 +244,6 @@ function SessionListInner() {
             <button className={styles.sessionSearchClear} onClick={() => { setSearchQuery(''); searchRef.current?.focus(); }}>×</button>
           )}
         </div>
-      )}
       {searchQuery && filtered.length === 0 && (
         <div className={styles.sessionEmpty}>{t('sidebar.noResults') || 'No results'}</div>
       )}

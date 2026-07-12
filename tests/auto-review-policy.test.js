@@ -103,6 +103,34 @@ describe("auto review policy", () => {
     expect(decision.reasons).toContain("time_sensitive_or_market");
   });
 
+  it("reviews English medical and legal answers as high-stakes domains", () => {
+    const decision = decideAutoReviewTurn({
+      mode: "background",
+      sourceText: "This medication advice and contract interpretation should be checked carefully.",
+      ss: makeState({ hasOutput: true }),
+    });
+
+    expect(decision.shouldReview).toBe(true);
+    expect(decision.reasons).toContain("high_stakes_domain");
+  });
+
+  it("reviews semantic English current-fact claims without treating source code as a market trigger", () => {
+    const currentPrice = decideAutoReviewTurn({
+      mode: "background",
+      sourceText: "The current gold price is volatile.",
+      ss: makeState({ hasOutput: true }),
+    });
+    const sourceCode = decideAutoReviewTurn({
+      mode: "background",
+      sourceText: "The current source code keeps the cursor state in a React hook.",
+      ss: makeState({ hasOutput: true }),
+    });
+
+    expect(currentPrice.reasons).toContain("time_sensitive_or_market");
+    expect(sourceCode.shouldReview).toBe(false);
+    expect(sourceCode.reasons).not.toContain("time_sensitive_or_market");
+  });
+
   it("always reviews fallback turns so empty answers get a visible safety net", () => {
     const decision = decideAutoReviewTurn({
       mode: "fallback",

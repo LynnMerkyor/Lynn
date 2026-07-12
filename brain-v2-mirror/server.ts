@@ -12,7 +12,7 @@ import { registerDevice, verifySignedRequest, AuthError } from './auth.js';
 import { resolveClientIp } from './client-ip.js';
 import { createDailyQuota, parseDailyLimit } from './daily-quota.js';
 import { recordDeviceRegisterEvent } from './device-register-analytics.js';
-import { errorMessage, errorName, type ChatMessage, type ToolDefinition } from './types.js';
+import { errorMessage, errorName, providerId, type ChatMessage, type ToolDefinition } from './types.js';
 import { attachRealtimeUpgrade } from './voice-realtime-proxy.js';
 
 // H4 fix (2026-05-24): agentKey 是长期 bearer,不能进 INFO 日志 plaintext。
@@ -133,6 +133,9 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse, 
   const messages = (body.messages || []) as ChatMessage[];
   // v0.77.7: extra_body 透传 (OpenAI 标准, 客户端可传 thinking:{type:disabled} 关思考)
   const extraBody = (body.extra_body && typeof body.extra_body === "object") ? body.extra_body as JsonObject : null;
+  const reviewArbitration = device && String(req.headers['x-lynn-review-arbitration'] || '').trim() === 'mimo-token-plan-pro'
+    ? providerId('mimo-token-plan-pro')
+    : null;
   // Lynn ThinkingLevelButton (off/auto/high/xhigh) → Pi SDK reasoning_effort
   const reasoningEffort = (body.reasoning_effort || (extraBody && extraBody.reasoning_effort) || null) as string | null;
   const tools = (body.tools || null) as ToolDefinition[] | null;
@@ -147,6 +150,7 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse, 
   try {
     const result = await routerRun({
       messages, tools, capabilityRequired, extraBody, reasoningEffort,
+      ...(reviewArbitration ? { providerOrder: [reviewArbitration], strictProviderOrder: true } : {}),
       signal: ctrl.signal,
       onChunk: async (chunk, meta) => {
         if (clientDisconnected) return;

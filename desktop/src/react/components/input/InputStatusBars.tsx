@@ -131,6 +131,7 @@ export function InputStatusBars({
         onStart={localQwen.start}
         onOpenSettings={localQwen.openSettings}
         onSnooze={localQwen.snoozePrompt}
+        onDismissForever={localQwen.dismissPromptForever}
         onSetPanelOpen={localQwen.setPanelOpen}
       />
     </>

@@ -799,6 +799,7 @@ buf = b""
 sent_task = False
 sent_exit = False
 exit_ready_at = None
+input_ready_at = None
 deadline = time.time() + 75
 while time.time() < deadline:
     readable, _, _ = select.select([master], [], [], 0.1)
@@ -811,11 +812,13 @@ while time.time() < deadline:
             break
         buf += chunk
         text = buf.decode("utf-8", errors="replace")
-        if (not sent_task) and "Lynn Code" in text:
-            os.write(master, "hi\\r".encode("utf-8"))
-            sent_task = True
+        if (not sent_task) and input_ready_at is None and "Lynn Code" in text and "›" in text:
+            input_ready_at = time.time() + 0.2
         elif sent_task and (not sent_exit) and exit_ready_at is None and "模拟编码任务" in text and "Git:干净" in text:
             exit_ready_at = time.time() + 0.25
+    if (not sent_task) and input_ready_at is not None and time.time() >= input_ready_at:
+            os.write(master, "hi\\r".encode("utf-8"))
+            sent_task = True
     if sent_task and (not sent_exit) and exit_ready_at is not None and time.time() >= exit_ready_at:
             os.write(master, b"/exit\\r")
             sent_exit = True

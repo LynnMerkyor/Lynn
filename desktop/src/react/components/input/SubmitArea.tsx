@@ -1,4 +1,4 @@
-import type { ChangeEvent, MutableRefObject } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type MutableRefObject } from 'react';
 import type { ThinkingLevel } from '../../stores/model-slice';
 import { ContextRing } from './ContextRing';
 import { SessionCostChip } from './SessionCostChip';
@@ -63,6 +63,22 @@ export function SubmitArea({
   onSteer,
   onStop,
 }: SubmitAreaProps) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const close = (event: KeyboardEvent | MouseEvent) => {
+      if (event instanceof KeyboardEvent && event.key === 'Escape') setMoreOpen(false);
+      if (event instanceof MouseEvent && !moreRef.current?.contains(event.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener('keydown', close);
+    document.addEventListener('mousedown', close);
+    return () => {
+      document.removeEventListener('keydown', close);
+      document.removeEventListener('mousedown', close);
+    };
+  }, [moreOpen]);
+
   return (
     <div className={styles['input-bottom-bar']}>
       <div className={styles['input-actions']}>
@@ -85,20 +101,34 @@ export function SubmitArea({
           </svg>
         </button>
         <TaskModePicker />
-        <button
-          type="button"
-          className={`${styles['deep-research-pill']} ${deepResearchOpen ? styles['deep-research-pill-active'] : ''}`}
-          onClick={onDeepResearchToggle}
-          disabled={deepResearchBusy}
-          title="深度调研：生成可预览 HTML 报告"
-          aria-pressed={deepResearchOpen}
-          aria-label="深度调研"
-        >
-          <span className={styles['deep-research-pill-mark']}>⌁</span>
-          <span>深研</span>
-        </button>
-        <SecurityModeSelector />
-        <WritingModeToggle />
+        <div ref={moreRef} className={styles['composer-more']}>
+          <button
+            type="button"
+            className={styles['attach-btn']}
+            onClick={() => setMoreOpen((open) => !open)}
+            aria-label="更多输入选项"
+            aria-expanded={moreOpen}
+            title="更多输入选项"
+          >
+            ⋯
+          </button>
+          {moreOpen && (
+            <div className={styles['composer-more-menu']} role="menu" aria-label="更多输入选项">
+              <button
+                type="button"
+                className={`${styles['deep-research-pill']} ${deepResearchOpen ? styles['deep-research-pill-active'] : ''}`}
+                onClick={onDeepResearchToggle}
+                disabled={deepResearchBusy}
+                aria-pressed={deepResearchOpen}
+              >
+                <span className={styles['deep-research-pill-mark']}>⌁</span>
+                <span>深度调研</span>
+              </button>
+              <SecurityModeSelector />
+              <WritingModeToggle />
+            </div>
+          )}
+        </div>
       </div>
       <div className={styles['input-controls']}>
         {showThinkingControl && (

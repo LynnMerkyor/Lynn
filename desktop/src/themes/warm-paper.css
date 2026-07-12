@@ -17,8 +17,8 @@
 
     /* 文字 */
     --text:         #3B3D3F;
-    --text-light:   #6B6F73;
-    --text-muted:   #8E9196;
+    --text-light:   #5F6469;
+    --text-muted:   #6F7479;
 
     /* 边框与阴影 */
     --border:       rgba(83, 125, 150, 0.22);

@@ -102,7 +102,7 @@ describe("colored cards (统一彩色卡片)", () => {
   it("draws a colored left gutter, glyph, bold title and dim body", () => {
     const card = renderCard({ kind: "tool", title: "web_search · done", body: ["3 results"] }, true);
     const plain = stripAnsi(card);
-    expect(plain).toContain("│ 🔧 web_search · done");
+    expect(plain).toContain("│ > web_search · done");
     expect(plain).toContain("│   3 results");
     expect(card).toContain("\x1b[36m│\x1b[0m"); // tool → cyan gutter
     // 只有左 gutter:每行至多一个 │(无右边框 → 无滚动残骸)
@@ -182,7 +182,7 @@ describe("TerminalSpinner class", () => {
     spinner.stop();
     const last = calls(stream).at(-1)?.[0] as string;
     expect(last.startsWith("\r")).toBe(true);
-    expect(last.trim()).toBe(""); // 清场:仅 \r + 空格
+    expect(last).toBe("\r\u001b[2K"); // ANSI EL2 清整行，不依赖固定终端宽度
   });
 
   it("no-ops on a non-TTY stream", () => {

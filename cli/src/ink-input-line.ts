@@ -7,12 +7,14 @@ import { visibleLength } from "./startup.js";
 export interface InkInputLineProps {
   value: string;
   placeholder: string;
+  cursorIndex?: number;
+  focused?: boolean;
   danger?: boolean;
   commands?: string[];
   contextSummary?: string;
 }
 
-export function InkInputLine({ value, placeholder, danger, commands = [], contextSummary = "" }: InkInputLineProps): React.ReactElement {
+export function InkInputLine({ value, placeholder, cursorIndex, focused = true, danger, commands = [], contextSummary = "" }: InkInputLineProps): React.ReactElement {
   const { stdout } = useStdout();
   const prompt = "› ";
   const width = Math.max(20, (stdout.columns || 80) - 2);
@@ -21,6 +23,8 @@ export function InkInputLine({ value, placeholder, danger, commands = [], contex
   const showUnknownSlash = !paletteItems.length && normalizeSlashInput(value).startsWith("/") && commands.length > 0;
   const visibleText = value || placeholder;
   const rows = inputDisplayRows(visibleText, hint, width, prompt);
+  const cursor = Math.max(0, Math.min(cursorIndex ?? Array.from(value).length, Array.from(value).length));
+  let rowOffset = 0;
   const borderColor = danger ? "red" : "gray";
   return React.createElement(Box, { marginTop: 1, flexDirection: "column" },
     paletteItems.length
@@ -32,14 +36,82 @@ export function InkInputLine({ value, placeholder, danger, commands = [], contex
       : showUnknownSlash ? React.createElement(Text, { color: "yellow" }, t("slash.unknown")) : null,
     contextSummary ? React.createElement(Text, { color: "cyan" }, `已加入本轮上下文: ${contextSummary}`) : null,
     React.createElement(Box, { borderStyle: "single", borderColor, paddingX: 1, flexDirection: "column" },
-      ...rows.map((row, index) => React.createElement(Box, { key: index },
+      ...rows.map((row, index) => {
+        const rowLength = Array.from(row.text).length;
+        const cursorColumn = value && focused && cursor >= rowOffset && cursor <= rowOffset + rowLength
+          ? cursor - rowOffset
+          : null;
+        rowOffset += rowLength + (index < rows.length - 1 ? 1 : 0);
+        return React.createElement(Box, { key: index },
         React.createElement(Text, { color: "white" }, row.prompt),
-        React.createElement(Text, { color: value ? "white" : "gray" }, row.text),
+        value
+          ? renderEditableText(row.text, cursorColumn)
+          : React.createElement(React.Fragment, null,
+            focused ? React.createElement(Text, { inverse: true }, " ") : null,
+            React.createElement(Text, { color: "gray" }, row.text),
+          ),
         row.hint ? React.createElement(Text, { color: "cyan", dimColor: true }, ` ${row.hint}`) : null,
         row.pad ? React.createElement(Text, null, " ".repeat(row.pad)) : null,
-      )),
+        );
+      }),
     ),
   );
+}
+
+function renderEditableText(value: string, cursorColumn: number | null): React.ReactElement {
+  if (cursorColumn === null) return React.createElement(Text, { color: "white" }, value);
+  const chars = Array.from(value);
+  const before = chars.slice(0, cursorColumn).join("");
+  const cursorChar = chars[cursorColumn] || " ";
+  const after = chars.slice(cursorColumn + (chars[cursorColumn] ? 1 : 0)).join("");
+  return React.createElement(Text, { color: "white" },
+    before,
+    React.createElement(Text, { inverse: true }, cursorChar),
+    after,
+  );
+}
+
+export interface InputBufferState {
+  value: string;
+  cursor: number;
+}
+
+export type InputEditAction =
+  | { type: "insert"; text: string }
+  | { type: "backspace" }
+  | { type: "delete" }
+  | { type: "left" }
+  | { type: "right" }
+  | { type: "home" }
+  | { type: "end" };
+
+export function editInputBuffer(value: string, cursorIndex: number, action: InputEditAction): InputBufferState {
+  const chars = Array.from(value);
+  const cursor = Math.max(0, Math.min(cursorIndex, chars.length));
+  if (action.type === "insert") {
+    const inserted = Array.from(action.text);
+    chars.splice(cursor, 0, ...inserted);
+    return { value: chars.join(""), cursor: cursor + inserted.length };
+  }
+  if (action.type === "backspace") {
+    if (cursor > 0) chars.splice(cursor - 1, 1);
+    return { value: chars.join(""), cursor: Math.max(0, cursor - 1) };
+  }
+  if (action.type === "delete") {
+    if (cursor < chars.length) chars.splice(cursor, 1);
+    return { value: chars.join(""), cursor };
+  }
+  if (action.type === "left") return { value, cursor: Math.max(0, cursor - 1) };
+  if (action.type === "right") return { value, cursor: Math.min(chars.length, cursor + 1) };
+  if (action.type === "home") return { value, cursor: 0 };
+  return { value, cursor: chars.length };
+}
+
+export function stripBracketedPasteMarkers(value: string): string {
+  return value
+    .replace(/\u001b\[(?:200|201)~/g, '')
+    .replace(/^\[200~/, '')
+    .replace(/\[201~$/, '');
 }
 
 export function inputDisplayRows(value: string, hint: string, width: number, prompt = "› "): Array<{ prompt: string; text: string; hint: string; pad: number }> {

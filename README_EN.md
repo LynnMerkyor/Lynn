@@ -95,12 +95,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.86.0
+Lynn --version  # should print 0.86.1
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -126,7 +126,28 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details open>
-<summary><strong>Lynn v0.86.0</strong> · 2026-07-12 · Security boundaries and runtime reliability <em>(latest)</em></summary>
+<summary><strong>Lynn v0.86.1</strong> · 2026-07-12 · GUI/CLI interaction and local-model management <em>(latest)</em></summary>
+
+**v0.86.1 UX and reliability update**:
+- Busy Ctrl+C now cancels only the active Ink turn and keeps the REPL alive; the full Ink PTY gate requires cancellation within one second and a clean final exit.
+- CLI history uses persistent `Static` output, streamed Markdown is batched, tool start/end share one row, and the input line has a visible movable cursor.
+- The default 27B Q4 imatrix MTP download reports real aggregate progress, shard count, speed, and ETA, with pause/resume/cancel/delete controls.
+- Eligible devices can snooze the local-model recommendation for seven days or dismiss it permanently; low-spec devices remain free of proactive prompts.
+- Session search is always visible, long chats have a jump-to-latest button, low-frequency composer controls live under More, and Stop gives immediate feedback.
+- User-facing errors no longer expose opaque transport codes, and warm/dark theme secondary text now meets a stronger contrast baseline.
+- High-stakes answers use heterogeneous review: DS V4 Flash remains the fast asynchronous reviewer, while a DS V4 concern on medical, legal, financial, or current-fact answers can trigger one time-bounded MiMo 2.5 Pro Token Plan arbitration. It never blocks or automatically rewrites the original answer, and both GUI and CLI expose the structured outcome.
+- All V0.86 security boundaries remain enabled and covered by security, Agent regression, CLI100, GUI100, packaged, signing, and notarization gates.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz"
+```
+
+[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.1)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.86.0</strong> · 2026-07-12 · Security boundaries and runtime reliability</summary>
 
 **v0.86.0 security, runtime, and UX update**:
 - Model-driven browser sessions deny microphone, camera, location, notification, and storage access by default; navigation and subresources pass DNS/SSRF checks.
@@ -1043,7 +1064,7 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases). The V0.86.0 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases). The V0.86.1 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
 **Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases).
 
@@ -1110,8 +1131,8 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.85.6 notarized DMG) |
-| macOS (Intel) | Supported (V0.85.6 notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.86.1 notarized DMG) |
+| macOS (Intel) | Supported (V0.86.1 notarized DMG) |
 | Windows | Beta |
 | Linux | Planned |
 | Mobile (PWA) | Planned |

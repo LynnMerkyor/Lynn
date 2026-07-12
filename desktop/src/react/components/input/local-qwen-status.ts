@@ -5,15 +5,20 @@ export const LOCAL_QWEN_SHORT_NAME = 'Qwen3.6-27B';
 export const LOCAL_QWEN35_ENDPOINT = 'http://127.0.0.1:18099/v1';
 export const LOCAL_QWEN_PROMPT_DISMISS_KEY = 'lynn-local-model-prompt-dismissed-date';
 export const LOCAL_QWEN_PROMPT_SHOWN_KEY = 'lynn-local-model-prompt-shown-date';
+export const LOCAL_QWEN_PROMPT_SNOOZE_UNTIL_KEY = 'lynn-local-model-prompt-snooze-until';
+export const LOCAL_QWEN_PROMPT_NEVER_KEY = 'lynn-local-model-prompt-never';
 export const LOCAL_QWEN_PROMPT_DELAY_MS = 8_000;
 
 export interface LocalQwenPromptStorage {
   getItem(key: string): string | null;
 }
 
-export function isLocalQwenPromptSnoozed(storage: LocalQwenPromptStorage, today = todayKey()) {
+export function isLocalQwenPromptSnoozed(storage: LocalQwenPromptStorage, now = Date.now()) {
   try {
-    return storage.getItem(LOCAL_QWEN_PROMPT_DISMISS_KEY) === today;
+    if (storage.getItem(LOCAL_QWEN_PROMPT_NEVER_KEY) === '1') return true;
+    const until = Number(storage.getItem(LOCAL_QWEN_PROMPT_SNOOZE_UNTIL_KEY) || 0);
+    if (Number.isFinite(until) && until > now) return true;
+    return storage.getItem(LOCAL_QWEN_PROMPT_DISMISS_KEY) === todayKey(new Date(now));
   } catch {
     return false;
   }
@@ -86,8 +91,8 @@ export type LocalQwen35RuntimeStatus = {
 
 export type LocalQwenWarmupStage = 'ready' | 'launching' | 'loading' | 'checking';
 
-export function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+export function todayKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
 }
 
 export function deriveLocalQwenRuntimeState(

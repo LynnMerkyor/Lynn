@@ -49,7 +49,7 @@ export type BrainStreamEvent =
   | { type: "tool_progress"; event: string; name: string; ms?: number; ok?: boolean; summary?: string; details?: string[]; argsSummary?: string }
   | { type: "review_start"; reviewId: string; reviewerName?: string; reviewerModelLabel?: string; autoReview?: boolean; reviewMode?: string | null; triggerReasons?: string[] }
   | { type: "review_progress"; reviewId: string; stage?: string; findingsCount?: number; verdict?: string; workflowGate?: string; autoReview?: boolean; reviewMode?: string | null; triggerReasons?: string[] }
-  | { type: "review_result"; reviewId: string; content?: string; error?: string; reviewerName?: string; reviewerModelLabel?: string; autoReview?: boolean; reviewMode?: string | null; triggerReasons?: string[] }
+  | { type: "review_result"; reviewId: string; content?: string; error?: string; reviewerName?: string; reviewerModelLabel?: string; autoReview?: boolean; reviewMode?: string | null; triggerReasons?: string[]; structured?: Record<string, unknown>; secondOpinion?: Record<string, unknown>; fallbackNote?: string }
   | { type: "brain.error"; error: string; code?: string }
   | { type: "usage"; usage: unknown }
   | { type: "done"; finishReason?: string | null };
@@ -143,6 +143,9 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
     verdict?: unknown;
     workflowGate?: unknown;
     content?: unknown;
+    structured?: unknown;
+    secondOpinion?: unknown;
+    fallbackNote?: unknown;
     choices?: Array<{
       delta?: {
         content?: unknown;
@@ -194,6 +197,13 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
       reviewerModelLabel: typeof parsed.reviewerModelLabel === "string" ? parsed.reviewerModelLabel : undefined,
       content: typeof parsed.content === "string" ? parsed.content : undefined,
       error: typeof parsed.error === "string" ? parsed.error : undefined,
+      structured: parsed.structured && typeof parsed.structured === "object" && !Array.isArray(parsed.structured)
+        ? parsed.structured as Record<string, unknown>
+        : undefined,
+      secondOpinion: parsed.secondOpinion && typeof parsed.secondOpinion === "object" && !Array.isArray(parsed.secondOpinion)
+        ? parsed.secondOpinion as Record<string, unknown>
+        : undefined,
+      fallbackNote: typeof parsed.fallbackNote === "string" ? parsed.fallbackNote : undefined,
     });
   }
   if (parsed.object === "lynn.provider") {

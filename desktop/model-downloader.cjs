@@ -121,6 +121,7 @@ class ModelDownloader extends EventEmitter {
     this.lastError = null;
     this.activeSourceLabel = null;
     this.attemptedSources = new Set();
+    this.runGeneration = 0;
   }
 
   // ── public API ──
@@ -132,8 +133,10 @@ class ModelDownloader extends EventEmitter {
     }
     this.aborted = false;
     this.paused = false;
+    this.runGeneration += 1;
     this.lastError = null;
     this.attemptedSources.clear();
+    this._sourceAttemptCounts = new Map();
     return new Promise((resolve) => {
       this._finishResolve = resolve;
       try {
@@ -163,10 +166,17 @@ class ModelDownloader extends EventEmitter {
 
   /** Cancel + leave .part on disk for later resume. */
   pause() {
-    if (this.state !== "downloading") return;
+    if (this.state !== "downloading") return false;
     this.paused = true;
     this._setState("paused");
     this._teardownActive();
+    // A parallel download resumes from its range segments, never from a partially
+    // merged output file. Remove that file before start() can begin a new generation.
+    if (this.parallelSegmentPaths.length > 0) {
+      try { fs.rmSync(this.partPath, { force: true }); } catch {}
+    }
+    this._finish({ ok: false, reason: "paused" });
+    return true;
   }
 
   /** Cancel + delete .part. */
@@ -202,8 +212,8 @@ class ModelDownloader extends EventEmitter {
 
   // ── source rotation ──
 
-  _beginNextSource() {
-    if (this.aborted) return;
+  _beginNextSource(generation = this.runGeneration) {
+    if (this.aborted || this.paused || generation !== this.runGeneration) return;
     // #4: per-source retry budget — each source can be tried up to PER_SOURCE_RETRIES times
     // before being marked exhausted. Survives a single transient mirror outage during
     // a 5+GB download instead of declaring "all-sources-failed" after one round.
@@ -234,25 +244,26 @@ class ModelDownloader extends EventEmitter {
       && this.expectedSize > 0
       && safeStatSize(this.partPath) === 0;
     const task = canTryParallel
-      ? this._downloadFromSourceParallel(src.url, 0)
-      : this._downloadFromSource(src.url, 0);
+      ? this._downloadFromSourceParallel(src.url, 0, generation)
+      : this._downloadFromSource(src.url, 0, generation);
     task.catch((err) => {
-      if (this.aborted || this.paused) return;
+      if (generation !== this.runGeneration || this.aborted || this.paused) return;
       this._log("warn", `[download] source ${src.label} attempt ${attempt} failed: ${err?.message || err}`);
       this._teardownActive();
       // Brief jitter before next attempt to avoid thundering retry
       const jitterMs = 500 + Math.floor(Math.random() * 1500);
-      setTimeout(() => this._beginNextSource(), jitterMs);
+      setTimeout(() => {
+        if (generation !== this.runGeneration || this.aborted || this.paused) return;
+        this._beginNextSource(generation);
+      }, jitterMs);
     });
   }
 
-  async _downloadFromSourceParallel(urlStr, redirectsLeft) {
-    if (this.aborted || this.paused) return;
+  async _downloadFromSourceParallel(urlStr, redirectsLeft, generation = this.runGeneration) {
+    if (this.aborted || this.paused || generation !== this.runGeneration) return;
     ensureDirSync(path.dirname(this.target));
-    this.bytesTransferred = 0;
     this.totalBytes = this.expectedSize;
     this.activeHash = null;
-    this._emitProgress(true);
 
     const segments = [];
     const segmentSize = Math.ceil(this.expectedSize / this.parallelSegments);
@@ -260,60 +271,102 @@ class ModelDownloader extends EventEmitter {
       const start = i * segmentSize;
       const end = Math.min(this.expectedSize - 1, start + segmentSize - 1);
       if (start <= end) {
-      segments.push({
+        const segmentPath = `${this.partPath}.seg${i}`;
+        const expectedBytes = end - start + 1;
+        const existingBytes = safeStatSize(segmentPath);
+        if (existingBytes > expectedBytes) {
+          try { fs.rmSync(segmentPath, { force: true }); } catch {}
+        }
+        const reusableBytes = existingBytes <= expectedBytes ? existingBytes : 0;
+        segments.push({
           index: i,
-          start,
+          start: start + reusableBytes,
           end,
-          path: `${this.partPath}.seg${i}`,
+          path: segmentPath,
+          existingBytes: reusableBytes,
+          complete: reusableBytes === expectedBytes,
         });
       }
     }
-    for (const seg of segments) {
-      try { fs.rmSync(seg.path, { force: true }); } catch {}
-    }
+    this.bytesTransferred = segments.reduce((sum, seg) => sum + seg.existingBytes, 0);
+    this._emitProgress(true);
     this.parallelSegmentPaths = segments.map((seg) => seg.path);
 
     try {
-      await Promise.all(segments.map((seg) => this._downloadRangeSegment(urlStr, seg, redirectsLeft)));
+      await Promise.all(segments
+        .filter((seg) => !seg.complete)
+        .map((seg) => this._downloadRangeSegment(urlStr, seg, redirectsLeft, generation)));
     } catch (err) {
-      if (this.aborted || this.paused) return;
+      if (this.aborted || this.paused || generation !== this.runGeneration) return;
       this._teardownActive();
-      for (const seg of segments) {
-        try { fs.rmSync(seg.path, { force: true }); } catch {}
-      }
-      this.parallelSegmentPaths = [];
       if (/range-not-supported|http 200/.test(String(err?.message || err))) {
+        for (const seg of segments) {
+          try { fs.rmSync(seg.path, { force: true }); } catch {}
+        }
+        this.parallelSegmentPaths = [];
         this._log("warn", "[download] parallel range unavailable — falling back to single connection");
-        return this._downloadFromSource(urlStr, redirectsLeft);
+        return this._downloadFromSource(urlStr, redirectsLeft, generation);
       }
       throw err;
     }
-    if (this.aborted || this.paused) return;
+    if (this.aborted || this.paused || generation !== this.runGeneration) return;
 
-    await new Promise((resolve, reject) => {
-      const out = fs.createWriteStream(this.partPath, { flags: "w" });
-      out.on("error", reject);
-      out.on("finish", resolve);
-      let chain = Promise.resolve();
-      for (const seg of segments) {
-        chain = chain.then(() => new Promise((segResolve, segReject) => {
-          const input = fs.createReadStream(seg.path);
-          input.on("error", segReject);
-          input.on("end", segResolve);
-          input.pipe(out, { end: false });
-        }));
-      }
-      chain.then(() => out.end(), (err) => {
-        try { out.destroy(); } catch {}
-        reject(err);
+    try {
+      await new Promise((resolve, reject) => {
+        const out = fs.createWriteStream(this.partPath, { flags: "w" });
+        this.parallelStreams.push(out);
+        out.on("error", reject);
+        out.on("finish", resolve);
+        out.on("close", () => {
+          if (this.aborted || this.paused || generation !== this.runGeneration) resolve();
+        });
+        let chain = Promise.resolve();
+        for (const seg of segments) {
+          chain = chain.then(() => new Promise((segResolve, segReject) => {
+            if (this.aborted || this.paused || generation !== this.runGeneration) {
+              segResolve();
+              return;
+            }
+            const input = fs.createReadStream(seg.path);
+            this.parallelStreams.push(input);
+            input.on("error", segReject);
+            input.on("end", segResolve);
+            input.on("close", () => {
+              if (this.aborted || this.paused || generation !== this.runGeneration) segResolve();
+            });
+            input.pipe(out, { end: false });
+          }));
+        }
+        chain.then(() => {
+          if (this.aborted || this.paused || generation !== this.runGeneration) return;
+          out.end();
+        }, (err) => {
+          try { out.destroy(); } catch {}
+          reject(err);
+        });
       });
-    });
+    } catch (err) {
+      if (generation !== this.runGeneration) return;
+      if (this.aborted || this.paused) {
+        try { fs.rmSync(this.partPath, { force: true }); } catch {}
+        if (this.aborted) this._cleanupParallelSegments();
+        return;
+      }
+      throw err;
+    }
+    if (generation !== this.runGeneration) return;
+    this.parallelStreams = [];
+    if (this.aborted || this.paused) {
+      try { fs.rmSync(this.partPath, { force: true }); } catch {}
+      if (this.aborted) this._cleanupParallelSegments();
+      return;
+    }
     for (const seg of segments) {
       try { fs.rmSync(seg.path, { force: true }); } catch {}
     }
     this.parallelSegmentPaths = [];
 
-    const ok = await this._finalizeDownload();
+    const ok = await this._finalizeDownload(generation);
     if (ok === "verified") {
       this._setState("done", { sourceLabel: this.activeSourceLabel });
       this._finish({ ok: true });
@@ -328,8 +381,8 @@ class ModelDownloader extends EventEmitter {
     throw new Error(String(ok));
   }
 
-  _downloadRangeSegment(urlStr, segment, redirectsLeft) {
-    if (this.aborted || this.paused) return Promise.resolve();
+  _downloadRangeSegment(urlStr, segment, redirectsLeft, generation = this.runGeneration) {
+    if (this.aborted || this.paused || generation !== this.runGeneration) return Promise.resolve();
     const url = new URL(validateModelSourceUrl(urlStr, {
       context: "model-source-redirect",
       enforceGgufPath: false,
@@ -352,7 +405,7 @@ class ModelDownloader extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       req.on("response", (res) => {
-        if (this.aborted || this.paused) {
+        if (this.aborted || this.paused || generation !== this.runGeneration) {
           try { res.destroy(); } catch {}
           resolve();
           return;
@@ -368,7 +421,7 @@ class ModelDownloader extends EventEmitter {
             context: "model-source-redirect",
             enforceGgufPath: false,
           });
-          this._downloadRangeSegment(next, segment, redirectsLeft + 1).then(resolve, reject);
+          this._downloadRangeSegment(next, segment, redirectsLeft + 1, generation).then(resolve, reject);
           return;
         }
         if (res.statusCode === 200) {
@@ -386,11 +439,13 @@ class ModelDownloader extends EventEmitter {
         if (Number.isFinite(reportedTotal) && reportedTotal > 0) {
           this.totalBytes = reportedTotal;
         }
-        const fileStream = fs.createWriteStream(segment.path, { flags: "w" });
+        const fileStream = fs.createWriteStream(segment.path, {
+          flags: segment.existingBytes > 0 ? "a" : "w",
+        });
         this.parallelStreams.push(fileStream);
         let segmentBytes = 0;
         res.on("data", (chunk) => {
-          if (this.aborted || this.paused) {
+          if (this.aborted || this.paused || generation !== this.runGeneration) {
             try { res.destroy(); } catch {}
             return;
           }
@@ -405,7 +460,11 @@ class ModelDownloader extends EventEmitter {
         fileStream.on("error", reject);
         fileStream.on("finish", () => {
           const expected = segment.end - segment.start + 1;
-          if (!this.aborted && !this.paused && segmentBytes !== expected) {
+          if (generation !== this.runGeneration || this.aborted || this.paused) {
+            resolve();
+            return;
+          }
+          if (segmentBytes !== expected) {
             reject(new Error(`segment-incomplete-${segment.index}`));
             return;
           }
@@ -421,24 +480,26 @@ class ModelDownloader extends EventEmitter {
     });
   }
 
-  async _downloadFromSource(urlStr, redirectsLeft) {
-    if (this.aborted || this.paused) return;
+  async _downloadFromSource(urlStr, redirectsLeft, generation = this.runGeneration) {
+    if (this.aborted || this.paused || generation !== this.runGeneration) return;
     ensureDirSync(path.dirname(this.target));
     const existingPartSize = safeStatSize(this.partPath);
     this.bytesTransferred = existingPartSize;
     // Hash must include the bytes already on disk if any.
-    this.activeHash = crypto.createHash("sha256");
+    let activeHash = crypto.createHash("sha256");
     if (existingPartSize > 0) {
       try {
-        await this._rehashExisting();
+        await this._rehashExisting(activeHash);
       } catch (err) {
+        if (this.aborted || this.paused || generation !== this.runGeneration) return;
         // hash setup failed — restart .part
         this._log("warn", `[download] rehash failed, restarting: ${err?.message || err}`);
         try { fs.rmSync(this.partPath, { force: true }); } catch {}
         this.bytesTransferred = 0;
-        this.activeHash = crypto.createHash("sha256");
+        activeHash = crypto.createHash("sha256");
       }
     }
+    if (this.aborted || this.paused || generation !== this.runGeneration) return;
 
     const url = new URL(validateModelSourceUrl(urlStr, {
       context: "model-source-redirect",
@@ -463,7 +524,7 @@ class ModelDownloader extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       req.on("response", (res) => {
-        if (this.aborted) {
+        if (this.aborted || this.paused || generation !== this.runGeneration) {
           try { res.destroy(); } catch {}
           return resolve();
         }
@@ -479,7 +540,7 @@ class ModelDownloader extends EventEmitter {
             enforceGgufPath: false,
           });
           this._log("info", `[download] redirect → ${next}`);
-          this._downloadFromSource(next, redirectsLeft + 1).then(resolve, reject);
+          this._downloadFromSource(next, redirectsLeft + 1, generation).then(resolve, reject);
           return;
         }
         // Range mismatch -> server doesn't support resume, restart .part
@@ -488,7 +549,7 @@ class ModelDownloader extends EventEmitter {
           this._log("warn", "[download] server returned 200 (no range support) — restarting .part");
           try { fs.rmSync(this.partPath, { force: true }); } catch {}
           this.bytesTransferred = 0;
-          this.activeHash = crypto.createHash("sha256");
+          activeHash = crypto.createHash("sha256");
         } else if (res.statusCode !== 200 && res.statusCode !== 206) {
           try { res.destroy(); } catch {}
           return reject(new Error(`http ${res.statusCode}`));
@@ -511,11 +572,11 @@ class ModelDownloader extends EventEmitter {
         this.activeStream = fileStream;
 
         res.on("data", (chunk) => {
-          if (this.aborted || this.paused) {
+          if (this.aborted || this.paused || generation !== this.runGeneration) {
             try { res.destroy(); } catch {}
             return;
           }
-          this.activeHash.update(chunk);
+          activeHash.update(chunk);
           this.bytesTransferred += chunk.length;
           this._emitProgress(false);
         });
@@ -530,10 +591,9 @@ class ModelDownloader extends EventEmitter {
         res.pipe(fileStream);
 
         fileStream.on("finish", () => {
-          if (this.aborted) return resolve();
-          if (this.paused) return resolve();
+          if (this.aborted || this.paused || generation !== this.runGeneration) return resolve();
           // All bytes received from this response. Check if more pending (Range continuation handled by server in single response).
-          this._finalizeDownload().then((ok) => {
+          this._finalizeDownload(generation, activeHash).then((ok) => {
             if (ok === "verified") {
               this._setState("done", { sourceLabel: this.activeSourceLabel });
               this._finish({ ok: true });
@@ -561,16 +621,17 @@ class ModelDownloader extends EventEmitter {
     });
   }
 
-  async _rehashExisting() {
+  async _rehashExisting(hash = this.activeHash) {
     return new Promise((resolve, reject) => {
       const rs = fs.createReadStream(this.partPath);
-      rs.on("data", (chunk) => this.activeHash.update(chunk));
+      rs.on("data", (chunk) => hash.update(chunk));
       rs.on("error", reject);
       rs.on("end", resolve);
     });
   }
 
-  async _finalizeDownload() {
+  async _finalizeDownload(generation = this.runGeneration, hash = this.activeHash) {
+    if (generation !== this.runGeneration || this.aborted || this.paused) return "cancelled";
     const size = safeStatSize(this.partPath);
     if (this.expectedSize > 0) {
       const tolerance = Math.max(1024 * 1024, Math.floor(this.expectedSize * 0.005));
@@ -582,18 +643,21 @@ class ModelDownloader extends EventEmitter {
         }
       }
     }
+    if (generation !== this.runGeneration || this.aborted || this.paused) return "cancelled";
     this._setState("verifying", { sourceLabel: this.activeSourceLabel });
     if (this.expectedSha256) {
-      const digest = this.activeHash
-        ? this.activeHash.digest("hex")
+      const digest = hash
+        ? hash.digest("hex")
         : await this._hashFile(this.partPath);
+      if (generation !== this.runGeneration || this.aborted || this.paused) return "cancelled";
       if (digest.toLowerCase() !== this.expectedSha256) {
         this._log("error", `[download] sha256 mismatch got=${digest} expected=${this.expectedSha256}`);
         return "checksum-failed";
       }
-    } else if (this.activeHash) {
-      this.activeHash.digest("hex");
+    } else if (hash) {
+      hash.digest("hex");
     }
+    if (generation !== this.runGeneration || this.aborted || this.paused) return "cancelled";
     // atomic rename .part → target
     try {
       fs.renameSync(this.partPath, this.target);

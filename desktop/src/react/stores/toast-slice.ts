@@ -1,3 +1,5 @@
+import { humanizeUiError } from '../utils/humanize-ui-error';
+
 export interface Toast {
   id: number;
   text: string;
@@ -32,6 +34,7 @@ export const createToastSlice = (
   toasts: [],
   addToast: (text, type = 'info', duration = 5000, opts = {}) => {
     const id = ++_toastId;
+    const displayText = type === 'error' ? humanizeUiError(text) : text;
 
     if (opts.dedupeKey) {
       const existing = get().toasts;
@@ -41,7 +44,7 @@ export const createToastSlice = (
     const persistent = opts.persistent ?? false;
 
     set((s) => {
-      let toasts = [...s.toasts, { id, text, type, ...opts, persistent }];
+      let toasts = [...s.toasts, { id, text: displayText, type, ...opts, persistent }];
 
       const persistentCount = toasts.filter(t => t.persistent).length;
       if (persistentCount > MAX_PERSISTENT) {

@@ -1,45 +1,42 @@
-# Lynn v0.86.0 Release Notes / 发布说明
+# Lynn v0.86.1 Release Notes / 发布说明
 
-> 发布日期: 2026-07-12 · 安全边界 / Agent 运行时可靠性 / Windows 本地模型修复
+> 发布日期: 2026-07-12 · GUI/CLI 交互、本地模型下载与发布门禁更新
 
 ## 国内镜像站下载（推荐）
 
-国内用户请优先使用镜像站；GitHub 与 Gitee Releases 保留相同版本记录。
+国内用户请优先使用镜像站地址；GitHub Assets 仅作为备用下载。两个 GitHub 仓库与 Gitee Release 保留相同版本记录。
 
-- **GitHub Releases**: https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.0
-- **GitHub Releases（镜像仓）**: https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.0
-- **Gitee Releases**: https://gitee.com/merkyor/Lynn/releases/tag/v0.86.0
+- **GitHub Releases**: https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.1
+- **GitHub Releases（镜像仓）**: https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.1
+- **Gitee Releases**: https://gitee.com/merkyor/Lynn/releases/tag/v0.86.1
 - **下载页**: https://download.merkyorlynn.com/download.html
 
 ```bash
 # Node.js 20 LTS or 22 LTS with npm.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz"
 Lynn
 ```
 
-- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.0-macOS-arm64.dmg
-- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.0-macOS-x64.dmg
-- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.0-Windows-Setup.exe
+- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.1-macOS-arm64.dmg
+- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.1-macOS-x64.dmg
+- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.1-Windows-Setup.exe
 
 ## 中文重点
 
-- **模型浏览器默认拒绝敏感权限**:网页不能静默取得麦克风、摄像头、定位、通知或浏览器敏感数据；导航与子资源请求统一通过 DNS/SSRF 校验。
-- **本地信任边界收紧**:Electron IPC 只信任已知窗口对象，本地 HTTP/WS 同时校验 Host、Origin 与启动 token，敏感配置和日志统一使用仅当前用户可读权限。
-- **执行沙箱真正生效**:授权执行仍受 OS 沙箱约束，SSH、云凭证、浏览器资料、Lynn token 与 Agent 配置均是禁止读取路径。
-- **回合状态可靠收口**:同一会话 prompt 串行进入运行时，`turn_end` 兜底矩阵有独立契约测试，废弃的 internal retry 状态已移除，断线恢复容量可配置。
-- **Brain 双层输出净化**:腾讯 Brain 已部署跨 chunk sanitizer，客户端继续保留末端清理；伪工具、内部推理和模型结构标签不会泄漏，普通代码与 JSX 不会被误删。
-- **Windows 27B 启动修复**:支持从 PATH 发现 `llama-server`；手动 GGUF 启动会明确报告 runtime 缺失、端口冲突、超时、崩溃或 ready 状态。
-- **CLI 更适合脚本和长任务**:流式回答支持 Ctrl+C 取消，未知参数立即失败，命令级帮助、非 TTY 退出码、manager/worker JSONL 行为和 Windows argv 执行保持一致。
-- **GUI 状态更直观**:Fleet worker 进入活动面板，语音显示 RTT/上下行统计，renderer 恢复有明确提示，Bridge、Provider 与快捷键补齐中英文和键盘焦点。
-- **发版门禁扩大**:根仓、Brain、Agent regression、CLI100、GUI100、真实安装、PTY、语音、架构循环与生产 Brain 漂移均为硬门槛。
+- **CLI 中断符合直觉**:忙碌时 Ctrl+C 取消当前回答而不退出，空闲时才退出；真实 Ink PTY 门禁覆盖取消、继续提问、粘贴和正常退出。
+- **终端历史与输入更稳定**:已完成内容进入稳定历史，流式 Markdown 批量刷新，工具开始与结果更新同一行，输入光标支持左右移动、Home、End、Delete 和退格。
+- **本地 27B 下载可控**:默认 Qwen3.6-27B Coding Q4 imatrix MTP 支持分片续传、暂停、继续、取消和删除，并展示总进度、速度与剩余时间。
+- **GUI 找内容更直接**:会话搜索常驻，长对话提供回到底部按钮，低频输入工具收进“更多”，停止回答与错误原因使用用户可理解的状态文案。
+- **异构复核只在必要时升级**:DS V4 Flash 先异步快审；医疗、法律、金融或时效事实回答只有在一审发现疑点时，才限时调用一次 MiMo 2.5 Pro Token Plan 仲裁。超时保留 DS V4 结论，不阻塞原回答、不自动重答、不进入普通模型降级链。
+- **推荐不再打扰低配设备**:不满足条件的设备不会主动弹出端侧模型引导；合适设备可稍后七天或永久关闭推荐。
+- **安全基线保持不变**:V0.86 的浏览器权限、IPC/SSRF、OS 沙箱、本地服务鉴权、per-session 准入、工具取消和跨轮隔离继续生效。
+- **发布门禁扩大**:根仓、Brain、Agent regression、CLI100、GUI100、真实安装、完整 Ink PTY、语音、架构循环与生产 Brain 漂移均为硬门槛。
 
 ## English highlights
 
-- Model-driven browser sessions deny sensitive permissions and browser data by default; navigation and subresources pass DNS/SSRF checks.
-- Electron IPC trusts known window identities, while local HTTP/WS validates Host, Origin, and the per-launch token.
-- Authorized execution remains inside the OS sandbox with credential and profile deny-read paths.
-- Per-session prompt admission, explicit turn-end fallback contracts, and removal of legacy retry state prevent cross-turn contamination.
-- Brain and client sanitizers stop split pseudo-tool markup without damaging ordinary code or JSX.
-- Windows discovers `llama-server` through PATH and reports actionable GGUF startup failures.
-- CLI cancellation, strict flags, command help, non-TTY exits, JSONL output, and Windows-safe worker invocation are now consistent.
-- Fleet, voice telemetry, renderer recovery, localization, and dialog keyboard behavior are visible in the desktop app.
+- Ctrl+C cancels an active Ink turn without killing the REPL; idle Ctrl+C exits normally.
+- Settled terminal history is stable, stream updates are batched, tool rows update in place, and the input cursor is fully movable.
+- The default Qwen3.6-27B Coding Q4 imatrix MTP download supports segmented resume, pause, cancel, delete, aggregate progress, speed, and ETA.
+- Session search, long-chat navigation, composer organization, stop feedback, and human-readable errors improve desktop usability.
+- DS V4 performs fast asynchronous review; only high-stakes or current-fact concerns escalate once to time-bounded MiMo 2.5 Pro arbitration. Arbitration never blocks or rewrites the original answer.
+- The V0.86 browser, IPC/SSRF, sandbox, local-server, session-admission, cancellation, and cross-turn isolation baseline remains enabled.

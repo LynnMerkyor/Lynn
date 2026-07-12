@@ -79,9 +79,9 @@ function cardGutter(kind: CardKind, color: boolean): string {
 function cardGlyph(kind: CardKind): string {
   switch (kind) {
     case "tool":
-      return "🔧";
+      return ">";
     case "run":
-      return "⏳";
+      return "~";
     case "ok":
       return "✓";
     case "error":
@@ -178,8 +178,7 @@ export class TerminalSpinner {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     if (this.stream.isTTY) {
-      const clearWidth = this.clearWidth();
-      this.stream.write(`\r${" ".repeat(Math.max(clearWidth, 80))}\r`);
+      this.stream.write("\r\u001b[2K");
     }
   }
 
@@ -203,7 +202,7 @@ export class TerminalSpinner {
   }
 
   private clearWidth(): number {
-    return Math.max(80, typeof this.stream.columns === "number" ? this.stream.columns : 0);
+    return Math.max(20, typeof this.stream.columns === "number" ? this.stream.columns : 80);
   }
 }
 

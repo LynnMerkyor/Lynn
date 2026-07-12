@@ -45,6 +45,38 @@ describe("formatBrainErrorForHuman", () => {
 });
 
 describe("renderBrainEventForHuman", () => {
+  it("renders structured DS V4 and MiMo arbitration results without truncating the verdict", () => {
+    let output = "";
+    const stream = {
+      isTTY: false,
+      write(chunk: string) {
+        output += chunk;
+        return true;
+      },
+    } as unknown as NodeJS.WriteStream;
+
+    renderBrainEventForHuman({
+      type: "review_result",
+      reviewId: "review-1",
+      reviewerModelLabel: "Hanako · DS V4 + MiMo 2.5 Pro 仲裁",
+      content: "A very long unstructured review that should not hide the verdict.",
+      structured: {
+        verdict: "blocker",
+        workflowGate: "hold",
+        summary: "The cited medical dose is not supported.",
+        secondOpinion: {
+          status: "completed",
+          verdict: "blocker",
+          summary: "MiMo agrees that the claim must be corrected.",
+        },
+      },
+    }, {}, stream);
+
+    expect(output).toContain("verdict: blocker · gate: hold");
+    expect(output).toContain("MiMo: blocker");
+    expect(output).toContain("MiMo agrees");
+  });
+
   it("renders route and tool progress as stable cards", () => {
     let output = "";
     const stream = {
@@ -69,7 +101,7 @@ describe("renderBrainEventForHuman", () => {
     }, state, stream);
 
     expect(output).toContain("│ • route: StepFun 3.7 Flash");
-    expect(output).toContain("│ 🔧 🔎 web_search · running");
+    expect(output).toContain("│ > 🔎 web_search · running");
     expect(output).toContain("│ ✓ 🔎 web_search · done 5.1s");
     expect(output).toContain("│   MiMo summary · Source A: fresh result");
     expect(output).toContain("│   sources: /tool 1 · 1 link · a.example");

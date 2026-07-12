@@ -176,6 +176,47 @@ function makeToolThenContentAdapter(reasoningSeen) {
 }
 
 describe('Router', () => {
+  it('honors a strict signed-review provider order without falling through', async () => {
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'mimo arbitration' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+
+    const result = await run({
+      messages: [{ role: 'user', content: 'Review this answer.' }],
+      tools: null,
+      providerOrder: ['p-cloud'],
+      strictProviderOrder: true,
+      onChunk: (chunk) => chunks.push(chunk),
+    });
+
+    expect(result.providerId).toBe('p-cloud');
+    expect(mockState.adapterCalls).toEqual(['p-cloud']);
+    expect(chunks.some((chunk) => chunk.type === 'content' && chunk.delta === 'mimo arbitration')).toBe(true);
+  });
+
+  it('does not clear cooldown or fall through for a strict review provider', async () => {
+    mockState.cooldown.add('p-cloud');
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'should not run' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    await expect(run({
+      messages: [{ role: 'user', content: 'Review this answer.' }],
+      tools: null,
+      providerOrder: ['p-cloud'],
+      strictProviderOrder: true,
+      onChunk: () => undefined,
+    })).rejects.toThrow('all providers failed');
+
+    expect(mockState.adapterCalls).toEqual([]);
+    expect(mockState.cooldown.has('p-cloud')).toBe(true);
+  });
+
   it('falls through to the next provider when a turn overflows (finish=length, empty answer)', async () => {
     const reasoningSeen = [];
     mockState.adapterFn = async function* ({ provider, reasoningEffort }) {

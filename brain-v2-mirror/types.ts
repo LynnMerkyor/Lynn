@@ -132,6 +132,9 @@ export interface RouterRunOptions {
   log?: LogFn;
   extraBody?: Record<string, unknown> | null;
   reasoningEffort?: string | null;
+  /** Signed first-party calls may pin a single provider for bounded review arbitration. */
+  providerOrder?: readonly ProviderId[];
+  strictProviderOrder?: boolean;
 }
 
 export interface RouterRunResult {

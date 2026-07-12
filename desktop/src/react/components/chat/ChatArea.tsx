@@ -157,18 +157,24 @@ const Panel = memo(function Panel({ path, active }: { path: string; active: bool
   const ref = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
 
   // 判断是否在底部
   const checkAtBottom = () => {
     const el = ref.current;
     if (!el) return;
     isAtBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD;
+    setShowJumpToBottom(!isAtBottom.current);
   };
 
   // 滚到底
   const scrollToBottom = () => {
     const el = ref.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      isAtBottom.current = true;
+      setShowJumpToBottom(false);
+    }
   };
 
   // scroll 事件维护 isAtBottom 标志
@@ -254,6 +260,17 @@ const Panel = memo(function Panel({ path, active }: { path: string; active: bool
         )}
         <div className={styles.sessionFooter} />
       </div>
+      {active && showJumpToBottom && (
+        <button
+          type="button"
+          className={styles.scrollToBottomFab}
+          onClick={scrollToBottom}
+          aria-label="滚动到最新消息"
+          title="滚动到最新消息"
+        >
+          ↓
+        </button>
+      )}
     </div>
   );
 });

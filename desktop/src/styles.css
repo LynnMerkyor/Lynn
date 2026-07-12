@@ -28,6 +28,14 @@
     --jian-sidebar-width: 260px;
     --preview-panel-width: 580px;
     --jian-columns: 1;
+
+    /* Semantic aliases consumed by React modules across every theme. */
+    --text-secondary: var(--text-light);
+    --border-light: var(--border);
+    --composer-bg: var(--bg-card);
+    --composer-text: var(--text);
+    --composer-placeholder: var(--text-muted);
+    --composer-focus-border: var(--border);
 }
 
 /* 无衬线模式：覆盖 --font-serif 为系统无衬线体 */

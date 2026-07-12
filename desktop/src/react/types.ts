@@ -311,6 +311,17 @@ export interface PlatformApi {
     parallelSegments?: number;
     availableModelIds?: string[];
   }>;
+  llamacppPauseDownload?(): Promise<{ ok: boolean; reason?: string }>;
+  llamacppCancelDownload?(): Promise<{ ok: boolean; reason?: string }>;
+  llamacppRemoveModel?(payload?: { modelId?: string }): Promise<{
+    ok: boolean;
+    reason?: string;
+    modelId?: string;
+    bytesFreed?: number;
+    removed?: string[];
+  }>;
+  onLlamacppDownloadProgress?(callback: (state: Record<string, unknown>) => void): () => void;
+  onLlamacppDownloadState?(callback: (state: Record<string, unknown>) => void): () => void;
   readFile(path: string): Promise<string | null>;
   writeFile(filePath: string, content: string): Promise<boolean>;
   watchFile(filePath: string): Promise<boolean>;

@@ -6,6 +6,15 @@ function normalizedText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * A tool-evidence claim must assert a concrete returned or real-time fact.
+ * Generic educational wording such as "retrieved reference material" is not
+ * evidence of a live tool call and must not make a stable answer fail a gate.
+ */
+export function claimsFreshToolEvidence(text) {
+  return /(?:根据(?:最新|本次|本轮)?(?:查询|搜索|工具|检索)(?:结果|返回)|(?:查询|搜索|工具|检索)(?:结果|返回)(?:显示|表明|指出|为)|(?:最新|实时)(?:天气|行情|比分|赛程|价格|新闻|汇率|金价)|(?:查询|搜索)(?:到|得)(?:的)?(?:最新|实时)?(?:天气|行情|比分|赛程|价格|新闻|汇率|金价))/u.test(String(text || ""));
+}
+
 export function requiresFreshEvidenceForDialogue({ category, prompt }) {
   const c = String(category || "");
   if (HIGH_RISK_CURRENT_CATEGORY_RE.test(c)) return true;
@@ -107,7 +116,7 @@ function hasStaleCrossDomainLeak(prompt, text) {
   if (!/(?:Apple|notarization|公证|苹果)/iu.test(p) && /(?:Apple\s+notarization|notarizing_macos_software|Gatekeeper|苹果.{0,12}公证)/iu.test(raw)) {
     return true;
   }
-  if (!/(?:Claude|Anthropic)/iu.test(p) && /(?:Claude\s+(?:Code|4|模型)|Anthropic\s+官方)/iu.test(raw)) {
+  if (!/(?:Claude|Anthropic)/iu.test(p) && /(?:Claude\s+(?:4(?:\.\d+)?|模型)|Anthropic\s+官方)/iu.test(raw)) {
     return true;
   }
   if (!/(?:Microsoft|Windows\s+on\s+Arm)/iu.test(p) && /(?:Microsoft\s+Windows\s+on\s+Arm|developer\.microsoft\.com\/windows\/arm)/iu.test(raw)) {

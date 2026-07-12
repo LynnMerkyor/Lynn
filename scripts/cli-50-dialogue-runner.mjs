@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { DIALOGUE_PROMPTS } from "./dialogue-scenario-bank.mjs";
-import { additionalDialogueQualityReason, requiresFreshEvidenceForDialogue } from "./dialogue-quality-rules.mjs";
+import { additionalDialogueQualityReason, claimsFreshToolEvidence, requiresFreshEvidenceForDialogue } from "./dialogue-quality-rules.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_CLI = resolve(ROOT, "cli/bin/lynn.mjs");
@@ -349,10 +349,6 @@ function buildReactReview(result) {
       nextAction,
     },
   };
-}
-
-function claimsFreshToolEvidence(text) {
-  return /根据(?:最新|真实)?(?:查询结果|搜索结果|工具结果|检索结果|返回结果|工具返回)|实时(?:天气|行情|比分|赛程|价格|新闻|汇率|金价)|(?:搜索|检索|查询)(?:结果|显示|到)|(?:本轮|当前|上述|这些|根据).{0,12}(?:搜索结果|工具结果)/.test(text);
 }
 
 function deniesAvailableToolCapability(text) {

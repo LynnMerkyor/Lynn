@@ -1076,15 +1076,17 @@ function recoverCooldownLockedRoute({
   capabilityRequired,
   tools,
   skipProviders,
+  providerOrder,
   log,
 }: {
   capabilityRequired: CapabilityRequired | undefined;
   tools: RouterRunOptions['tools'];
   skipProviders?: ReadonlySet<ProviderId>;
+  providerOrder?: readonly ProviderId[];
   log?: RouterRunOptions['log'];
 }): void {
   const candidates: ProviderId[] = [];
-  for (const providerId of providerOrderForCapability(capabilityRequired)) {
+  for (const providerId of providerOrder || providerOrderForCapability(capabilityRequired)) {
     if (skipProviders?.has(providerId)) continue;
     const provider = getProvider(providerId);
     if (!provider || !providerCanAttemptRound(provider, capabilityRequired, tools)) continue;
@@ -1110,13 +1112,17 @@ async function runRound({
   sanitizeSynthesisOpening,
   bufferContent,
   attemptTimeoutCapMs,
+  providerOrder,
+  strictProviderOrder,
 }: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache; skipProviders?: ReadonlySet<ProviderId>; sanitizeSynthesisOpening?: boolean; bufferContent?: boolean; attemptTimeoutCapMs?: number }): Promise<RunRoundResult> {
   const errors: Array<{ providerId: ProviderId; error: string }> = [];
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
   // (例:"StepFun → Spark fallback"),不再让 cascade decision 对 UI 不可见。
   const fallbackChain: FallbackEntry[] = [];
-  recoverCooldownLockedRoute({ capabilityRequired, tools, skipProviders, log });
-  for (const providerId of providerOrderForCapability(capabilityRequired)) {
+  if (!strictProviderOrder) {
+    recoverCooldownLockedRoute({ capabilityRequired, tools, skipProviders, providerOrder, log });
+  }
+  for (const providerId of providerOrder || providerOrderForCapability(capabilityRequired)) {
     const provider = getProvider(providerId);
     if (!provider) continue;
     if (skipProviders?.has(providerId)) {
@@ -1369,10 +1375,13 @@ async function runRound({
   throw err;
 }
 
-export async function run({ messages, tools, capabilityRequired, signal, onChunk, log, extraBody, reasoningEffort }: RouterRunOptions): Promise<RouterRunResult> {
+export async function run({ messages, tools, capabilityRequired, signal, onChunk, log, extraBody, reasoningEffort, providerOrder, strictProviderOrder }: RouterRunOptions): Promise<RouterRunResult> {
+  const requestProviderOrder = providerOrder?.length
+    ? [...new Set(providerOrder)]
+    : providerOrderForCapability(capabilityRequired);
   // Capability pre-flight — vision/audio/video capability gate, friendly error if no provider supports
   if (capabilityRequired && (capabilityRequired.vision || capabilityRequired.audio || capabilityRequired.video)) {
-    const anySupports = providerOrderForCapability(capabilityRequired).some((id) => {
+    const anySupports = requestProviderOrder.some((id) => {
       const p = getProvider(id);
       if (!p) return false;
       if (capabilityRequired.vision && !p.capability.vision) return false;
@@ -1393,7 +1402,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   }
 
   const internalLynnUxTurn = shouldSuppressWebToolsForInternalLynnUx(messages);
-  const mergedTools = mergeWithServerTools(tools, messages);
+  const mergedTools = strictProviderOrder ? (tools || []) : mergeWithServerTools(tools, messages);
   let workingMessages: ChatMessage[] = [...(messages || [])];
   if (internalLynnUxTurn) {
     workingMessages = [{
@@ -1403,7 +1412,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   }
   let lastProviderId: ProviderId | null = null;
   let iter = 0;
-  const maxIter = MAX_ITERATIONS > 0 ? MAX_ITERATIONS : Infinity;
+  const maxIter = strictProviderOrder ? 1 : (MAX_ITERATIONS > 0 ? MAX_ITERATIONS : Infinity);
   const requestCache = createSearchRequestCache();
   const audioCache = createAudioRequestCache() as AudioRequestCache;
   const toolStormConfig = readToolStormConfigFromEnv();
@@ -1527,6 +1536,8 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   };
 
   if (
+    !strictProviderOrder
+    &&
     process.env.BRAIN_V2_DIRECT_OFFICIAL_MODEL_PREFETCH !== '0'
     && shouldPreferOfficialModelSearchTool(messages)
   ) {
@@ -1556,7 +1567,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     }
   }
 
-  for (const plan of buildDirectEvidencePrefetchPlans(messages || [], workingMessages)) {
+  for (const plan of strictProviderOrder ? [] : buildDirectEvidencePrefetchPlans(messages || [], workingMessages)) {
     const directResult = await prefetchDirectEvidenceTool({
       toolName: plan.toolName,
       providerId: plan.providerId,
@@ -1583,11 +1594,14 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         signal, onChunk, log, extraBody, reasoningEffort: activeReasoning,
         requestCache,
         audioCache,
+        providerOrder: requestProviderOrder,
+        strictProviderOrder,
         skipProviders: skippedProviders,
         sanitizeSynthesisOpening: summarizeFromEvidenceOnly || hasGroundedEvidenceContext,
         bufferContent: shouldBufferProviderContent || hasCallableTools,
       });
     } catch (error) {
+      if (strictProviderOrder) throw error;
       const deterministicAnswer = buildDeterministicSportsEvidenceAnswer(workingMessages);
       if (deterministicAnswer) {
         const providerId = (lastProviderId || 'deepseek-chat') as ProviderId;
@@ -1606,7 +1620,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       }
       const recoveryOrder = [
         'glm-5-turbo' as ProviderId,
-        ...providerOrderForCapability(capabilityRequired),
+        ...requestProviderOrder,
       ];
       const recoveryProviderId = Array.from(new Set(recoveryOrder)).find((candidateId) => {
         const candidate = getProvider(candidateId);
@@ -1623,7 +1637,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       lastChanceRecoveryUsed = true;
       clearUnhealthy(recoveryProviderId);
       const recoverySkip = new Set(
-        providerOrderForCapability(capabilityRequired).filter((candidateId) => candidateId !== recoveryProviderId),
+        requestProviderOrder.filter((candidateId) => candidateId !== recoveryProviderId),
       );
       const recoveryMessages: ChatMessage[] = [
         ...workingMessages,
@@ -1651,6 +1665,8 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
           reasoningEffort: 'off',
           requestCache,
           audioCache,
+          providerOrder: [recoveryProviderId],
+          strictProviderOrder: false,
           skipProviders: recoverySkip,
           sanitizeSynthesisOpening: false,
           bufferContent: true,
