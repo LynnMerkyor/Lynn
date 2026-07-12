@@ -44,7 +44,11 @@ export function shouldRecoverIncompleteVisibleAnswer(
   const question = String(prompt || "").trim();
   const visible = String(content || "").trim();
   if (question.length < 16 || visible.length === 0 || visible.length > 140) return false;
-  if (reasoningChars < 400 || SHORT_ANSWER_REQUEST_RE.test(question)) return false;
+  // Provider-side reasoning counters are approximate and may omit framing
+  // tokens. Keep the guard structural instead of depending on a brittle
+  // round-number boundary: a substantive prompt plus hidden reasoning and a
+  // short non-terminal fragment should receive one continuation attempt.
+  if (reasoningChars < 240 || SHORT_ANSWER_REQUEST_RE.test(question)) return false;
   return !TERMINAL_VISIBLE_CHAR_RE.test(visible);
 }
 
