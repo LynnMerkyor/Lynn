@@ -15,6 +15,7 @@ const reportResearchMock = vi.hoisted(() => ({
 vi.mock("../server/chat/report-research-context.js", () => reportResearchMock);
 
 import { createChatRoute } from "../server/routes/chat.js";
+import { buildDirectResearchAnswer as buildActualDirectResearchAnswer } from "../server/chat/report-research-answer.js";
 
 function makeWebSocketHarness() {
   const clients = [];
@@ -2081,6 +2082,42 @@ describe("chat route event forwarding", () => {
     expect(visibleText).toContain("Spain vs Saudi Arabia");
   });
 
+  it("closes a bounded zero-match sports prefetch as no games without invoking the model", async () => {
+    engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = vi.fn(async () => {});
+    reportResearchMock.inferReportResearchKind.mockReturnValue("sports");
+    reportResearchMock.buildReportResearchContext.mockResolvedValue([
+      "【体育比分工具资料】",
+      "体育查询结果 (ESPN scoreboard)",
+      "provider: espn_scoreboard",
+      "league: FIFA World Cup",
+      "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260713-20260714",
+      "dateRange: 20260713-20260714",
+      "时间口径: 北京时间",
+      "查询口径: “今晚/今夜”按北京时间 2026-07-13 晚间至 2026-07-14 后续赛程处理；不是“昨晚”。",
+      "matched: 0",
+      "匹配比赛: 0 场",
+    ].join("\n"));
+    reportResearchMock.buildDirectResearchAnswer.mockImplementation(buildActualDirectResearchAnswer);
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "今晚世界杯有比赛吗" }),
+    }, connections[0].client);
+
+    await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
+    expect(hub.send).not.toHaveBeenCalled();
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(visibleText).toContain("今晚没有世界杯比赛");
+    expect(visibleText).toContain("按北京时间口径返回 0 场");
+    expect(visibleText).not.toContain("不等于赛事数量为 0");
+  });
+
   it("closes GUI sports tool-chain turns from ESPN evidence before generic search can override it", async () => {
     engine.currentModel = { id: "glm-5-turbo", provider: "glm", name: "GLM 5.0 Turbo" };
     engine.resolveModelOverrides = vi.fn((model) => model);
@@ -2144,6 +2181,60 @@ describe("chat route event forwarding", () => {
     expect(visibleText).toContain("Türkiye vs United States");
     expect(visibleText).not.toContain("2026/06/21");
     expect(visibleText).not.toContain("Netherlands 5-1 Sweden");
+  });
+
+  it("closes GUI zero-match sports tool evidence as no games without a fallback chain", async () => {
+    engine.currentModel = { id: "glm-5-turbo", provider: "glm", name: "GLM 5.0 Turbo" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    engine.abortSessionByPath = vi.fn(async () => true);
+    reportResearchMock.inferReportResearchKind.mockReturnValue("");
+    reportResearchMock.buildDirectResearchAnswer.mockImplementation(buildActualDirectResearchAnswer);
+    hub.send = vi.fn(() => new Promise(() => {}));
+
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+    connections[0].handlers.onMessage({
+      data: JSON.stringify({ type: "prompt", text: "今晚世界杯有比赛吗" }),
+    }, connections[0].client);
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
+
+    subscribed({
+      type: "tool_execution_start",
+      toolName: "sports_score",
+      args: { query: "今晚世界杯有比赛吗" },
+    }, "/sessions/current.jsonl");
+    subscribed({
+      type: "tool_execution_end",
+      toolName: "sports_score",
+      args: { query: "今晚世界杯有比赛吗" },
+      result: {
+        content: [{
+          type: "text",
+          text: [
+            "体育查询结果 (ESPN scoreboard)",
+            "provider: espn_scoreboard",
+            "league: FIFA World Cup",
+            "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260713-20260714",
+            "dateRange: 20260713-20260714",
+            "时间口径: 北京时间",
+            "查询口径: “今晚/今夜”按北京时间 2026-07-13 晚间至 2026-07-14 后续赛程处理；不是“昨晚”。",
+            "matched: 0",
+            "匹配比赛: 0 场",
+          ].join("\n"),
+        }],
+        details: { provider: "espn_scoreboard" },
+      },
+    }, "/sessions/current.jsonl");
+
+    await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
+    expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+    const visibleText = clients[0].sent
+      .filter((evt) => evt.type === "text_delta")
+      .map((evt) => evt.delta)
+      .join("");
+    expect(visibleText).toContain("今晚没有世界杯比赛");
+    expect(visibleText).toContain("按北京时间口径返回 0 场");
+    expect(visibleText).not.toContain("不等于赛事数量为 0");
   });
 
   it("closes simple table template turns with a deterministic local answer", async () => {

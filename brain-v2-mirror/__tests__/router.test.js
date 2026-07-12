@@ -1436,6 +1436,47 @@ describe('Router', () => {
     expect(promptText).toContain('Norway 3-2 Senegal');
   });
 
+  it('uses the latest user turn and closes a zero-match ESPN sports prefetch without provider handoffs', async () => {
+    process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH = '1';
+    mockState.providers = {
+      'step-3.7-flash': makeProvider('step-3.7-flash'),
+      'deepseek-chat': makeProvider('deepseek-chat'),
+    };
+    mockState.order = ['step-3.7-flash', 'deepseek-chat'];
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'provider should not run' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ events: [] }),
+    })));
+
+    const chunks = [];
+    const result = await run({
+      messages: [
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: '你好！' },
+        { role: 'user', content: '今晚有世界杯比赛吗' },
+      ],
+      onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'step-3.7-flash', iterations: 0 });
+    expect(mockState.adapterCalls).toEqual([]);
+    const starts = chunks.filter((chunk) => chunk.type === 'tool_progress' && chunk.event === 'start');
+    expect(starts).toHaveLength(1);
+    expect(starts[0]).toMatchObject({ name: 'sports_score', argsSummary: '今晚有世界杯比赛吗' });
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toContain('今晚没有世界杯比赛');
+    expect(visible).toContain('按北京时间口径返回 0 场');
+    expect(visible).toContain('“今晚/今夜”按北京时间');
+    expect(visible).toContain('site.api.espn.com');
+    expect(visible).not.toContain('根据本轮已执行工具返回的证据');
+  });
+
   it('prefetches stock_market evidence for direct index quote prompts before provider synthesis', async () => {
     process.env.BRAIN_V2_DIRECT_MARKET_PREFETCH = '1';
     mockState.providers = {
@@ -1463,7 +1504,11 @@ describe('Router', () => {
     };
 
     const result = await run({
-      messages: [{ role: 'user', content: '纳斯达克指数最新点位是多少？' }],
+      messages: [
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: '你好！' },
+        { role: 'user', content: '纳斯达克指数最新点位是多少？' },
+      ],
       onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
     });
 
@@ -1471,6 +1516,7 @@ describe('Router', () => {
     expect(result.providerId).toBe('step-3.7-flash');
     expect(mockState.adapterCalls).toEqual(['step-3.7-flash']);
     expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'stock_market' && chunk.event === 'end' && chunk.meta?.providerId === 'step-3.7-flash')).toBe(true);
+    expect(chunks.find((chunk) => chunk.type === 'tool_progress' && chunk.name === 'stock_market' && chunk.event === 'start')?.argsSummary).toBe('纳斯达克指数最新点位是多少？');
     expect(captured[0]?.tools).toEqual([]);
     const promptText = captured[0]?.messages.map((message) => String(message.content || '')).join('\n') || '';
     expect(promptText).toContain('stock_market');
@@ -1556,7 +1602,11 @@ describe('Router', () => {
 
     try {
       const result = await run({
-        messages: [{ role: 'user', content: '明天深圳天气如何' }],
+        messages: [
+          { role: 'user', content: 'hi' },
+          { role: 'assistant', content: '你好！' },
+          { role: 'user', content: '明天深圳天气如何' },
+        ],
         onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
       });
 
@@ -1566,6 +1616,7 @@ describe('Router', () => {
       const toolEvents = chunks.filter((chunk) => chunk.type === 'tool_progress');
       expect(toolEvents.map((chunk) => chunk.name)).toEqual(['weather', 'weather']);
       expect(toolEvents.every((chunk) => chunk.meta?.providerId === 'step-3.7-flash')).toBe(true);
+      expect(toolEvents.find((chunk) => chunk.event === 'start')?.argsSummary).toBe('明天深圳天气如何');
       expect(toolEvents.some((chunk) => chunk.name === 'parallel_research' || chunk.name === 'calendar')).toBe(false);
       const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
       expect(visible).toContain('深圳明天天气：阴天，28~31°C');

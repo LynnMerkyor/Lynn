@@ -896,8 +896,9 @@ describe("realtime market/weather tools", () => {
       expect(searchMock.runSearchQuery).not.toHaveBeenCalled();
       expect(result.details.provider).toBe("espn_scoreboard");
       expect(text).toContain("matched: 0");
-      expect(answer).toContain("未返回 FIFA World Cup");
-      expect(answer).toContain("不等于赛事数量为 0");
+      expect(answer).toContain("今晚没有世界杯比赛");
+      expect(answer).toContain("按北京时间口径返回 0 场");
+      expect(answer).not.toContain("不等于赛事数量为 0");
       expect(answer).not.toContain("Spain vs Saudi Arabia");
     } finally {
       vi.useRealTimers();

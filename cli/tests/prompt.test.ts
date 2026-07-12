@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseArgs } from "../src/args.js";
 import { mergePromptAndStdin, runPrompt } from "../src/commands/prompt.js";
 
@@ -122,6 +122,38 @@ describe("prompt stdin handling", () => {
     expect(output).toContain("docs.anthropic.com");
     expect(output).toContain("\"researchPrefetch\":true");
     expect(output).not.toContain("fetch failed");
+  });
+
+  it("answers a direct ESPN zero as no tonight World Cup matches without contacting Brain", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ events: [] }),
+    })));
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await expect(runPrompt(parseArgs([
+        "-p",
+        "今晚世界杯有比赛吗",
+        "--json",
+        "--brain-url",
+        "http://127.0.0.1:1",
+      ]), { json: true })).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+      vi.unstubAllGlobals();
+    }
+
+    expect(output).toContain('"name":"sports_score"');
+    expect(output).toContain("今晚没有世界杯比赛");
+    expect(output).toContain("按北京时间口径返回 0 场");
+    expect(output).toContain('"researchPrefetch":true');
+    expect(output).not.toContain("不等于赛事数量为 0");
   });
 
   it("answers Apple notarization official research prompts with local evidence", async () => {

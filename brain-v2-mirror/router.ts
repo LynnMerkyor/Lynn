@@ -594,20 +594,28 @@ function evidenceToolWeight(toolName: string, result: unknown): number {
 type ScoreboardRow = { time: string; matchup: string; result: string };
 
 function originalUserPrompt(messages: ChatMessage[]): string {
-  const found = messages.find((message) => message.role === 'user' && typeof message.content === 'string');
+  const found = [...messages].reverse().find((message) => message.role === 'user' && typeof message.content === 'string');
   return typeof found?.content === 'string' ? found.content : '';
 }
 
-function parseScoreboardRowsFromEvidence(messages: ChatMessage[]): ScoreboardRow[] {
-  const text = messages
+function latestDirectScoreboardEvidence(messages: ChatMessage[]): string {
+  const candidates = messages
     .filter((message) => {
       if (message.role === 'tool') return true;
       const content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content || '');
       return /【Lynn 工具证据 #\d+:\s*sports_score】/u.test(content);
     })
-    .map((message) => typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''))
-    .join('\n');
-  if (!/provider:\s*espn_scoreboard/i.test(text)) return [];
+    .map((message) => typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''));
+  const latest = candidates.at(-1) || '';
+  return /provider:\s*espn_scoreboard/i.test(latest)
+    && !/directSourceStatus:\s*(?:unavailable|fallback_static_schedule)/i.test(latest)
+    ? latest
+    : '';
+}
+
+function parseScoreboardRowsFromEvidence(messages: ChatMessage[]): ScoreboardRow[] {
+  const text = latestDirectScoreboardEvidence(messages);
+  if (!text) return [];
   const rows: ScoreboardRow[] = [];
   for (const line of text.split(/\r?\n/u)) {
     const match = line.match(/^-\s*(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2})\s+(.+?)\s+\(([^)]+)\)\s*$/u);
@@ -624,14 +632,36 @@ function parseScoreboardRowsFromEvidence(messages: ChatMessage[]): ScoreboardRow
   return rows;
 }
 
-function buildDeterministicSportsEvidenceAnswer(messages: ChatMessage[]): string | null {
+function buildDeterministicSportsEvidenceAnswer(messages: ChatMessage[], promptOverride?: string): string | null {
+  const evidenceText = latestDirectScoreboardEvidence(messages);
+  if (!evidenceText) return null;
   const rows = parseScoreboardRowsFromEvidence(messages);
-  if (!rows.length) return null;
-  const prompt = originalUserPrompt(messages);
+  const prompt = promptOverride ?? originalUserPrompt(messages);
   if (/预测|预估|猜|可能比分|比分预测|predict|prediction|forecast/i.test(prompt)) {
     // A schedule proves who plays and when, not a likely score. Prediction turns
     // must be synthesized by a model from evidence instead of hard-coded team keywords.
     return null;
+  }
+  if (!rows.length) {
+    const matched = evidenceText.match(/^(?:matched:\s*|匹配比赛:\s*)(\d+)(?:\s*场)?\s*$/im)?.[1];
+    const asksScheduleOrExistence = /(几场|多少场|只有一场|就一场|一场吗|赛程|对阵|有.{0,6}比赛|比赛.{0,6}吗|今晚|今夜|今天|今日|明天|tonight|today|tomorrow|schedule|fixtures?|how many games?)/i.test(prompt);
+    if (matched !== '0' || !asksScheduleOrExistence) return null;
+    const league = evidenceText.match(/^league:\s*([^\n]+)$/im)?.[1]?.trim() || '相关赛事';
+    const leagueLabel = /^FIFA World Cup$/i.test(league) ? '世界杯' : league;
+    const timeLabel = /(今晚|今夜|tonight)/i.test(prompt)
+      ? '今晚'
+      : /(今天|今日|today)/i.test(prompt)
+        ? '今天'
+        : /(明天|明日|tomorrow)/i.test(prompt)
+          ? '明天'
+          : '本轮查询时间范围内';
+    const scope = evidenceText.match(/^查询口径:\s*([^\n]+)$/im)?.[1]?.trim();
+    const source = evidenceText.match(/^source:\s*(https?:\/\/\S+)$/im)?.[1]?.trim();
+    return [
+      `${timeLabel}没有${leagueLabel}比赛。ESPN scoreboard 按北京时间口径返回 0 场。`,
+      scope ? `口径：${scope}` : null,
+      source ? `来源：${source}` : null,
+    ].filter(Boolean).join('\n\n');
   }
   const wantsCount = /(几场|多少场|只有一场|就一场|一场吗|赛程|今晚|今天|今日|tonight|today|schedule)/i.test(prompt);
   const title = wantsCount
@@ -645,21 +675,17 @@ function buildDeterministicSportsEvidenceAnswer(messages: ChatMessage[]): string
   return `${title}\n\n${table}`;
 }
 
-function buildDeterministicSportsFactAnswer(messages: ChatMessage[]): string | null {
-  const evidenceText = messages
-    .filter((message) => message.role === 'tool' || /sports_score|espn_scoreboard/i.test(String(message.content || '')))
-    .map((message) => typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''))
-    .join('\n');
-  if (/directSourceStatus:\s*fallback_static_schedule/i.test(evidenceText)) return null;
+function buildDeterministicSportsFactAnswer(messages: ChatMessage[], promptOverride?: string): string | null {
+  if (!latestDirectScoreboardEvidence(messages)) return null;
   const rows = parseScoreboardRowsFromEvidence(messages);
-  if (!rows.length) return null;
-  const prompt = originalUserPrompt(messages);
+  const prompt = promptOverride ?? originalUserPrompt(messages);
   if (/预测|预估|猜|可能比分|比分预测|predict|prediction|forecast/i.test(prompt)) return null;
+  if (!rows.length) return buildDeterministicSportsEvidenceAnswer(messages, prompt);
   const asksCompletedScores = /(已出|已经|比分|赛果|结果|完赛|score|result|final)/i.test(prompt)
     && !/(几场|多少场|只有一场|就一场|一场吗|赛程|对阵|今晚|今天|今日|tonight|today|schedule)/i.test(prompt);
   const hasCompletedScore = rows.some((row) => /\d+\s*[-–—:：比]\s*\d+|FT|Final|Full Time/i.test(row.result));
   if (asksCompletedScores && !hasCompletedScore) return null;
-  return buildDeterministicSportsEvidenceAnswer(messages);
+  return buildDeterministicSportsEvidenceAnswer(messages, prompt);
 }
 
 function buildDeterministicAirQualityAnswer(prompt: unknown, result: unknown): string | null {
@@ -1376,6 +1402,7 @@ async function runRound({
 }
 
 export async function run({ messages, tools, capabilityRequired, signal, onChunk, log, extraBody, reasoningEffort, providerOrder, strictProviderOrder }: RouterRunOptions): Promise<RouterRunResult> {
+  const turnUserPrompt = originalUserPrompt(messages || []);
   const requestProviderOrder = providerOrder?.length
     ? [...new Set(providerOrder)]
     : providerOrderForCapability(capabilityRequired);
@@ -1471,7 +1498,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   };
 
   if (process.env.BRAIN_V2_DIRECT_KNOWN_OFFICIAL !== '0') {
-    const query = originalUserPrompt(workingMessages);
+    const query = turnUserPrompt;
     const answer = buildDirectKnownOfficialAnswer(query);
     if (answer) {
       const providerId = 'deepseek-chat' as ProviderId;
@@ -1492,7 +1519,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     continuationRequirement: string;
     buildDeterministicAnswer?: (query: string, toolResult: unknown) => string | null;
   }): Promise<RouterRunResult | null> => {
-    const query = originalUserPrompt(workingMessages);
+    const query = turnUserPrompt;
     const argsText = JSON.stringify({ query });
     const argsSummary = summarizeToolCallArgs(argsText);
     const started = Date.now();
@@ -1542,7 +1569,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     && shouldPreferOfficialModelSearchTool(messages)
   ) {
     const toolName = 'web_search';
-    const query = originalUserPrompt(workingMessages);
+    const query = turnUserPrompt;
     const argsText = JSON.stringify({ query });
     const argsSummary = summarizeToolCallArgs(argsText);
     const providerId = DEEPSEEK_CHAT_PROVIDER_ID;
@@ -1576,6 +1603,11 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         ? (query, toolResult) => buildDeterministicWeatherAlertAnswer(query, toolResult)
           || buildDeterministicAirQualityAnswer(query, toolResult)
           || buildDeterministicWeatherAnswer(query, toolResult)
+        : plan.kind === 'sports'
+          ? (query, toolResult) => buildDeterministicSportsFactAnswer([
+            { role: 'user', content: query },
+            { role: 'tool', content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult) },
+          ], query)
         : undefined,
     });
     if (directResult) return directResult;
@@ -1602,7 +1634,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       });
     } catch (error) {
       if (strictProviderOrder) throw error;
-      const deterministicAnswer = buildDeterministicSportsEvidenceAnswer(workingMessages);
+      const deterministicAnswer = buildDeterministicSportsEvidenceAnswer(workingMessages, turnUserPrompt);
       if (deterministicAnswer) {
         const providerId = (lastProviderId || 'deepseek-chat') as ProviderId;
         log && log('warn', `all providers failed after sports evidence; emitting deterministic scoreboard fallback`);
@@ -1861,7 +1893,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     }
     workingMessages = compactToolResults(workingMessages, toolResultCompactionConfig);
     const deterministicSportsFactAnswer = evidenceToolCount > 0
-      ? buildDeterministicSportsFactAnswer(workingMessages)
+      ? buildDeterministicSportsFactAnswer(workingMessages, turnUserPrompt)
       : null;
     if (deterministicSportsFactAnswer) {
       await onChunk({ type: 'content', delta: deterministicSportsFactAnswer }, { providerId: lastProviderId });

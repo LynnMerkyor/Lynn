@@ -702,6 +702,34 @@ function buildSportsNoMatchExplanation(prompt: string, askWinner: boolean): stri
   return "所以我不能从这条直接数据源确认相关比赛记录，也不会用猜测补答案。";
 }
 
+function buildBoundedSportsNoMatchAnswer(text: string, prompt: string): string {
+  const asksOutcome = /(?:冠军|夺冠|谁赢|比分|赛果|结果|已经出|上一场|score|scores|result|results|winner|champion)/i.test(prompt);
+  const asksScheduleOrExistence = /(?:几场|多少场|只有一场|就一场|一场吗|赛程|对阵|有.{0,6}比赛|比赛.{0,6}吗|今晚|今夜|今天|今日|明天|明日|昨晚|昨天|昨日|tonight|today|tomorrow|last night|schedule|fixtures?|how many games?)/i.test(prompt);
+  const hasDirectEspnEvidence = /provider:\s*espn_scoreboard/i.test(text)
+    && /^source:\s*https?:\/\/\S+/im.test(text)
+    && !/directSourceStatus:\s*(?:unavailable|fallback_static_schedule)/i.test(text);
+  if (!hasDirectEspnEvidence || !asksScheduleOrExistence || asksOutcome) return "";
+
+  const league = text.match(/^league:\s*([^\n]+)$/im)?.[1]?.trim() || "相关赛事";
+  const leagueLabel = /^FIFA World Cup$/i.test(league) ? "世界杯" : league;
+  const timeLabel = /(?:今晚|今夜|tonight)/i.test(prompt)
+    ? "今晚"
+    : /(?:今天|今日|today)/i.test(prompt)
+      ? "今天"
+      : /(?:明天|明日|tomorrow)/i.test(prompt)
+        ? "明天"
+        : /(?:昨晚|昨天|昨日|last night)/i.test(prompt)
+          ? "昨晚"
+          : "本轮查询时间范围内";
+  const scope = text.match(/^查询口径:\s*([^\n]+)$/im)?.[1]?.trim() || "";
+  const source = text.match(/^source:\s*(https?:\/\/\S+)$/im)?.[1] || "";
+  return [
+    `${timeLabel}没有${leagueLabel}比赛。ESPN scoreboard 按北京时间口径返回 0 场。`,
+    scope ? `口径：${scope}` : "",
+    source ? `来源：${source}` : "",
+  ].filter(Boolean).join("\n\n");
+}
+
 function buildDirectSportsAnswer(context: unknown, userPrompt: string = ""): string {
   const text = String(context || "");
   if (!/体育查询结果/.test(text)) return "";
@@ -719,7 +747,7 @@ function buildDirectSportsAnswer(context: unknown, userPrompt: string = ""): str
       "我不会用泛搜索摘要、百科页或新闻标题冒充比分/赛程结论；请稍后重试或接入专门体育数据源复核。",
     ].filter(Boolean).join("\n");
   }
-  if (/matched:\s*0/i.test(text)) {
+  if (/(?:matched:\s*0|匹配比赛[:：]\s*0\s*场)/i.test(text)) {
     const league = text.match(/league:\s*([^\n]+)/)?.[1]?.trim() || "体育赛事";
     const dateRange = text.match(/dateRange:\s*([^\n]+)/)?.[1]?.trim() || "";
     const source = text.match(/source:\s*(https?:\/\/\S+)/)?.[1] || "";
@@ -732,6 +760,8 @@ function buildDirectSportsAnswer(context: unknown, userPrompt: string = ""): str
         source ? `来源：${source}` : "",
       ].filter(Boolean).join("\n");
     }
+    const boundedNoMatch = buildBoundedSportsNoMatchAnswer(text, prompt);
+    if (boundedNoMatch) return boundedNoMatch;
     return [
       `本轮 ESPN scoreboard 未返回 ${league}${dateRange ? `（${dateRange}）` : ""}可供核验的赛事清单。`,
       buildSportsNoMatchExplanation(prompt, askWinner),

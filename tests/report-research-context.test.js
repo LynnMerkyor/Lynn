@@ -389,6 +389,28 @@ describe("report research context intent", () => {
     expect(answer).toContain("不会用猜测补答案");
   });
 
+  it("treats a direct ESPN zero as zero for a bounded tonight schedule query", () => {
+    const context = [
+      "【体育比分工具资料】",
+      "",
+      "体育查询结果 (ESPN scoreboard)",
+      "provider: espn_scoreboard",
+      "league: FIFA World Cup",
+      "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260713-20260714",
+      "dateRange: 20260713-20260714",
+      "时间口径: 北京时间",
+      "查询口径: “今晚/今夜”按北京时间 2026-07-13 晚间至 2026-07-14 后续赛程处理；不是“昨晚”。",
+      "匹配比赛: 0 场",
+    ].join("\n");
+
+    const answer = buildDirectResearchAnswer("sports", context, "今晚世界杯有比赛吗");
+    expect(answer).toContain("今晚没有世界杯比赛");
+    expect(answer).toContain("按北京时间口径返回 0 场");
+    expect(answer).toContain("2026-07-13 晚间至 2026-07-14");
+    expect(answer).toContain("来源：https://site.api.espn.com");
+    expect(answer).not.toContain("不等于赛事数量为 0");
+  });
+
   it("does not invent a score prediction when the scoreboard has no fixtures", () => {
     const context = [
       "【体育比分工具资料】",
