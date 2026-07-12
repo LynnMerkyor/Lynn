@@ -35,6 +35,14 @@ describe('direct evidence prefetch policy', () => {
     expect(buildDirectEvidencePrefetchPlans(intent, evidence)).toEqual([]);
   });
 
+  it('does not prefetch realtime evidence when the latest turn explicitly forbids tools', () => {
+    expect(buildDirectEvidencePrefetchPlans([
+      { role: 'user', content: '深圳明天天气怎么样？' },
+      { role: 'assistant', content: '深圳明天有雨。' },
+      { role: 'user', content: '不要提天气，不要调用工具，只回复：FENCE_OK' },
+    ])).toEqual([]);
+  });
+
   it('honors per-tool kill switches', () => {
     process.env.BRAIN_V2_DIRECT_MARKET_PREFETCH = '0';
     expect(buildDirectEvidencePrefetchPlans([

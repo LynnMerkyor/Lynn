@@ -1626,6 +1626,36 @@ describe('Router', () => {
     }
   });
 
+  it('does not prefetch or expose tools when the latest turn explicitly forbids them', async () => {
+    process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH = '1';
+    mockState.order = ['p-step'];
+    const chunks = [];
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new Error('weather prefetch must not run');
+    }));
+    mockState.adapterFn = async function* ({ provider, tools }) {
+      mockState.adapterCalls.push(provider.id);
+      expect(tools).toEqual([]);
+      yield { type: 'content', delta: 'FENCE_OK' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const result = await run({
+      messages: [
+        { role: 'user', content: '【FENCE-01A】用工具查深圳明天天气。' },
+        { role: 'assistant', content: '深圳明天有雨。' },
+        { role: 'user', content: '【FENCE-01B】不要提天气，不要调用工具，只回复：FENCE_OK' },
+      ],
+      tools: [{ type: 'function', function: { name: 'weather', parameters: { type: 'object' } } }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockState.adapterCalls).toEqual(['p-step']);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress')).toBe(false);
+    expect(chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('')).toBe('FENCE_OK');
+  });
+
   it('summarizes weather fallback evidence with Step after skipping MiMo and DS planners', async () => {
     process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH = '1';
     process.env.ZHIPU_KEY = 'test-zhipu';

@@ -7,7 +7,7 @@
 
 import { providerOrderForCapability, getProvider, isInCooldown, markUnhealthy, clearUnhealthy } from './provider-registry.js';
 import { getAdapter } from './wire-adapter/index.js';
-import { isServerTool, executeServerTool, mergeWithServerTools, shouldPreferOfficialModelSearchTool, shouldSuppressWebToolsForInternalLynnUx } from './tool-exec/index.js';
+import { isServerTool, executeServerTool, mergeWithServerTools, shouldPreferOfficialModelSearchTool, shouldSuppressToolsForCurrentTurn, shouldSuppressWebToolsForInternalLynnUx } from './tool-exec/index.js';
 import { applySearchContext, createSearchRequestCache, type SearchRequestCache } from './search-context.js';
 import { applyAudioTranscribe, createAudioRequestCache, type AudioRequestCache } from './audio-transcribe.js';
 import { compactToolResults, readToolResultCompactionConfigFromEnv } from './context-compact.js';
@@ -1429,7 +1429,8 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   }
 
   const internalLynnUxTurn = shouldSuppressWebToolsForInternalLynnUx(messages);
-  const mergedTools = strictProviderOrder ? (tools || []) : mergeWithServerTools(tools, messages);
+  const explicitNoToolTurn = shouldSuppressToolsForCurrentTurn(messages);
+  const mergedTools = strictProviderOrder ? (tools || []) : explicitNoToolTurn ? [] : mergeWithServerTools(tools, messages);
   let workingMessages: ChatMessage[] = [...(messages || [])];
   if (internalLynnUxTurn) {
     workingMessages = [{

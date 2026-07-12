@@ -5,7 +5,7 @@ vi.mock('../tool-exec/web_search.js', () => ({
 }));
 
 import { webSearch } from '../tool-exec/web_search.js';
-import { executeServerTool, isServerTool, mergeWithServerTools, SERVER_TOOLS, SERVER_TOOL_NAMES, shouldExposeExternalEvidenceTools, shouldPreferSportsScoreTool, shouldPreferStockMarketTool, shouldPreferWeatherTool, shouldSuppressWebToolsForInternalLynnUx } from '../tool-exec/index.js';
+import { executeServerTool, isServerTool, mergeWithServerTools, SERVER_TOOLS, SERVER_TOOL_NAMES, shouldExposeExternalEvidenceTools, shouldPreferSportsScoreTool, shouldPreferStockMarketTool, shouldPreferWeatherTool, shouldSuppressToolsForCurrentTurn, shouldSuppressWebToolsForInternalLynnUx } from '../tool-exec/index.js';
 import { parallelResearch } from '../tool-exec/parallel_research.js';
 
 describe('tool-exec dispatcher', () => {
@@ -113,6 +113,29 @@ describe('tool-exec dispatcher', () => {
       const messages = [{ role: 'user', content }];
       expect(shouldExposeExternalEvidenceTools(messages)).toBe(true);
     }
+  });
+
+  it('honors an explicit no-tool instruction even when the current turn names realtime topics', () => {
+    const messages = [
+      { role: 'user', content: '用工具查深圳明天天气。' },
+      { role: 'assistant', content: '深圳明天有雨。' },
+      { role: 'user', content: '不要提天气，不要调用工具，只回复：FENCE_OK' },
+    ];
+    const tools = mergeWithServerTools([
+      { type: 'function', function: { name: 'weather' } },
+    ], messages).map((tool) => tool.function.name);
+
+    expect(shouldSuppressToolsForCurrentTurn(messages)).toBe(true);
+    expect(shouldPreferWeatherTool(messages)).toBe(false);
+    expect(shouldExposeExternalEvidenceTools(messages)).toBe(false);
+    expect(tools).not.toContain('weather');
+  });
+
+  it('does not confuse a requested tool lookup with a short answer constraint', () => {
+    const messages = [{ role: 'user', content: '用工具查深圳明天天气，只回复温度和是否带伞。' }];
+
+    expect(shouldSuppressToolsForCurrentTurn(messages)).toBe(false);
+    expect(shouldPreferWeatherTool(messages)).toBe(true);
   });
 
   it('prefers the dedicated sports score tool for direct sports schedule prompts', () => {

@@ -305,6 +305,17 @@ const STOCK_QUOTE_INTENT_RE = /(?:点位|多少|最新|行情|涨跌|收盘|现�
 const DIRECT_AIR_QUALITY_RE = /空气质量|空气污染|AQI|PM\s*2\.?5|PM10|雾霾|霾|air\s*quality|pollution/i;
 const DIRECT_WEATHER_RE = /(?:天气|下雨|降雨|雨吗|气温|温度|预警|暴雨|雷暴|雷电|台风|weather|forecast|rain|alert|warning)/i;
 const OFFICIAL_MODEL_RELEASE_RE = /(?:(?:OpenAI|ChatGPT|GPT|Claude|Anthropic).{0,32}(?:模型|model|发布|release|新模型|最新|最近|recent|latest|公开|代)|(?:模型|model|发布|release|新模型|最新|最近|recent|latest|公开|代).{0,32}(?:OpenAI|ChatGPT|GPT|Claude|Anthropic))/i;
+const EXPLICIT_NO_TOOL_RE = /(?:不要|别|禁止|无需|不需要)(?:再)?(?:调用|使用|用|开启|触发)?[^。！？!?,，\n]{0,8}(?:任何)?(?:工具|联网|搜索|检索)|(?:without|do\s+not|don't|dont|no)\s+(?:use|using|call|calling)?\s*(?:any\s+)?(?:tools?|web|search)/i;
+
+function latestUserText(messages) {
+  if (!Array.isArray(messages)) return '';
+  const message = messages.filter(m => m && m.role === 'user').slice(-1)[0];
+  return message ? (typeof message.content === 'string' ? message.content : JSON.stringify(message.content ?? '')) : '';
+}
+
+export function shouldSuppressToolsForCurrentTurn(messages) {
+  return EXPLICIT_NO_TOOL_RE.test(latestUserText(messages));
+}
 
 export function shouldSuppressWebToolsForInternalLynnUx(messages) {
   if (!Array.isArray(messages)) return false;
@@ -325,6 +336,7 @@ export function shouldSuppressWebToolsForInternalLynnUx(messages) {
 
 export function shouldPreferSportsScoreTool(messages) {
   if (!Array.isArray(messages)) return false;
+  if (shouldSuppressToolsForCurrentTurn(messages)) return false;
   const text = messages
     .filter(m => m && m.role === 'user')
     .slice(-1)
@@ -335,6 +347,7 @@ export function shouldPreferSportsScoreTool(messages) {
 
 export function shouldPreferStockMarketTool(messages) {
   if (!Array.isArray(messages)) return false;
+  if (shouldSuppressToolsForCurrentTurn(messages)) return false;
   const text = messages
     .filter(m => m && m.role === 'user')
     .slice(-1)
@@ -346,6 +359,7 @@ export function shouldPreferStockMarketTool(messages) {
 
 export function shouldPreferWeatherTool(messages) {
   if (!Array.isArray(messages)) return false;
+  if (shouldSuppressToolsForCurrentTurn(messages)) return false;
   const text = messages
     .filter(m => m && m.role === 'user')
     .slice(-1)
@@ -356,6 +370,7 @@ export function shouldPreferWeatherTool(messages) {
 
 export function shouldPreferOfficialModelSearchTool(messages) {
   if (!Array.isArray(messages)) return false;
+  if (shouldSuppressToolsForCurrentTurn(messages)) return false;
   const text = messages
     .filter(m => m && m.role === 'user')
     .slice(-1)
@@ -380,6 +395,7 @@ const EXTERNAL_EVIDENCE_TOOL_NAMES = new Set([
 
 export function shouldExposeExternalEvidenceTools(messages) {
   if (!Array.isArray(messages)) return false;
+  if (shouldSuppressToolsForCurrentTurn(messages)) return false;
   const text = messages
     .filter(m => m && m.role === 'user')
     .slice(-1)
