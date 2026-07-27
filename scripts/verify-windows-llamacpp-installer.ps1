@@ -57,7 +57,8 @@ if (-not (Test-Path $manifest)) {
   throw "Packaged runtime manifest not found at $manifest"
 }
 $runtime = Get-Content $manifest -Raw | ConvertFrom-Json
-if ($runtime.sourceTag -ne "b10153" -or $runtime.files.PSObject.Properties.Count -ne 23) {
+$runtimeFileCount = @($runtime.files.PSObject.Properties).Count
+if ($runtime.sourceTag -ne "b10153" -or $runtimeFileCount -ne 23) {
   throw "Packaged runtime manifest does not match the pinned b10153 package."
 }
 
@@ -153,4 +154,4 @@ try {
   }
 }
 
-Write-Host "[llama.cpp] final-installer load/generation gate passed: $($runtime.files.PSObject.Properties.Count) verified files"
+Write-Host "[llama.cpp] final-installer load/generation gate passed: $runtimeFileCount verified files"
