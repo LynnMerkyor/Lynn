@@ -106,6 +106,11 @@ function defaultBinaryPath(homeDir, platform) {
   return binaryPathForLynnRoot(defaultLynnRoot(homeDir), platform);
 }
 
+function bundledBinaryPath(resourcesPath, platform) {
+  if (!resourcesPath || platform !== "win32") return "";
+  return path.join(resourcesPath, "llamacpp", "bin", "llama-server.exe");
+}
+
 function systemBinaryCandidates(platform, spawnSyncFn = spawnSync) {
   const candidates = platform === "win32" ? [] : [
     "/opt/homebrew/bin/llama-server",
@@ -251,6 +256,7 @@ class LlamaCppManager {
     this.homeDir = opts.homeDir || os.homedir();
     this.lynnHome = expandHomePath(opts.lynnHome, this.homeDir) || defaultLynnRoot(this.homeDir);
     this.platform = opts.platform || process.platform;
+    this.resourcesPath = opts.resourcesPath != null ? opts.resourcesPath : (process.resourcesPath || "");
     this.envSkip = opts.envSkip
       ? () => opts.envSkip()
       : () => process.env.LYNN_SKIP_LLAMACPP === "1";
@@ -287,6 +293,8 @@ class LlamaCppManager {
     }
     const candidate = binaryPathForLynnRoot(this.lynnHome, this.platform);
     if (this.fsModule.existsSync(candidate)) return candidate;
+    const bundledCandidate = bundledBinaryPath(this.resourcesPath, this.platform);
+    if (bundledCandidate && this.fsModule.existsSync(bundledCandidate)) return bundledCandidate;
     for (const systemCandidate of systemBinaryCandidates(this.platform, this.spawnSyncFn)) {
       if (this.fsModule.existsSync(systemCandidate)) return systemCandidate;
     }
@@ -614,6 +622,7 @@ module.exports = {
   LlamaCppManager,
   defaultLynnRoot,
   defaultBinaryPath,
+  bundledBinaryPath,
   defaultModelPath,
   lynnHomeModelPath,
   systemBinaryCandidates,

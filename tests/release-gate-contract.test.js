@@ -13,8 +13,20 @@ describe('release gate contract', () => {
     const scripts = readPackage().scripts;
     expect(scripts.dist).toContain('npm run release:full-gate');
     expect(scripts['dist:win']).toContain('npm run release:full-gate');
+    expect(scripts['dist:win']).toContain('npm run prepare:llamacpp:win');
     expect(scripts.dist).not.toContain('npm run release:preflight');
     expect(scripts['dist:win']).not.toContain('npm run release:preflight');
+  });
+
+  it('packages the pinned llama.cpp runtime in Windows resources', () => {
+    const packageJson = readPackage();
+    expect(packageJson.build.win.extraResources).toContainEqual({
+      from: 'vendor/llama.cpp/win-x64',
+      to: 'llamacpp/bin',
+    });
+    expect(packageJson.scripts['prepare:llamacpp:win']).toBe(
+      'node scripts/prepare-windows-llamacpp.mjs',
+    );
   });
 
   it('keeps the release gate aligned with the approved GUI100 and CLI100 policy', () => {

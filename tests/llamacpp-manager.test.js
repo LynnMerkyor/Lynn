@@ -3,7 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { LlamaCppManager, DEFAULT_CONFIG, systemBinaryCandidates } from "../desktop/llamacpp-manager.cjs";
+import {
+  LlamaCppManager,
+  DEFAULT_CONFIG,
+  bundledBinaryPath,
+  systemBinaryCandidates,
+} from "../desktop/llamacpp-manager.cjs";
 
 function makeTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -68,6 +73,40 @@ describe("LlamaCppManager path and spawn safety", () => {
     expect(spawnCalls).toEqual([
       expect.objectContaining({ command: "where.exe", args: ["llama-server"] }),
     ]);
+  });
+
+  it("discovers the llama-server bundled in Windows app resources before PATH", () => {
+    const resourcesPath = "C:\\Program Files\\Lynn\\resources";
+    const expected = bundledBinaryPath(resourcesPath, "win32");
+    const spawnCalls = [];
+    const manager = new LlamaCppManager({
+      platform: "win32",
+      resourcesPath,
+      lynnHome: "C:\\Users\\test\\.lynn",
+      fsModule: { existsSync: (candidate) => candidate === expected },
+      spawnSyncFn: (...args) => {
+        spawnCalls.push(args);
+        return { stdout: "C:\\other\\llama-server.exe\r\n" };
+      },
+    });
+
+    expect(manager.resolveBinaryPath()).toBe(expected);
+    expect(spawnCalls).toEqual([]);
+  });
+
+  it("keeps a managed Windows llama-server ahead of the bundled runtime", () => {
+    const lynnHome = makeTempDir("lynn-managed-win-");
+    const resourcesPath = makeTempDir("lynn-resources-win-");
+    const managed = path.join(lynnHome, "llamacpp", "bin", "llama-server.exe");
+    const bundled = bundledBinaryPath(resourcesPath, "win32");
+    const manager = new LlamaCppManager({
+      platform: "win32",
+      resourcesPath,
+      lynnHome,
+      fsModule: { existsSync: (candidate) => candidate === managed || candidate === bundled },
+    });
+
+    expect(manager.resolveBinaryPath()).toBe(managed);
   });
 
   it("keeps every valid Windows PATH match so an unavailable first result can fall through", () => {

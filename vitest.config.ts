@@ -6,6 +6,7 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       "**/.claude/**",
+      "**/.codex-work/**",
       "**/.codebuddy/**",
       "**/.qwen/**",
       "**/.session_tmps/**",

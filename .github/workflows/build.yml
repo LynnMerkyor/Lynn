@@ -40,6 +40,19 @@ jobs:
         if: runner.os == 'Windows'
         run: node --import tsx scripts/download-git-portable.ts
 
+      - name: Prepare llama.cpp Windows runtime
+        if: runner.os == 'Windows'
+        run: npm run prepare:llamacpp:win
+
+      - name: Smoke llama.cpp Windows runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & "vendor/llama.cpp/win-x64/llama-server.exe" --version
+          if ($LASTEXITCODE -ne 0) {
+            throw "Bundled llama-server.exe smoke failed with exit code $LASTEXITCODE"
+          }
+
       - name: Build server bundle
         shell: bash
         run: |
@@ -154,10 +167,17 @@ jobs:
       # Windows 打包
       - name: Build Windows installer
         if: runner.os == 'Windows'
-        run: npx electron-builder --win nsis --publish never
+        run: |
+          npm run prepare:llamacpp:win -- --verify-only
+          npx electron-builder --win nsis --publish never
         env:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Gate installed Windows llama.cpp runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/verify-windows-llamacpp-installer.ps1
 
       - name: Upload artifacts
         if: runner.os == 'Windows' || env.HAS_MAC_SIGNING == 'true'

@@ -1,0 +1,42 @@
+{
+  "name": "llama.cpp Windows CPU runtime",
+  "tag": "b10153",
+  "platform": "win32",
+  "arch": "x64",
+  "archive": {
+    "name": "llama-b10153-bin-win-cpu-x64.zip",
+    "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10153/llama-b10153-bin-win-cpu-x64.zip",
+    "size": 18297468,
+    "sha256": "fdae408ca8ac8cdea7d69073299a318e1ad89ab185a349b21cb6918df26f2099"
+  },
+  "license": {
+    "name": "LICENSE.llama.cpp",
+    "url": "https://raw.githubusercontent.com/ggml-org/llama.cpp/b10153/LICENSE",
+    "size": 1078,
+    "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+  },
+  "files": [
+    "ggml-base.dll",
+    "ggml-cpu-alderlake.dll",
+    "ggml-cpu-cannonlake.dll",
+    "ggml-cpu-cascadelake.dll",
+    "ggml-cpu-cooperlake.dll",
+    "ggml-cpu-haswell.dll",
+    "ggml-cpu-icelake.dll",
+    "ggml-cpu-ivybridge.dll",
+    "ggml-cpu-piledriver.dll",
+    "ggml-cpu-sandybridge.dll",
+    "ggml-cpu-sapphirerapids.dll",
+    "ggml-cpu-skylakex.dll",
+    "ggml-cpu-sse42.dll",
+    "ggml-cpu-x64.dll",
+    "ggml-cpu-zen4.dll",
+    "ggml.dll",
+    "libomp140.x86_64.dll",
+    "llama-common.dll",
+    "llama-server-impl.dll",
+    "llama-server.exe",
+    "llama.dll",
+    "mtmd.dll"
+  ]
+}
