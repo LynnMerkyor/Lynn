@@ -174,7 +174,7 @@ jobs:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
-      - name: Gate installed Windows llama.cpp runtime
+      - name: Gate final Windows installer llama.cpp runtime
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/verify-windows-llamacpp-installer.ps1

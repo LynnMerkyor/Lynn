@@ -12,38 +12,53 @@ if (-not $installer) {
   throw "Windows installer not found under dist/."
 }
 
-$installDir = Join-Path $env:RUNNER_TEMP "Lynn-llamacpp-installed-gate"
-if (Test-Path $installDir) {
-  Remove-Item -Recurse -Force $installDir
+$payloadDir = Join-Path $env:RUNNER_TEMP "Lynn-llamacpp-nsis-payload"
+$appDir = Join-Path $env:RUNNER_TEMP "Lynn-llamacpp-packaged-app"
+foreach ($path in @($payloadDir, $appDir)) {
+  if (Test-Path $path) {
+    Remove-Item -Recurse -Force $path
+  }
+  New-Item -ItemType Directory -Path $path | Out-Null
 }
 
-Write-Host "[llama.cpp] installing $($installer.Name) into $installDir"
-$process = Start-Process -FilePath $installer.FullName -ArgumentList @(
-  "/S",
-  "/D=$installDir"
-) -Wait -PassThru
-if ($process.ExitCode -ne 0) {
-  throw "NSIS installer exited with code $($process.ExitCode)."
+$sevenZip = (Get-Command 7z.exe -ErrorAction Stop).Source
+Write-Host "[llama.cpp] extracting final NSIS payload from $($installer.Name)"
+& $sevenZip x -y "-o$payloadDir" $installer.FullName
+if ($LASTEXITCODE -ne 0) {
+  throw "Unable to extract the final NSIS installer (7-Zip exit $LASTEXITCODE)."
 }
 
-$binary = Join-Path $installDir "resources\llamacpp\bin\llama-server.exe"
+$appArchive = Get-ChildItem -Path $payloadDir -Recurse -File |
+  Where-Object { $_.Name -match '^app-(32|64|arm64)\.7z$' } |
+  Select-Object -First 1
+if (-not $appArchive) {
+  throw "The final NSIS installer does not contain an Electron app payload archive."
+}
+
+Write-Host "[llama.cpp] extracting exact packaged application payload $($appArchive.Name)"
+& $sevenZip x -y "-o$appDir" $appArchive.FullName
+if ($LASTEXITCODE -ne 0) {
+  throw "Unable to extract the packaged application payload (7-Zip exit $LASTEXITCODE)."
+}
+
+$binary = Join-Path $appDir "resources\llamacpp\bin\llama-server.exe"
 if (-not (Test-Path $binary)) {
-  throw "Installed llama-server.exe not found at $binary"
+  throw "Packaged llama-server.exe not found at $binary"
 }
 
-Write-Host "[llama.cpp] executing installed runtime"
+Write-Host "[llama.cpp] executing runtime extracted from the final installer"
 & $binary --version
 if ($LASTEXITCODE -ne 0) {
-  throw "Installed llama-server.exe --version exited with code $LASTEXITCODE."
+  throw "Packaged llama-server.exe --version exited with code $LASTEXITCODE."
 }
 
-$manifest = Join-Path $installDir "resources\llamacpp\bin\runtime-manifest.json"
+$manifest = Join-Path $appDir "resources\llamacpp\bin\runtime-manifest.json"
 if (-not (Test-Path $manifest)) {
-  throw "Installed runtime manifest not found at $manifest"
+  throw "Packaged runtime manifest not found at $manifest"
 }
 $runtime = Get-Content $manifest -Raw | ConvertFrom-Json
 if ($runtime.sourceTag -ne "b10153" -or $runtime.files.PSObject.Properties.Count -ne 23) {
-  throw "Installed runtime manifest does not match the pinned b10153 package."
+  throw "Packaged runtime manifest does not match the pinned b10153 package."
 }
 
 $modelUrl = "https://huggingface.co/ggml-org/models/resolve/499bc8821c6b12b4e53c5bffcb21ec206f212d81/tinyllamas/stories260K.gguf?download=true"
@@ -65,7 +80,7 @@ $stdout = Join-Path $env:RUNNER_TEMP "llama-server.stdout.log"
 $stderr = Join-Path $env:RUNNER_TEMP "llama-server.stderr.log"
 $server = $null
 try {
-  Write-Host "[llama.cpp] starting installed runtime with a real GGUF"
+  Write-Host "[llama.cpp] starting final-installer runtime with a real GGUF"
   $server = Start-Process -FilePath $binary -ArgumentList @(
     "-m", $model,
     "-c", "256",
@@ -138,4 +153,4 @@ try {
   }
 }
 
-Write-Host "[llama.cpp] installed-package load/generation gate passed: $($runtime.files.PSObject.Properties.Count) verified files"
+Write-Host "[llama.cpp] final-installer load/generation gate passed: $($runtime.files.PSObject.Properties.Count) verified files"
