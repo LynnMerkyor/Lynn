@@ -71,6 +71,26 @@ export class ModelCallTimeoutError extends Error {
   }
 }
 
+/** A stream failed after yielding assistant text.  The caller may safely keep
+ * a structurally complete partial answer instead of appending a second model's
+ * fallback answer to text the user has already seen. */
+export class ModelCallStreamError extends Error {
+  readonly partialContent: string;
+  readonly partialReasoning: string;
+  readonly streamedText: boolean;
+  readonly cause: unknown;
+
+  constructor(cause: unknown, partialContent: string, partialReasoning: string, streamedText: boolean) {
+    const message = cause instanceof Error ? cause.message : String(cause || "model stream failed");
+    super(message);
+    this.name = "ModelCallStreamError";
+    this.cause = cause;
+    this.partialContent = partialContent;
+    this.partialReasoning = partialReasoning;
+    this.streamedText = streamedText;
+  }
+}
+
 export function positiveEnvInt(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -145,8 +165,19 @@ export function containsPastDateFutureStartContradiction(text: string): boolean 
   return futureStart && noResult;
 }
 
-export function isUnsafeFinalAnswerText(text: string): boolean {
-  return containsPastDateFutureStartContradiction(text);
+export function claimsToolEvidenceWithoutToolMessages(text: unknown): boolean {
+  const value = String(text || "");
+  return /针对[“"][^”"]{1,240}[”"]，?我能从工具证据中确认/u.test(value)
+    || /根据本轮已执行(?:工具|操作)返回的(?:证据|可见结果)/u.test(value)
+    || /这轮操作已有可见结果，先按结果收口/u.test(value);
+}
+
+export function isUnsafeFinalAnswerText(
+  text: string,
+  options: { hasToolEvidence?: boolean } = {},
+): boolean {
+  return containsPastDateFutureStartContradiction(text)
+    || (!options.hasToolEvidence && claimsToolEvidenceWithoutToolMessages(text));
 }
 
 export function createTimedSignal(parent: AbortSignal | undefined, timeoutMs: number): {

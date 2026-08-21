@@ -177,8 +177,29 @@ export function stripAssistantProcessChatter(text: string): string {
   return text;
 }
 
+const INTERNAL_REASONING_TAG_NAMES = ["reflect", "analysis", "thinking", "reasoning", "thought"] as const;
+
+/**
+ * Some OpenAI-compatible providers occasionally place their private planning
+ * scaffold in assistant content instead of reasoning_content.  Treat only the
+ * small, explicit internal-tag allowlist as hidden; ordinary HTML, JSX and
+ * TypeScript generics must remain untouched.
+ */
+export function stripInternalReasoningMarkup(content: unknown): string {
+  let text = String(content || "");
+  for (const tag of INTERNAL_REASONING_TAG_NAMES) {
+    const closed = new RegExp(`<${tag}\\s*>[\\s\\S]*?<\\/\\s*${tag}\\s*>`, "giu");
+    text = text.replace(closed, "");
+    const danglingOpen = new RegExp(`<${tag}\\s*>[\\s\\S]*$`, "iu");
+    text = text.replace(danglingOpen, "");
+    const strayClose = new RegExp(`<\\/\\s*${tag}\\s*>`, "giu");
+    text = text.replace(strayClose, "");
+  }
+  return text;
+}
+
 export function normalizeFinalAnswerText(content: string): string {
-  let text = String(content || "").replace(/\r/g, "\n");
+  let text = stripInternalReasoningMarkup(content).replace(/\r/g, "\n");
   if (!text.trim()) return text;
   const hasCodeFence = /```/.test(text);
   text = stripAssistantProcessChatter(text);

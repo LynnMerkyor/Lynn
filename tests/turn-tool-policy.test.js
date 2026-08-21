@@ -5,6 +5,7 @@ import {
   hasExplicitDeliverableIntent,
   isDeliverableToolName,
   isFileMutationToolName,
+  isStructurallyCompletePartialAnswer,
   shouldRecoverIncompleteVisibleAnswer,
 } from "../core/agent-runtime/turn-tool-policy.js";
 
@@ -44,6 +45,13 @@ describe("turn deliverable tool policy", () => {
       375,
     )).toBe(false);
     expect(shouldRecoverIncompleteVisibleAnswer("2+2 等于几？只给答案", "4", 900)).toBe(false);
+    expect(shouldRecoverIncompleteVisibleAnswer(
+      "劳动合同试用期被突然辞退，我应该先收集什么材料？不要当正式法律意见",
+      "",
+      470,
+    )).toBe(true);
+    expect(isStructurallyCompletePartialAnswer("这是一份已经完整写完的搬家清单，包含打包、预约车辆、清点箱数和修改地址。") ).toBe(true);
+    expect(isStructurallyCompletePartialAnswer("这是一份还没写完的搬家清")).toBe(false);
   });
 
   it("opens deliverable tools for explicit file or rendered-output requests", () => {

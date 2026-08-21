@@ -13,6 +13,7 @@ import { isBrainProvider } from "../../shared/brain-provider.js";
 import {
   STEP_EXECUTE_TOOL_NAME,
   ModelCallTimeoutError,
+  ModelCallStreamError,
   appendToolDelta,
   asRecord,
   brainModelCallTimeoutMs,
@@ -63,6 +64,7 @@ import { buildEvidenceSafetyAnswer } from "../../shared/evidence-safety-answer.j
 import {
   filterDeliverableToolsForTurn,
   hasExplicitDeliverableIntent,
+  isStructurallyCompletePartialAnswer,
   shouldRecoverIncompleteVisibleAnswer,
 } from "./turn-tool-policy.js";
 import type {
@@ -464,10 +466,11 @@ export class LynnAgentSession {
   ): void {
     const finalContent = normalizeFinalAnswerText(content);
     if (!opts.streamedText) {
-      const deltas = opts.contentDeltas?.length ? opts.contentDeltas : [finalContent];
-      for (const delta of deltas) {
-        if (delta) this.emit(eventTextDelta(delta));
-      }
+      // Buffered model paths have not exposed any content yet, so emit only
+      // the normalized final answer. Replaying raw provider chunks here can
+      // re-introduce <reflect> scaffolding that normalization intentionally
+      // removed from the persisted message.
+      if (finalContent) this.emit(eventTextDelta(finalContent));
     }
     const finalMessage: ChatMessage = {
       role: "assistant",
@@ -553,8 +556,8 @@ export class LynnAgentSession {
           });
           if (turnSignal?.aborted) return false;
           result.toolCalls = result.toolCalls.filter(isExecutableToolCall);
-          const content = contentToText(result.assistant.content);
-          if (content.trim() && !isUnsafeFinalAnswerText(content)) {
+          const content = normalizeFinalAnswerText(contentToText(result.assistant.content));
+          if (content.trim() && !isUnsafeFinalAnswerText(content, { hasToolEvidence: hasAnyToolEvidence(workingMessages) })) {
             this.finishAssistantAnswer(content, result.reasoning, {
               streamedText: false,
             });
@@ -634,19 +637,22 @@ export class LynnAgentSession {
         if (turnController.signal.aborted) return;
         result.toolCalls = result.toolCalls.filter(isExecutableToolCall);
         if (!result.toolCalls.length) {
-          let content = contentToText(result.assistant.content);
+          let content = normalizeFinalAnswerText(contentToText(result.assistant.content));
           let recoveredIncompleteAnswer = false;
           if (shouldRecoverIncompleteVisibleAnswer(latestUserQuestion(messages), content, result.reasoning.length)) {
-            const continuation = await this.callModel([
+            const continuationMessages = [
               ...messages,
-              roleMessage("assistant", content),
-              roleMessage("user", "上一个可见回答在中途结束了。请从中断处继续完成，不要重新开头，不要调用工具，直接输出剩余正文。"),
-            ], {
+              ...(content ? [roleMessage("assistant", content)] : []),
+              roleMessage("user", content
+                ? "上一个可见回答在中途结束了。请从中断处继续完成，不要重新开头，不要调用工具，直接输出剩余正文。"
+                : "上一个回答只返回了内部推理，没有可见结论。不要重复推理，不要调用工具，直接输出完整的最终答案。"),
+            ];
+            const continuation = await this.callModel(continuationMessages, {
               tools: [],
               streamText: result.streamedText,
             });
             if (turnController.signal.aborted) return;
-            const extra = contentToText(continuation.assistant.content);
+            const extra = normalizeFinalAnswerText(contentToText(continuation.assistant.content));
             if (extra.trim()) {
               content = `${content}${extra}`;
               recoveredIncompleteAnswer = true;
@@ -662,7 +668,7 @@ export class LynnAgentSession {
             );
             return;
           }
-          if (isUnsafeFinalAnswerText(content)) {
+          if (isUnsafeFinalAnswerText(content, { hasToolEvidence: hasAnyToolEvidence(messages) })) {
             const handled = await this.finishWithFallback(messages, "empty_response", this.model, turnController.signal);
             if (handled) return;
             const evidenceSafetyAnswer = buildEvidenceSafetyAnswer(messages);
@@ -728,6 +734,17 @@ export class LynnAgentSession {
     } catch (err) {
       const isAbortError = (err as any)?.name === "AbortError";
       if (turnController.signal.aborted) return;
+      if (err instanceof ModelCallStreamError) {
+        const partial = normalizeFinalAnswerText(err.partialContent);
+        const hasEvidence = hasAnyToolEvidence(fallbackMessages);
+        if (
+          isStructurallyCompletePartialAnswer(partial)
+          && !isUnsafeFinalAnswerText(partial, { hasToolEvidence: hasEvidence })
+        ) {
+          this.finishAssistantAnswer(partial, err.partialReasoning, { streamedText: err.streamedText });
+          return;
+        }
+      }
       const handled = fallbackMessages.length
         ? await this.finishWithFallback(fallbackMessages, "model_error", this.model, turnController.signal)
         : false;
@@ -776,6 +793,8 @@ export class LynnAgentSession {
     const resolvedTimeoutMs = options.timeoutMs
       ?? (isBrainProvider(model.provider) ? brainModelCallTimeoutMs() : defaultModelCallTimeoutMs());
     const timed = createTimedSignal(this.abortController?.signal, resolvedTimeoutMs);
+    const textParts: string[] = [];
+    const reasoningParts: string[] = [];
     try {
       const response = await fetch(chatCompletionsUrl(model), {
         method: "POST",
@@ -790,8 +809,6 @@ export class LynnAgentSession {
       if (!response.body) throw new Error("LLM response did not include a stream body");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      const textParts: string[] = [];
-      const reasoningParts: string[] = [];
       const toolDeltas = new Map<number, StreamToolCallAccumulator>();
       let buffer = "";
       while (true) {
@@ -843,8 +860,16 @@ export class LynnAgentSession {
         streamedText: streamTextImmediately,
       };
     } catch (err) {
-      if (timed.didTimeout()) throw new ModelCallTimeoutError(resolvedTimeoutMs);
-      throw err;
+      const failure = timed.didTimeout() ? new ModelCallTimeoutError(resolvedTimeoutMs) : err;
+      if (textParts.length > 0) {
+        throw new ModelCallStreamError(
+          failure,
+          textParts.join(""),
+          reasoningParts.join(""),
+          streamTextImmediately,
+        );
+      }
+      throw failure;
     } finally {
       timed.cleanup();
     }

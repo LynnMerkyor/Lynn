@@ -43,13 +43,25 @@ export function shouldRecoverIncompleteVisibleAnswer(
 ): boolean {
   const question = String(prompt || "").trim();
   const visible = String(content || "").trim();
-  if (question.length < 16 || visible.length === 0 || visible.length > 140) return false;
+  if (question.length < 16 || visible.length > 140) return false;
   // Provider-side reasoning counters are approximate and may omit framing
   // tokens. Keep the guard structural instead of depending on a brittle
   // round-number boundary: a substantive prompt plus hidden reasoning and a
   // short non-terminal fragment should receive one continuation attempt.
   if (reasoningChars < 240 || SHORT_ANSWER_REQUEST_RE.test(question)) return false;
+  // A provider may put a complete <reflect>...</reflect> scaffold in content.
+  // After final-answer normalization that is an empty visible answer and needs
+  // the same single tool-free continuation as a truncated fragment.
+  if (visible.length === 0) return true;
   return !TERMINAL_VISIBLE_CHAR_RE.test(visible);
+}
+
+export function isStructurallyCompletePartialAnswer(content: unknown): boolean {
+  const visible = String(content || "").trim();
+  if (visible.length < 24) return false;
+  return TERMINAL_VISIBLE_CHAR_RE.test(visible)
+    || /```\s*$/u.test(visible)
+    || /(?:^|\n)\s*\|[^\n]+\|\s*$/u.test(visible);
 }
 
 export function hasExplicitDeliverableIntent(prompt: unknown): boolean {

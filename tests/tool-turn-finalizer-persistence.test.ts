@@ -241,4 +241,44 @@ describe("tool turn finalizer fallback persistence", () => {
     expect(emittedText).not.toContain("工具证据中确认");
     expect(emittedText).not.toContain("北京2023");
   });
+
+  it("does not close from persisted internal reasoning without a visible answer", () => {
+    const sessionPath = makeTempSessionFile();
+    const internal = "<reflect>Premise: internal only. Conduct: plan. Reflection: check. Act: answer.</reflect>";
+    fs.appendFileSync(sessionPath, `${JSON.stringify({
+      type: "message",
+      id: "a-reflect",
+      parentId: "u1",
+      timestamp: new Date().toISOString(),
+      message: { role: "assistant", content: [{ type: "text", text: internal }], timestamp: Date.now() },
+    })}\n`, "utf-8");
+    const session = { messages: [{ role: "assistant", content: internal }] };
+    const emitted = vi.fn();
+    const finalizer = createToolTurnFinalizer({
+      engine: { getSessionByPath: vi.fn(() => session) },
+      editRollbackStore: { discardPendingForSession: vi.fn() },
+      lifecycleHooks: { run: vi.fn() },
+      broadcast: vi.fn(),
+      emitStreamEvent: vi.fn(),
+      emitTrustedVisibleTextDelta: emitted,
+      emitVisibleTextDelta: vi.fn(),
+      flushBufferedAssistantText: vi.fn(),
+      flushBufferedToolVisibleText: vi.fn(),
+      maybeAppendCodeVerificationPostscript: vi.fn(() => false),
+      hasStreamEvent: vi.fn(() => false),
+      hasToolExecutionInFlight: vi.fn(() => false),
+      hasDifferentActiveStreamToken: vi.fn(() => false),
+      timeouts: {
+        returnedTurnFinalizationGraceMs: 1,
+        turnHardAbortMs: 1,
+        turnLongResearchHardAbortMs: 1,
+        toolFinalizationGraceMs: 1,
+        toolAuthorizationGraceMs: 1,
+      },
+    });
+    const ss: any = { streamId: "s", events: [], visibleTextAcc: "", hasOutput: false };
+
+    expect(finalizer.finalizeReturnedTurnWithoutStream(sessionPath, ss, "returned", { requirePersistedText: true })).toBe(false);
+    expect(emitted).not.toHaveBeenCalled();
+  });
 });

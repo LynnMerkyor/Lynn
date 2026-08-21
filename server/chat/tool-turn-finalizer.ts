@@ -28,6 +28,8 @@ import {
   guiRunTerminalFields,
   terminalForGuiCloseReason,
 } from "./agent-run-state.js";
+import { normalizeFinalAnswerText } from "../../core/agent-runtime/session-fallback-helpers.js";
+import { isUnsafeFinalAnswerText } from "../../core/agent-runtime/session-openai-adapter.js";
 
 /**
  * 工具回合结束但模型没有产出收尾文本时的事实行(issue #72 第三类的 GUI 变体:
@@ -558,7 +560,8 @@ export function createToolTurnFinalizer({
   }
 
   function selectPersistedFinalText(ss: any, finalText: any) {
-    const text = String(finalText || "");
+    const text = normalizeFinalAnswerText(String(finalText || ""));
+    if (isUnsafeFinalAnswerText(text, { hasToolEvidence: hasToolEvidence(ss) })) return "";
     if (!text || !hasToolEvidence(ss)) return text;
     return selectToolEvidenceVisibleText(ss, text);
   }
@@ -598,7 +601,9 @@ export function createToolTurnFinalizer({
       ? extractLatestAssistantVisibleText(session, sessionPath)
       : "";
     if (opts.requirePersistedText && !ss.hasOutput && !finalText) return false;
-    return closeStreamWithVisibleFallback(sessionPath, ss, selectPersistedFinalText(ss, finalText), reason, { trustedFallback: true });
+    const selected = selectPersistedFinalText(ss, finalText);
+    if (opts.requirePersistedText && !ss.hasOutput && !selected) return false;
+    return closeStreamWithVisibleFallback(sessionPath, ss, selected, reason, { trustedFallback: true });
   }
 
   function scheduleReturnedTurnFinalizationFallback(sessionPath: any, ss: any, reason: any) {

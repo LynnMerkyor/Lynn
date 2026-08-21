@@ -21,6 +21,25 @@ function sseResponse(chunks) {
   };
 }
 
+function failingSseResponse(chunks, error = new Error("stream disconnected after content")) {
+  const encoder = new TextEncoder();
+  let index = 0;
+  return {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    body: new ReadableStream({
+      pull(controller) {
+        if (index < chunks.length) {
+          controller.enqueue(encoder.encode(chunks[index++]));
+          return;
+        }
+        controller.error(error);
+      },
+    }),
+  };
+}
+
 async function waitFor(condition, timeoutMs = 500) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -1436,6 +1455,129 @@ describe("createLynnAgentSession native runtime", () => {
     const finalMessage = manager.buildSessionContext().messages.at(-1);
     expect(finalMessage).toMatchObject({ role: "assistant" });
     expect(finalMessage.content.match(/1 USD = 6\.7844 CNY/g)).toHaveLength(1);
+  });
+
+  it("turns content-only reflect scaffolding into one tool-free visible-answer continuation", async () => {
+    const hidden = `<reflect>${"internal planning ".repeat(30)}</reflect>`;
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      if (fetchMock.mock.calls.length === 1) {
+        return sseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "r".repeat(300) } }] })}\n\n`,
+          `data: ${JSON.stringify({ choices: [{ delta: { content: hidden } }] })}\n\n`,
+          "data: [DONE]\n\n",
+        ]);
+      }
+      expect(body.tools || []).toHaveLength(0);
+      expect(JSON.stringify(body.messages)).toContain("只返回了内部推理");
+      return sseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "先保存劳动合同、工资和考勤记录，再固定书面辞退通知与沟通记录；以上仅为一般信息，不构成正式法律意见。" } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ]);
+    });
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: { id: "test-model", provider: "test", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "test-key" },
+    });
+
+    await session.prompt("劳动合同试用期被突然辞退，我应该先收集什么材料？不要当正式法律意见");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const finalMessage = manager.buildSessionContext().messages.at(-1);
+    expect(finalMessage.content).toContain("书面辞退通知");
+    expect(finalMessage.content).not.toContain("<reflect>");
+    expect(finalMessage.content).not.toContain("internal planning");
+  });
+
+  it("emits only normalized visible text from a buffered tool-capable model response", async () => {
+    const raw = "<reflect>internal planning only</reflect>最终只显示这句。";
+    const fetchMock = vi.fn(async () => sseResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: raw } }] })}\n\n`,
+      "data: [DONE]\n\n",
+    ]));
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+    const events = [];
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: { id: "test-model", provider: "test", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "test-key" },
+      tools: [{ name: "read", description: "read", parameters: { type: "object", properties: {} } }],
+    });
+    session.subscribe((event) => events.push(event));
+
+    await session.prompt("请给我一个普通回答");
+
+    const visible = events
+      .filter((event) => event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta")
+      .map((event) => event.assistantMessageEvent.delta)
+      .join("");
+    expect(visible).toBe("最终只显示这句。");
+    expect(manager.buildSessionContext().messages.at(-1)?.content).toBe("最终只显示这句。");
+  });
+
+  it("keeps a complete streamed partial answer when the provider disconnects before DONE", async () => {
+    const complete = "搬家前先确认日期和预算，再预约搬家公司、按房间打包并单独保管证件；搬家当天复核水电表和箱数，入住后及时修改地址。";
+    const fetchMock = vi.fn(async () => failingSseResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: complete } }] })}\n\n`,
+    ]));
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "primary", provider: "test", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "p" },
+          { id: "mimo-v2.5-pro", provider: "xiaomi", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "m" },
+        ],
+      },
+      model: { id: "primary", provider: "test", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "p" },
+    });
+
+    await session.prompt("下个月搬家，帮我按时间线列一个不容易漏事的待办清单");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const finalMessage = manager.buildSessionContext().messages.at(-1);
+    expect(finalMessage).toMatchObject({ role: "assistant", content: complete });
+    expect(finalMessage.content).not.toContain("工具证据");
+  });
+
+  it("rejects invented tool-evidence claims when the turn ran no tools", async () => {
+    const invented = "根据本轮已执行工具返回的证据，当前能确认：已经完成搬家清单并核对全部项目。";
+    const replacement = "搬家清单应按确认日期、预约车辆、分类打包、交接读表和修改地址五个阶段安排。";
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      const content = body.model === "primary" ? invented : replacement;
+      return sseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ]);
+    });
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      modelRegistry: {
+        getAll: () => [
+          { id: "primary", provider: "test", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "p" },
+          { id: "mimo-v2.5-pro", provider: "xiaomi", api: "openai-completions", baseUrl: "http://127.0.0.1:65531/v1", apiKey: "m" },
+        ],
+      },
+      model: { id: "primary", provider: "test", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "p" },
+    });
+
+    await session.prompt("下个月搬家，帮我按时间线列一个不容易漏事的待办清单");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).model).toBe("mimo-v2.5-pro");
+    const finalMessage = manager.buildSessionContext().messages.at(-1);
+    expect(finalMessage.content).toBe(replacement);
+    expect(finalMessage.content).not.toContain("工具证据");
   });
 
   it("drops stale process lead-in after a corrected final answer boundary", async () => {
