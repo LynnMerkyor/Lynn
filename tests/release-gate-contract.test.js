@@ -37,10 +37,13 @@ describe('release gate contract', () => {
   });
 
   it('keeps the release gate aligned with the approved GUI100 and CLI100 policy', () => {
-    const fullGate = readPackage().scripts['release:full-gate'];
+    const scripts = readPackage().scripts;
+    const fullGate = scripts['release:full-gate'];
     expect(fullGate).toContain('npm run gate:cli-100');
     expect(fullGate).toContain('npm run gate:gui-100');
     expect(fullGate).not.toContain('npm run gate:cli-200');
+    expect(scripts['release:preflight']).toContain('npm run test:release:root');
+    expect(scripts['test:release:root']).toBe('vitest run --maxWorkers=6');
   });
 
   it('requires the production Brain to expose a real Codex app-server route', () => {
