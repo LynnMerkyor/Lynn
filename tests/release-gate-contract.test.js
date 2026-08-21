@@ -35,4 +35,12 @@ describe('release gate contract', () => {
     expect(fullGate).toContain('npm run gate:gui-100');
     expect(fullGate).not.toContain('npm run gate:cli-200');
   });
+
+  it('requires the production Brain to declare Codex app-server capabilities', () => {
+    const gate = fs.readFileSync(path.join(ROOT, 'scripts', 'mirror-prod-diff.sh'), 'utf8');
+    expect(gate).toContain('appServerHarness: true');
+    expect(gate).toContain("j.capabilities?.responses === true");
+    expect(gate).toContain("j.capabilities?.appServerHarness === true");
+    expect(gate).toContain('prod 运行态缺 Responses/app-server harness capabilities');
+  });
 });

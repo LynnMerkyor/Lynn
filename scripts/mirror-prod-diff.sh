@@ -103,6 +103,19 @@ else
   printf '    mirror: %s\n    prod  : %s\n' "${local_route:-<empty>}" "${remote_route:-<empty>}"
 fi
 
+if grep -q "responses: true" "$MIRROR/server.ts" && grep -q "appServerHarness: true" "$MIRROR/server.ts"; then
+  ok "mirror 声明 Responses + app-server harness capabilities"
+else
+  fail "mirror 缺 Responses/app-server harness capability 声明"
+fi
+
+remote_harness_cap=$(ssh "$HOST" "node --input-type=module -e \"const r = await fetch('http://127.0.0.1:$PORT/v2/providers/status'); if (!r.ok) throw new Error('/v2/providers/status HTTP ' + r.status); const j = await r.json(); console.log(j.capabilities?.responses === true && j.capabilities?.appServerHarness === true ? 'ready' : 'missing');\"" 2>/dev/null || true)
+if [ "$remote_harness_cap" = "ready" ]; then
+  ok "prod 运行态 Responses + app-server harness capabilities ready"
+else
+  fail "prod 运行态缺 Responses/app-server harness capabilities: ${remote_harness_cap:-<empty>}"
+fi
+
 note ""
 if [ "$FAIL" -ne 0 ]; then
   note "== 结果:硬信号失败(tsc 门 / 锚点 / 运行态 smoke,见 ✗)。部署前必须人工 reconcile,严禁 wholesale 转译覆盖 prod。=="
