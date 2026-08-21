@@ -167,9 +167,9 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 
 **v0.86.2 Agent harness 与可靠性更新**:
 - **`Codex app-server harness` 接入 Lynn Code**：线程、回合、流式事件、计划、工具生命周期、审批请求、压缩与中断统一映射到 Lynn 的 Agent 运行状态；原 Agent loop 完整保留。
-- **默认 `auto`，任务开始前完成选择**：先验证 app-server 可执行、协议兼容、Brain Responses 能力、认证及当前 provider/model 路由；任一条件不满足就直接使用原架构，不在执行中途切换。
+- **默认 `auto`，任务开始前完成选择**：Lynn Code/CLI 先验证 app-server 可执行与协议兼容，再通过当前认证及 provider/model 做一次极短的真实 Responses 预检；任一条件不满足就直接使用原架构，不在执行中途切换。
 - **不牺牲现有能力换新架构**：附件/多模态继续走已验证的 Lynn bridge；`--json` 保留逐工具审计流；`ask`/`never` 保留严格审批语义；ultra 多 worker 继续走原 loop。显式 `--harness codex` 仅允许已验证的普通 `yolo/on-failure` 路径，不兼容组合会明确报错；`--harness legacy` 可固定原架构。
-- **GUI/CLI 共享可终结的运行状态**：completed、failed、cancelled、partial、resumable 与工具账本使用同一生命周期，降低空答、重复收尾和取消后残留状态。
+- **GUI/CLI 共享可终结的运行状态**：CLI 记录 harness 选择；GUI 与 CLI 的 completed、failed、cancelled、partial、resumable 和工具终态使用同一契约，降低空答、重复收尾和取消后残留状态。
 - **BYOK 与 Brain 各自保持原路由职责**：BYOK 仍使用用户配置的 provider/model；StepFun、DeepSeek V4 Flash、MiMo 与 GLM 等 Brain 模型继续由 Brain 路由，不因 harness 选择改变模型归属。
 - **Windows 本地 GGUF 能力继续随包提供**：Windows 安装包沿用 v0.86.1 已修复的内置 `llama.cpp` runtime 与安装包验证门禁。
 

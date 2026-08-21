@@ -735,6 +735,21 @@ class StreamBufferManager {
       case 'turn_end':
         {
           const endedStreamId = buf.streamId;
+          const success = msg.ok !== false;
+          const terminalSummary = String(msg.reason || msg.code || (success ? '' : 'Run ended before tool completion'));
+          this.updateStreamingMessage(buf, (m) => ({
+            ...m,
+            blocks: (m.blocks || []).map((block) => {
+              if (block.type !== 'tool_group' || block.tools.every((tool) => tool.done)) return block;
+              const tools = block.tools.map((tool) => tool.done ? tool : {
+                ...tool,
+                done: true,
+                success,
+                ...(terminalSummary ? { summary: { outputPreview: terminalSummary } } : {}),
+              });
+              return { ...block, tools, collapsed: tools.length > 1 };
+            }),
+          }));
           this.flush(buf, true);
           this.resetTurnBuffer(buf, null);
           buf.lastEndedStreamId = endedStreamId;

@@ -3,6 +3,7 @@ import { createAgentRunLifecycle } from "../shared/agent-run-lifecycle.js";
 import {
   beginGuiToolRun,
   finishGuiRun,
+  finishGuiRunWithToolEnds,
   finishGuiToolRun,
   guiRunTerminalFields,
   terminalForGuiCloseReason,
@@ -53,5 +54,25 @@ describe("GUI agent run state bridge", () => {
       resumable: false,
       reason: "fallback",
     });
+  });
+
+  it("emits deterministic tool_end records before a run closes", () => {
+    const ss = state();
+    const started = beginGuiToolRun(ss, { toolCallId: "call-1", name: "bash" }, 3);
+    const finished = finishGuiRunWithToolEnds(ss, {
+      code: "cancelled",
+      message: "user_abort",
+      resumable: true,
+    }, 4);
+
+    expect(started.accepted).toBe(true);
+    expect(finished.toolEnds).toEqual([{
+      type: "tool_end",
+      name: "bash",
+      toolCallId: "call-1",
+      success: false,
+      summary: { outputPreview: "user_abort" },
+    }]);
+    expect(finished.snapshot.tools["call-1"].status).toBe("cancelled");
   });
 });

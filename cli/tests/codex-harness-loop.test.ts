@@ -1,7 +1,7 @@
 import { PassThrough } from "node:stream";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { runCodexHarnessLoop } from "../src/codex-harness-loop.js";
 import type { CodeAgentEvent } from "../src/code-agent-loop.js";
 
@@ -43,6 +43,7 @@ describe("Codex harness loop", () => {
   });
 
   it("answers v2, permissions, and legacy approval requests with their native schemas", async () => {
+    const requestApproval = vi.fn(async () => "approve_all" as const);
     const result = await runCodexHarnessLoop({
       task: "approval protocol",
       context: { cwd: process.cwd(), gitStatus: "", gitDiffStat: "", topFiles: [], packageScripts: {} },
@@ -50,9 +51,10 @@ describe("Codex harness loop", () => {
       reasoning: { effort: "auto", display: "never" },
       json: true,
       maxSteps: 10,
-      toolCtx: { cwd: process.cwd(), approval: "yolo", sandbox: "danger-full-access" },
+      toolCtx: { cwd: process.cwd(), approval: "ask", sandbox: "workspace-write" },
       input: new PassThrough() as unknown as NodeJS.ReadStream,
       output: new PassThrough() as unknown as NodeJS.WriteStream,
+      requestApproval,
     }, {
       clientOptions: {
         command: process.execPath,
@@ -64,6 +66,7 @@ describe("Codex harness loop", () => {
 
     expect(result.text).toBe("approved");
     expect(result.terminal).toMatchObject({ code: "completed", ok: true });
+    expect(requestApproval).toHaveBeenCalledTimes(3);
   });
 
   it("declines unsupported interactive requests with valid protocol responses", async () => {

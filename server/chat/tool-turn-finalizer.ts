@@ -24,7 +24,7 @@ import {
   sessionLineId,
 } from "./session-persistence.js";
 import {
-  finishGuiRun,
+  finishGuiRunWithToolEnds,
   guiRunTerminalFields,
   terminalForGuiCloseReason,
 } from "./agent-run-state.js";
@@ -507,7 +507,7 @@ export function createToolTurnFinalizer({
 
   function closeStreamWithVisibleFallback(sessionPath: any, ss: any, text: any, reason: any, opts: any = {}) {
     if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
-    const runFinished = finishGuiRun(ss, terminalForGuiCloseReason(reason, {
+    const runFinished = finishGuiRunWithToolEnds(ss, terminalForGuiCloseReason(reason, {
       partial: !!ss.hasOutput,
       forced: true,
     }));
@@ -529,6 +529,7 @@ export function createToolTurnFinalizer({
       }
     }
     maybeAppendCodeVerificationPostscript(sessionPath, ss);
+    for (const toolEnd of runFinished.toolEnds) emitStreamEvent(sessionPath, ss, toolEnd);
     emitStreamEvent(sessionPath, ss, { type: "turn_end", ...guiRunTerminalFields(runFinished.snapshot, reason) });
     lifecycleHooks.run("turn_close", { sessionPath, ss, reason, forced: true });
     broadcast({ type: "status", isStreaming: false, sessionPath });

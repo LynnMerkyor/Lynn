@@ -494,11 +494,14 @@ export function createPromptTurnRunner({
       }
     } catch (err: any) {
       clearTurnTimers(ss);
-      const aborted = err.message?.includes("aborted");
+      const userAborted = ss?.userAbortRequested === true;
+      const aborted = userAborted
+        || err?.name === "AbortError"
+        || /\b(?:abort(?:ed)?|cancel(?:led|ed)?)\b/i.test(String(err?.message || err || ""));
       if (!aborted) {
         wsSend(ws, { type: "error", message: err.message, sessionPath: promptSessionPath });
         if (ss) ss.hasError = true;
-      } else if (!ss.hasOutput && !ss.hasToolCall && !ss.hasThinking && !ss.hasError) {
+      } else if (!userAborted && !ss.hasOutput && !ss.hasToolCall && !ss.hasThinking && !ss.hasError) {
         wsSend(ws, { type: "error", message: t("error.modelNoResponse"), sessionPath: promptSessionPath });
       }
       if (ss && !hasStreamEvent(ss, "turn_end")) {

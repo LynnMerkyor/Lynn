@@ -15,6 +15,18 @@ export interface AgentRunStateLike {
   [key: string]: unknown;
 }
 
+export interface GuiTerminalToolEndEvent {
+  type: "tool_end";
+  name: string;
+  toolCallId: string;
+  success: boolean;
+  summary?: { outputPreview: string };
+}
+
+export interface GuiRunFinishResult extends AgentRunMutationResult {
+  toolEnds: GuiTerminalToolEndEvent[];
+}
+
 let anonymousToolCallCounter = 0;
 
 function ensureLifecycle(ss: AgentRunStateLike): AgentRunLifecycle {
@@ -118,6 +130,32 @@ export function finishGuiRun(
   now = Date.now(),
 ): AgentRunMutationResult {
   return ensureLifecycle(ss).finish(input, now);
+}
+
+export function finishGuiRunWithToolEnds(
+  ss: AgentRunStateLike,
+  input: AgentRunFinishInput,
+  now = Date.now(),
+): GuiRunFinishResult {
+  const lifecycle = ensureLifecycle(ss);
+  const pendingCallIds = Object.values(lifecycle.snapshot().tools)
+    .filter((tool) => tool.status === "running")
+    .map((tool) => tool.callId);
+  const result = lifecycle.finish(input, now);
+  if (!result.accepted) return { ...result, toolEnds: [] };
+  const toolEnds = pendingCallIds.flatMap((callId): GuiTerminalToolEndEvent[] => {
+    const tool = result.snapshot.tools[callId];
+    if (!tool) return [];
+    const preview = tool.error || result.snapshot.terminal?.message || "";
+    return [{
+      type: "tool_end",
+      name: tool.name,
+      toolCallId: tool.callId,
+      success: tool.status === "succeeded",
+      ...(preview ? { summary: { outputPreview: preview } } : {}),
+    }];
+  });
+  return { ...result, toolEnds };
 }
 
 export function guiRunStartFields(ss: AgentRunStateLike): Record<string, unknown> {

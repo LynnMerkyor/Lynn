@@ -21,6 +21,15 @@ function getOnlyTextBlockHtml(sessionPath: string): string {
   return textBlock?.type === 'text' ? textBlock.html : '';
 }
 
+function getOnlyTool(sessionPath: string) {
+  const session = useStore.getState().chatSessions[sessionPath];
+  const message = session?.items?.find((item) => item.type === 'message' && item.data.role === 'assistant');
+  const group = message?.type === 'message'
+    ? message.data.blocks?.find((block) => block.type === 'tool_group')
+    : null;
+  return group?.type === 'tool_group' ? group.tools[0] : null;
+}
+
 describe('streamBufferManager markdown warmup', () => {
   beforeEach(() => {
     streamBufferManager.clearAll();
@@ -61,5 +70,41 @@ describe('streamBufferManager markdown warmup', () => {
     await Promise.resolve();
 
     expect(getOnlyTextBlockHtml(sessionPath)).toBe('<p data-rendered="markdown"><strong>流式加粗</strong></p>');
+  });
+});
+
+describe('streamBufferManager terminal tool cleanup', () => {
+  it('closes a pending tool card when a cancelled turn ends', () => {
+    const sessionPath = '/tmp/lynn-stream-cancel-tool.jsonl';
+    streamBufferManager.clearAll();
+    useStore.setState({
+      currentSessionPath: sessionPath,
+      currentModel: { id: 'smoke-model', provider: 'smoke' },
+      chatSessions: {
+        [sessionPath]: {
+          items: [],
+          hasMore: false,
+          loadingMore: false,
+          oldestId: undefined,
+        },
+      },
+    });
+
+    streamBufferManager.handle({ type: 'tool_start', sessionPath, streamId: 'stream-cancel', name: 'bash', args: {} });
+    expect(getOnlyTool(sessionPath)).toMatchObject({ done: false, success: false });
+
+    streamBufferManager.handle({
+      type: 'turn_end',
+      sessionPath,
+      streamId: 'stream-cancel',
+      ok: false,
+      code: 'cancelled',
+      reason: 'user_abort',
+    });
+    expect(getOnlyTool(sessionPath)).toMatchObject({
+      done: true,
+      success: false,
+      summary: { outputPreview: 'user_abort' },
+    });
   });
 });

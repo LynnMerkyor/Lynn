@@ -43,6 +43,7 @@ function appServerApprovalPolicy(
   value: CodeAgentLoopInput["toolCtx"]["approval"],
   protocol: CodexAppServerProtocol,
 ): "unlessTrusted" | "untrusted" | "never" {
+  if (value === "never") return "untrusted";
   if (value !== "ask") return "never";
   return protocol === "v2-camel" ? "unlessTrusted" : "untrusted";
 }
@@ -51,7 +52,7 @@ function appServerThreadSandbox(
   input: CodeAgentLoopInput,
   protocol: CodexAppServerProtocol,
 ): "readOnly" | "workspaceWrite" | "dangerFullAccess" | "read-only" | "workspace-write" | "danger-full-access" {
-  const sandbox = input.toolCtx.approval === "ask" || input.toolCtx.approval === "never"
+  const sandbox = input.toolCtx.approval === "never"
     ? "read-only"
     : input.toolCtx.sandbox || "workspace-write";
   if (protocol !== "v2-camel") return sandbox;
@@ -65,7 +66,7 @@ function appServerTurnSandbox(
   protocol: CodexAppServerProtocol,
 ): ReturnType<typeof appServerThreadSandbox> {
   if (protocol !== "hybrid-kebab-thread") return appServerThreadSandbox(input, protocol);
-  const sandbox = input.toolCtx.approval === "ask" || input.toolCtx.approval === "never"
+  const sandbox = input.toolCtx.approval === "never"
     ? "read-only"
     : input.toolCtx.sandbox || "workspace-write";
   if (sandbox === "read-only") return "readOnly";

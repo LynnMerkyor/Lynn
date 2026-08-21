@@ -37,7 +37,7 @@ import {
 import { resolveTurnEndFallback } from "./turn-end-fallback.js";
 import {
   beginGuiToolRun,
-  finishGuiRun,
+  finishGuiRunWithToolEnds,
   finishGuiToolRun,
   guiRunTerminalFields,
 } from "./agent-run-state.js";
@@ -665,7 +665,10 @@ export function createHubEventForwarder({
         hasToolCall: hasToolEvidence,
       });
       ss._turnClosed = true;
-      const runFinished = finishGuiRun(ss, { code: "completed", partial: false });
+      const userAborted = ss.userAbortRequested === true;
+      const runFinished = finishGuiRunWithToolEnds(ss, userAborted
+        ? { code: "cancelled", message: "user_abort", partial: !!ss.hasOutput, resumable: true }
+        : { code: "completed", partial: false });
       if (!runFinished.accepted) return;
       clearTurnTimers(ss);
       if (ss.isThinking) {
@@ -673,7 +676,8 @@ export function createHubEventForwarder({
         emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
       }
       maybeAppendCodeVerificationPostscript(sessionPath, ss);
-      emitStreamEvent(sessionPath, ss, { type: "turn_end", ...guiRunTerminalFields(runFinished.snapshot, "turn_end") });
+      for (const toolEnd of runFinished.toolEnds) emitStreamEvent(sessionPath, ss, toolEnd);
+      emitStreamEvent(sessionPath, ss, { type: "turn_end", ...guiRunTerminalFields(runFinished.snapshot, userAborted ? "user_abort" : "turn_end") });
       broadcast({ type: "status", isStreaming: false, sessionPath });
       void emitModelHintFromSessionTail(sessionPath, ss, emitStreamEvent);
       finishSessionStream(ss);

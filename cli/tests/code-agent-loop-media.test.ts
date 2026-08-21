@@ -542,6 +542,8 @@ proc = subprocess.Popen(
         "approval-model",
         "--approval",
         "ask",
+        "--harness",
+        "legacy",
         "--sandbox",
         "workspace-write",
         "--max-steps",

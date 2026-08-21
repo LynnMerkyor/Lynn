@@ -17,11 +17,13 @@ describe("Codex harness auto selection", () => {
   it("selects Codex only after a successful protocol probe", async () => {
     const probe = vi.fn(async () => "v2-camel" as const);
     const brainProbe = vi.fn(async () => ({ supported: true, reason: "ready" }));
-    await expect(resolveCodeHarnessSelection({ requested: "auto", cwd: ".", brainUrl: "http://brain", ultra: false, probe, brainProbe })).resolves.toMatchObject({
+    const routeProbe = vi.fn(async () => undefined);
+    await expect(resolveCodeHarnessSelection({ requested: "auto", cwd: ".", brainUrl: "http://brain", ultra: false, probe, brainProbe, routeProbe })).resolves.toMatchObject({
       requested: "auto",
       selected: "codex",
     });
     expect(probe).toHaveBeenCalledOnce();
+    expect(routeProbe).toHaveBeenCalledOnce();
   });
 
   it("falls back before a run when the protocol probe fails", async () => {
@@ -52,8 +54,9 @@ describe("Codex harness auto selection", () => {
     expect(probe).not.toHaveBeenCalled();
   });
 
-  it("keeps JSON tool auditing and strict approval modes on the legacy loop", async () => {
+  it("keeps JSON auditing and deny-all on legacy while allowing ask after both probes", async () => {
     const probe = vi.fn(async () => "v2-camel" as const);
+    const routeProbe = vi.fn(async () => undefined);
     await expect(resolveCodeHarnessSelection({
       requested: "auto",
       cwd: ".",
@@ -70,7 +73,9 @@ describe("Codex harness auto selection", () => {
       ultra: false,
       approval: "ask",
       probe,
-    })).resolves.toMatchObject({ selected: "legacy", reason: expect.stringContaining("strict tool-approval") });
+      brainProbe: async () => ({ supported: true, reason: "ready" }),
+      routeProbe,
+    })).resolves.toMatchObject({ selected: "codex", protocol: "v2-camel" });
     await expect(resolveCodeHarnessSelection({
       requested: "auto",
       cwd: ".",
@@ -79,7 +84,8 @@ describe("Codex harness auto selection", () => {
       approval: "never",
       probe,
     })).resolves.toMatchObject({ selected: "legacy", reason: expect.stringContaining("strict tool-approval") });
-    expect(probe).not.toHaveBeenCalled();
+    expect(probe).toHaveBeenCalledOnce();
+    expect(routeProbe).toHaveBeenCalledOnce();
   });
 
   it("rejects an unauthenticated remote BYOK route before probing", async () => {
@@ -104,6 +110,7 @@ describe("Codex harness auto selection", () => {
       ultra: false,
       provider: { provider: "openai-compatible", baseUrl: "http://127.0.0.1:18098/v1", model: "local" },
       probe,
+      routeProbe: async () => undefined,
     })).resolves.toMatchObject({ selected: "codex" });
     expect(probe).toHaveBeenCalledOnce();
   });
@@ -114,8 +121,24 @@ describe("Codex harness auto selection", () => {
     await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: true })).rejects.toThrow(/cannot be combined/);
     await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: false, hasMedia: true })).rejects.toThrow(/multimodal attachment bridge/);
     await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: false, machineReadable: true })).rejects.toThrow(/JSON audit stream/);
-    await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: false, approval: "ask" })).rejects.toThrow(/approval semantics/);
+    await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: false, approval: "ask", probe: async () => "hybrid-kebab-thread" })).resolves.toMatchObject({ selected: "codex", protocol: "hybrid-kebab-thread" });
     await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: false, approval: "never" })).rejects.toThrow(/approval semantics/);
+  });
+
+  it("falls back when the authenticated provider/model route probe fails", async () => {
+    await expect(resolveCodeHarnessSelection({
+      requested: "auto",
+      cwd: ".",
+      brainUrl: "http://brain",
+      ultra: false,
+      approval: "ask",
+      probe: async () => "v2-camel",
+      brainProbe: async () => ({ supported: true, reason: "ready" }),
+      routeProbe: async () => { throw new Error("invalid API key or unsupported model"); },
+    })).resolves.toMatchObject({
+      selected: "legacy",
+      reason: expect.stringContaining("invalid API key or unsupported model"),
+    });
   });
 
   it("falls back when the current Brain does not declare Responses compatibility", async () => {

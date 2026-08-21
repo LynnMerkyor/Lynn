@@ -20,6 +20,8 @@ export function createWsControlHandler({
     if (msg.type === "abort") {
       const abortPath = msg.sessionPath || engine.currentSessionPath;
       if (engine.isSessionStreaming(abortPath)) {
+        const ss = sessionState.get(abortPath);
+        if (ss) ss.userAbortRequested = true;
         try {
           await hub.abort(abortPath);
         } catch (err: any) {

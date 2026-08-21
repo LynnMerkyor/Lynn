@@ -116,6 +116,21 @@ else
   fail "prod 运行态缺 Responses/app-server harness capabilities: ${remote_harness_cap:-<empty>}"
 fi
 
+if grep -q "async function handleResponses" "$MIRROR/server.ts" && grep -q "url.pathname === '/v1/responses'" "$MIRROR/server.ts"; then
+  ok "mirror 包含 Responses handler + /v1/responses 路由"
+else
+  fail "mirror 声明了 harness capability，但缺 Responses handler 或 /v1/responses 路由"
+fi
+
+# 合法 JSON、无签名请求必须穿过真实路由并抵达认证层。401 authentication_error
+# 证明 handler 存在；404 则会捕获曾发生的“只开 capability、没部署路由”。
+remote_responses_route=$(ssh "$HOST" "node --input-type=module -e \"const r = await fetch('http://127.0.0.1:$PORT/v1/responses',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:'release-preflight',input:'Reply OK',stream:false})}); const j = await r.json().catch(()=>({})); console.log(r.status === 401 && j.error?.type === 'authentication_error' ? 'ready' : 'bad:' + r.status + ':' + String(j.error?.type || j.error || 'unknown'));\"" 2>/dev/null || true)
+if [ "$remote_responses_route" = "ready" ]; then
+  ok "prod /v1/responses handler 可达并进入认证层"
+else
+  fail "prod /v1/responses handler 不可用: ${remote_responses_route:-<empty>}"
+fi
+
 note ""
 if [ "$FAIL" -ne 0 ]; then
   note "== 结果:硬信号失败(tsc 门 / 锚点 / 运行态 smoke,见 ✗)。部署前必须人工 reconcile,严禁 wholesale 转译覆盖 prod。=="

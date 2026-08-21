@@ -574,6 +574,7 @@ async function runCodeTask(
         hasMedia: mediaPaths.length > 0,
         machineReadable: json,
         approval: mode.approval,
+        reasoning,
       });
   const harness = harnessSelection.selected;
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));

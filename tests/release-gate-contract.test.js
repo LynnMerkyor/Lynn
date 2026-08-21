@@ -14,6 +14,10 @@ describe('release gate contract', () => {
     expect(scripts.dist).toContain('npm run release:full-gate');
     expect(scripts['dist:win']).toContain('npm run release:full-gate');
     expect(scripts['dist:win']).toContain('npm run prepare:llamacpp:win');
+    expect(scripts['dist:win']).toContain('npm run test:windows-llamacpp-installer');
+    expect(scripts['dist:win'].indexOf('electron-builder --win nsis --x64')).toBeLessThan(
+      scripts['dist:win'].indexOf('npm run test:windows-llamacpp-installer'),
+    );
     expect(scripts.dist).not.toContain('npm run release:preflight');
     expect(scripts['dist:win']).not.toContain('npm run release:preflight');
   });
@@ -27,6 +31,9 @@ describe('release gate contract', () => {
     expect(packageJson.scripts['prepare:llamacpp:win']).toBe(
       'node scripts/prepare-windows-llamacpp.mjs',
     );
+    expect(packageJson.scripts['test:windows-llamacpp-installer']).toContain(
+      'scripts/verify-windows-llamacpp-installer.ps1',
+    );
   });
 
   it('keeps the release gate aligned with the approved GUI100 and CLI100 policy', () => {
@@ -36,12 +43,19 @@ describe('release gate contract', () => {
     expect(fullGate).not.toContain('npm run gate:cli-200');
   });
 
-  it('requires the production Brain to declare Codex app-server capabilities', () => {
+  it('requires the production Brain to expose a real Codex app-server route', () => {
     const gate = fs.readFileSync(path.join(ROOT, 'scripts', 'mirror-prod-diff.sh'), 'utf8');
     expect(gate).toContain('appServerHarness: true');
     expect(gate).toContain("j.capabilities?.responses === true");
     expect(gate).toContain("j.capabilities?.appServerHarness === true");
     expect(gate).toContain('prod 运行态缺 Responses/app-server harness capabilities');
+    expect(gate).toContain("http://127.0.0.1:$PORT/v1/responses");
+    expect(gate).toContain("j.error?.type === 'authentication_error'");
+    expect(gate).toContain('prod /v1/responses handler 不可用');
+
+    const scripts = readPackage().scripts;
+    expect(scripts['release:verify-codex-harness-prod']).toContain('verify-codex-harness-prod.ts');
+    expect(scripts['release:preflight']).toContain('npm run release:verify-codex-harness-prod');
   });
 
   it('builds the CLI before agent regression in a clean checkout', () => {

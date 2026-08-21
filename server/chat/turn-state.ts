@@ -106,6 +106,7 @@ export interface ChatTurnState extends SessionStreamStateFields {
   activeStreamToken: unknown | null;
   streamSource: "user" | "brain_fallback" | null;
   degenerationAbortRequested: boolean;
+  userAbortRequested: boolean;
   _lastTurnAborted: boolean;
   progressMarkerCount: number;
   _turnEndDeferred: boolean;
@@ -177,6 +178,7 @@ export function createChatTurnState(): ChatTurnState {
     activeStreamToken: null,
     streamSource: null,
     degenerationAbortRequested: false,
+    userAbortRequested: false,
     _lastTurnAborted: false,
     progressMarkerCount: 0,
     _turnEndDeferred: false,

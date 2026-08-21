@@ -247,6 +247,7 @@ export function prepareChatTurnState(ss: SessionLike, options: PrepareChatTurnSt
   ss.activeStreamToken = null;
   ss.streamSource = null;
   ss.degenerationAbortRequested = false;
+  ss.userAbortRequested = false;
   ss.progressMarkerCount = 0;
   ss._turnEndDeferred = false;
   ss._turnClosed = false;
@@ -261,6 +262,7 @@ export function resetCompletedTurnState(ss: SessionLike): void {
   ss.activeStreamToken = null;
   ss.lifecycleToolCallQueues = new Map();
   ss.degenerationAbortRequested = false;
+  ss.userAbortRequested = false;
   ss.progressMarkerCount = 0;
   ss._turnEndDeferred = false;
   ss._turnClosed = false;

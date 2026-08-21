@@ -5,6 +5,8 @@ import {
 } from "../../shared/codex-app-server-client.js";
 import type { CliProviderProfile } from "./provider-profile.js";
 import { brainRouteUsable, fetchBrainProviderStatus } from "./brain-status.js";
+import { startCodexResponsesProxy } from "./codex-responses-proxy.js";
+import type { ReasoningOptions } from "./reasoning.js";
 import { readVersionInfo } from "./version.js";
 
 export type CodeHarnessMode = "auto" | "legacy" | "codex";
@@ -27,9 +29,19 @@ export interface CodeHarnessSelectionInput {
   hasMedia?: boolean;
   machineReadable?: boolean;
   approval?: "ask" | "on-failure" | "never" | "yolo";
+  reasoning?: ReasoningOptions;
+  lynnHome?: string;
   probe?: (options: CodexAppServerClientOptions) => Promise<CodexAppServerProtocol>;
   brainProbe?: (brainUrl: string) => Promise<{ supported: boolean; reason: string }>;
+  routeProbe?: (input: CodeHarnessRouteProbeInput) => Promise<void>;
   clientOptions?: CodexAppServerClientOptions;
+}
+
+export interface CodeHarnessRouteProbeInput {
+  brainUrl: string;
+  provider?: CliProviderProfile | null;
+  reasoning: ReasoningOptions;
+  lynnHome?: string;
 }
 
 function isLoopbackBaseUrl(baseUrl: string): boolean {
@@ -137,13 +149,57 @@ export async function probeCodexAppServer(options: CodexAppServerClientOptions =
 }
 
 export async function probeBrainHarnessSupport(brainUrl: string): Promise<{ supported: boolean; reason: string }> {
-  const status = await fetchBrainProviderStatus(brainUrl);
+  const status = await fetchBrainProviderStatus(brainUrl, 5_000);
   if (!status) return { supported: false, reason: "Brain provider status or authentication is unavailable" };
   if (status.capabilities?.responses !== true || status.capabilities?.appServerHarness !== true) {
     return { supported: false, reason: "Brain does not declare Codex app-server Responses compatibility" };
   }
   if (!brainRouteUsable(status)) return { supported: false, reason: "Brain has no configured provider route" };
   return { supported: true, reason: "Brain Responses route is ready" };
+}
+
+export async function probeCodeHarnessRoute(input: CodeHarnessRouteProbeInput): Promise<void> {
+  const proxy = await startCodexResponsesProxy(input);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error("Codex route preflight timed out")), 20_000);
+  try {
+    const response = await fetch(`${proxy.baseUrl}/responses`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${proxy.bearerToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: input.provider?.model || "lynn-brain-router",
+        input: "Reply with OK.",
+        max_output_tokens: 8,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+    const body = await response.text();
+    if (!response.ok) {
+      throw new Error(`provider/model preflight returned HTTP ${response.status}: ${body.slice(0, 240)}`);
+    }
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(body) as Record<string, unknown>;
+    } catch {
+      throw new Error("provider/model preflight returned invalid JSON");
+    }
+    if (parsed.error) {
+      const message = typeof parsed.error === "object" && parsed.error && "message" in parsed.error
+        ? String((parsed.error as { message?: unknown }).message || "provider/model rejected the request")
+        : String(parsed.error);
+      throw new Error(`provider/model preflight failed: ${message}`);
+    }
+    if (!parsed.id && !parsed.output && !parsed.output_text) {
+      throw new Error("provider/model preflight returned no Responses result");
+    }
+  } finally {
+    clearTimeout(timer);
+    await proxy.stop();
+  }
 }
 
 export async function resolveCodeHarnessSelection(input: CodeHarnessSelectionInput): Promise<CodeHarnessSelection> {
@@ -154,7 +210,7 @@ export async function resolveCodeHarnessSelection(input: CodeHarnessSelectionInp
     if (input.ultra) throw new Error("--harness codex cannot be combined with --ultra yet; use --harness auto or legacy");
     if (input.hasMedia) throw new Error("--harness codex does not yet preserve Lynn's multimodal attachment bridge; use --harness auto or legacy");
     if (input.machineReadable) throw new Error("--harness codex does not yet preserve Lynn's per-tool JSON audit stream; use --harness auto or legacy");
-    if (input.approval === "ask" || input.approval === "never") {
+    if (input.approval === "never") {
       throw new Error(`--harness codex does not yet preserve Lynn's ${input.approval} approval semantics; use --harness auto or legacy`);
     }
     const protocol = await (input.probe || probeCodexAppServer)({
@@ -172,7 +228,7 @@ export async function resolveCodeHarnessSelection(input: CodeHarnessSelectionInp
   if (input.machineReadable) {
     return { requested: input.requested, selected: "legacy", reason: "JSON mode uses Lynn's verified per-tool audit stream" };
   }
-  if (input.approval === "ask" || input.approval === "never") {
+  if (input.approval === "never") {
     return { requested: input.requested, selected: "legacy", reason: `${input.approval} approval mode requires Lynn's strict tool-approval semantics` };
   }
   if (input.provider && !input.provider.apiKey && !isLoopbackBaseUrl(input.provider.baseUrl)) {
@@ -188,6 +244,12 @@ export async function resolveCodeHarnessSelection(input: CodeHarnessSelectionInp
     const protocol = await (input.probe || probeCodexAppServer)({
       cwd: path.resolve(input.cwd),
       ...input.clientOptions,
+    });
+    await (input.routeProbe || probeCodeHarnessRoute)({
+      brainUrl: input.brainUrl,
+      provider: input.provider,
+      reasoning: input.reasoning || { effort: "auto", display: "auto" },
+      lynnHome: input.lynnHome,
     });
     return { requested: input.requested, selected: "codex", reason: `Codex app-server, authentication, provider, and ${protocol} protocol preflight passed`, protocol };
   } catch (error) {

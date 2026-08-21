@@ -49,7 +49,7 @@
             <p class="lead">
               客户端 GUI 当前为 <strong id="gui-release-version">0.86.2</strong>,
               CLI 当前为 <strong id="cli-release-version">0.86.2</strong>。
-              GUI 下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作和显式启用的本地模型；CLI 可独立安装,也可作为 Fleet worker 或 manager。V0.86.2 默认自动探测并选择 Codex app-server harness，不兼容时在任务开始前回到原架构；Windows 安装包已内置 llama.cpp 本地模型运行时。
+              GUI 下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作和显式启用的本地模型；CLI 可独立安装,也可作为 Fleet worker 或 manager。V0.86.2 的 Lynn Code/CLI 编码任务默认自动探测并选择 Codex app-server harness，不兼容时在任务开始前回到原架构；Windows 安装包已内置 llama.cpp 本地模型运行时。
             </p>
             <div class="platform-callout" id="platform-callout">
               系统识别中…
@@ -101,7 +101,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
             <div class="cli-install-copy">
               <span class="pill pill-soft">启动命令</span>
               <h3>3. 启动 Lynn</h3>
-              <p>默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到远端 Brain。编码任务默认使用 <code>auto</code> harness:探测通过才进入 Codex app-server,否则在启动前使用 Lynn 原 Loop；多模态、JSON 逐工具审计、Ultra 和严格审批语义继续走原架构。实验性 manager 仍可通过 <code>Lynn manager run -p ... --jsonl</code> 显式调用。</p>
+              <p>默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到远端 Brain。编码任务默认使用 <code>auto</code> harness:协议与当前认证/provider/model 的真实预检通过才进入 Codex app-server,否则在启动前使用 Lynn 原 Loop；<code>ask/workspace-write</code> 保留审批，多模态、JSON 逐工具审计、Ultra 和 <code>never</code> deny-all 继续走原架构。实验性 manager 仍可通过 <code>Lynn manager run -p ... --jsonl</code> 显式调用。</p>
             </div>
             <div class="code-copy-block">
               <button class="copy-button" type="button" data-copy-target="cli-start">复制</button>
@@ -233,14 +233,14 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
           <div class="release-card">
             <h2>V0.86.2:Codex app-server harness 与 Windows 本地运行时</h2>
             <p>
-              V0.86.2 为 GUI 与 CLI 加入默认 <code>auto</code> 的 Codex app-server harness，并保持原 Loop 作为兼容与安全回退。选择发生在任务启动前，运行中不临时换架构。
+              V0.86.2 为 Lynn Code/CLI 编码任务加入默认 <code>auto</code> 的 Codex app-server harness，并保持原 Loop 作为兼容与安全回退。GUI 同步采用更严格的可终结运行状态。选择发生在任务启动前，运行中不临时换架构。
               Windows 安装包新增内置 llama.cpp 运行时，最终 NSIS payload 会在 Windows 上完成真实 GGUF 加载和连续生成门禁。
             </p>
             <ul>
               <li>启动前探测 app-server 可执行文件、协议、认证、provider/model 与 Brain capability</li>
               <li>兼容才走 Codex harness；失败或不支持时直接选择原 Loop</li>
               <li>多模态、JSON 审计、Ultra 和严格审批保持原有经过验证的执行语义</li>
-              <li>GUI/CLI 统一记录 requested/selected harness、协议与选择原因</li>
+              <li>CLI 记录 requested/selected harness、协议与选择原因；GUI/CLI 共享终态契约</li>
               <li>Windows 内置 llama-server.exe、依赖 DLL、许可证和逐文件 SHA-256 清单</li>
               <li>Windows 最终安装器门禁真实加载固定 GGUF 并连续生成两次</li>
               <li>生产 Brain 必须公开 responses 与 appServerHarness 运行态能力</li>
