@@ -16,6 +16,7 @@ describe("runtime answer", () => {
     expect(isLocalRuntimeQuestion("Lynn CLI 的 memory 会持久保存吗")).toBe(true);
     expect(isLocalRuntimeQuestion("本地优化了什么？")).toBe(true);
     expect(isLocalRuntimeQuestion("Lynn CLI 做了什么长任务优化")).toBe(true);
+    expect(isLocalRuntimeQuestion("Lynn CLI 的本地 9B 模型做了哪些运行时优化？")).toBe(true);
     expect(isLocalRuntimeQuestion("你有语音模式吗")).toBe(true);
     expect(isLocalRuntimeQuestion("Lynn CLI 怎么语音输入")).toBe(true);
     expect(isLocalRuntimeQuestion("帮我写一个版本比较函数")).toBe(false);
@@ -32,6 +33,7 @@ describe("runtime answer", () => {
     expect(isLocalRuntimeQuestion("评估 Lynn CLI 的长任务架构")).toBe(false);
     expect(isLocalRuntimeQuestion("你觉得我们这 CLI编排器和执行器用哪几个模型合适")).toBe(false);
     expect(isLocalRuntimeQuestion("你觉得我们这个Lynn CLI编排器和执行器用哪几个模型合适")).toBe(false);
+    expect(isLocalRuntimeQuestion("请阅读这个本地目录 /tmp/lynn-agent-matrix-3j9bDm 里的第一章小说文件，只回答里面的暗号四个字。")).toBe(false);
   });
 
   it("renders the local CLI version instead of asking the model", () => {

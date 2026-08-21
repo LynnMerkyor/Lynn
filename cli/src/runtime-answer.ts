@@ -36,8 +36,9 @@ const MEMORY_PATTERNS = [
 ];
 
 const RUNTIME_OPTIMIZATION_PATTERNS = [
-  /(?:lynn\s*)?(?:cli\s*)?.{0,16}(?:本地优化|运行时优化|长任务优化|前置缓存|decode\s*tps|prefix-cache|端侧模型|本地模型|9B|35B|KV\s*cache)/i,
-  /(?:你|当前|现在|本地|运行时|命令行|cli|lynn).{0,24}(?:做了什么优化|有什么优化|本地优化|运行时优化|本地模型|端侧|9B|35B|KV\s*cache|前置缓存|decode\s*tps)/i,
+  /(?:lynn\s*)?(?:cli\s*)?.{0,16}(?:本地优化|运行时优化|长任务优化|前置缓存|decode\s*tps|prefix-cache|端侧模型|本地模型|KV\s*cache)/i,
+  /(?:你|当前|现在|本地|运行时|命令行|cli|lynn).{0,24}(?:做了什么优化|有什么优化|本地优化|运行时优化|本地模型|端侧|KV\s*cache|前置缓存|decode\s*tps)/i,
+  /(?:lynn\s*cli|lynn|cli|运行时|端侧模型|本地模型).{0,24}(?<![a-z0-9])(?:9|35)\s*b(?![a-z0-9]).{0,24}(?:优化|策略|回退|模型|运行时)/i,
   /\b(?:local|runtime|prefix|cache|decode|tps|9b|35b)\b.{0,36}\b(?:optimization|policy|fallback|route|model)\b/i,
 ];
 
