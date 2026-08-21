@@ -1,3 +1,5 @@
+import { parseBudgetCalculation } from "./prefetch-context.js";
+
 type ActionItemRow = {
   item: string;
   owner: string;
@@ -306,27 +308,47 @@ function buildMomentumConservationAnswer(raw: unknown): string {
 }
 
 function buildBudgetSavingAnswer(raw: unknown): string {
-  const text = String(raw || "");
-  if (!/(?:月收入|房租|固定支出|攒|存)/.test(text)) return "";
-  if (!/(?:50000|5\s*万)/.test(text)) return "";
+  const calculation = parseBudgetCalculation(raw);
+  if (!calculation) return "";
+  const fmt = (value: number) => Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.00$/, "");
+  const {
+    income,
+    rent,
+    fixed,
+    months,
+    goal,
+    fixedSpend,
+    remainingBeforeSaving,
+    monthlySaving,
+    disposableAfterSaving,
+  } = calculation;
+  const feasible = disposableAfterSaving >= 0;
+  const weeklyBudget = Math.max(0, disposableAfterSaving) / 4;
 
   return [
     "## 计算",
     "",
-    "- 月收入：18000",
-    "- 房租：5200",
-    "- 固定支出：3100",
-    "- 每月固定后剩余：18000 - 5200 - 3100 = 9700",
-    "- 8 个月攒 50000，需要每月存：50000 / 8 = 6250",
-    "- 存完后每月可用于吃饭、交通、娱乐和临时开销：9700 - 6250 = 3450",
+    `- 月收入：${fmt(income)}`,
+    `- 房租：${fmt(rent)}`,
+    `- 其他固定支出：${fmt(fixed)}`,
+    `- 每月固定支出合计：${fmt(rent)} + ${fmt(fixed)} = ${fmt(fixedSpend)}`,
+    `- 固定支出后每月剩余：${fmt(income)} - ${fmt(fixedSpend)} = ${fmt(remainingBeforeSaving)}`,
+    `- ${fmt(months)} 个月攒 ${fmt(goal)}，每月需要存：${fmt(goal)} / ${fmt(months)} = ${fmt(monthlySaving)}`,
+    `- 存完后每月可支配：${fmt(remainingBeforeSaving)} - ${fmt(monthlySaving)} = ${fmt(disposableAfterSaving)}`,
     "",
-    "结论：每月至少存 6250 元，8 个月可以攒到 50000 元。",
+    feasible
+      ? `结论：目标在算术上可以实现。每月存 ${fmt(monthlySaving)} 元后还剩 ${fmt(disposableAfterSaving)} 元，但这笔钱还要覆盖吃饭、交通、娱乐和临时开销。`
+      : `结论：按当前收入和固定支出，目标每月还差 ${fmt(Math.abs(disposableAfterSaving))} 元，不能仅靠现有结余完成。`,
     "",
     "## 现实调整方案",
     "",
-    "1. 每月发薪后先自动转出 6250 元到单独账户，避免月底靠意志力攒钱。",
-    "2. 把 3450 元生活预算拆成每周约 860 元，超支时下一周自动收紧。",
-    "3. 如果某个月有大额支出，可以把目标延长到 9 个月：50000 / 9 约 5556 元，压力会明显下降。",
+    feasible
+      ? `1. 每月发薪后先自动转出 ${fmt(monthlySaving)} 元到单独账户，避免月底靠意志力攒钱。`
+      : `1. 先把目标周期延长、目标金额下调，或增加每月收入至少 ${fmt(Math.abs(disposableAfterSaving))} 元。`,
+    feasible
+      ? `2. 把 ${fmt(disposableAfterSaving)} 元可支配预算拆成每周约 ${fmt(weeklyBudget)} 元，单独记录餐饮、交通和临时开销。`
+      : "2. 不要把可支配金额写成负数后仍强行执行；先保住房租、基本生活和应急金。",
+    "3. 预留一笔应急金；若某月出现大额支出，应同步调整后续月存款额或延长周期。",
   ].join("\n");
 }
 

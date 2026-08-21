@@ -229,6 +229,15 @@ describe("buildLocalOfficeDirectAnswer", () => {
     expect(answer).toContain("容易误解");
   });
 
+  it("answers arbitrary budget-saving prompts from one exact calculation without inventing a shortfall", () => {
+    const answer = buildLocalOfficeDirectAnswer("我月收入 18000，房租 5200，固定支出 3800，想 8 个月攒 60000，帮我算每月该存多少并给建议");
+
+    expect(answer).toContain("每月需要存：60000 / 8 = 7500");
+    expect(answer).toContain("存完后每月可支配：9000 - 7500 = 1500");
+    expect(answer).toContain("目标在算术上可以实现");
+    expect(answer).not.toContain("每月还差");
+  });
+
   it("answers low-spec local model guidance as a product decision", () => {
     const answer = buildLocalOfficeDirectAnswer("电脑配置比较低，是否还应该引导用户安装端侧大模型？从产品体验角度说");
 

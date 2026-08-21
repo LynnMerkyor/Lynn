@@ -4,7 +4,7 @@ import { fetchWebContent } from "../../lib/tools/web-fetch.js";
 import { runSearchQuery } from "../../lib/tools/web-search.js";
 import { buildStructuredSection, extractToolText, parseIndexSnapshot, parseStockSnapshot, parseWeatherSnapshot } from "./report-research-answer.js";
 import { detectPrimaryIndexTarget, extractCompositeWeatherLocation, extractPrimaryUsTicker, extractStockTargetForResearch, extractWeatherLocationForResearch } from "./report-research-intent.js";
-import { currentLynnCliTarballName, currentLynnVersionTag } from "./release-info.js";
+import { currentLynnVersionTag } from "./release-info.js";
 import type { IndexResearchTarget, ReportResearchKind, StockResearchTarget } from "./report-research-intent.js";
 
 export type RealtimeResearchToolKind = "live_news" | "sports" | "weather";
@@ -265,24 +265,45 @@ function buildDgxSparkOfficialContext(userPrompt: unknown): string {
     "判断辅助：如果用户问 RTX Spark Windows PC 与 DGX Spark 是否同一个产品，结论是“不是同一个产品”。DGX Spark 是 NVIDIA 官方 DGX Spark personal AI supercomputer；RTX Spark Windows PC 属于 Windows PC / RTX AI PC 语境，不应和 DGX Spark 混为同一产品。",
   ].join("\n").slice(0, MAX_CONTEXT_CHARS);
 }
-function buildLynnReleaseContext(userPrompt: unknown): string {
+async function buildLynnReleaseContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const versionTag = currentLynnVersionTag();
-  const cliTarball = currentLynnCliTarballName();
-  return [
+  const lines = [
     "【Lynn 发布资料】",
     `查询：${textOf(userPrompt)}`,
     "项目仓库: https://gitee.com/merkyor/Lynn",
     "Gitee releases: https://gitee.com/merkyor/Lynn/releases",
-    `当前版本: ${versionTag}`,
-    `Gitee release tag: https://gitee.com/merkyor/Lynn/releases/tag/${versionTag}`,
+    `本地构建候选版本: ${versionTag}`,
+    "警告: 本地构建候选版本不能作为 Gitee 已发布版本的证据。",
     "镜像下载页: https://download.merkyorlynn.com/download.html",
-    `CLI 包: https://download.merkyorlynn.com/downloads/cli/${cliTarball}`,
-    "说明：回答应给出当前版本号和 Gitee release 链接，并提示以 Gitee 页面实际显示为准；不要输出内部抓取或调试状态。",
-  ].join("\n").slice(0, MAX_CONTEXT_CHARS);
+  ];
+  const apiUrl = "https://gitee.com/api/v5/repos/merkyor/Lynn/releases/latest";
+  try {
+    const result = await executeWebFetch(apiUrl, 2400, {
+      ...opts,
+      timeoutMs: Math.min(resolveTimeout(opts, "fetch", FETCH_TIMEOUT_MS), 8_000),
+      label: "lynn_gitee_latest_release",
+    });
+    const body = String(result?.text || "");
+    const tag = body.match(/"tag_name"\s*:\s*"([^"]+)"/)?.[1] || "";
+    if (!/^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(tag)) throw new Error("Gitee latest release response has no valid tag_name");
+    lines.push(
+      "Gitee latest release status: verified",
+      `Gitee latest tag: ${tag}`,
+      `Gitee latest release URL: https://gitee.com/merkyor/Lynn/releases/tag/${tag}`,
+      `Gitee latest release API: ${apiUrl}`,
+    );
+  } catch (err) {
+    lines.push(
+      "Gitee latest release status: unconfirmed",
+      `Gitee latest release API: ${apiUrl}`,
+      `说明: 本轮未能从 Gitee API 核验最新 tag（${errorMessage(err)}）；不得用本地构建候选版本代替。`,
+    );
+  }
+  return lines.join("\n").slice(0, MAX_CONTEXT_CHARS);
 }
 async function buildLynnReleaseAvailabilityContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const url = "https://download.merkyorlynn.com/download.html";
-  const base = buildLynnReleaseContext(userPrompt);
+  const base = await buildLynnReleaseContext(userPrompt, opts);
   try {
     const result = await executeWebFetch(url, 1600, {
       ...opts,
@@ -645,7 +666,7 @@ function buildGenericResearchContext(userPrompt: unknown, opts: ReportResearchFe
   if (isLynnReleasePrompt(userPrompt)) {
     return isLynnReleaseAvailabilityPrompt(userPrompt)
       ? buildLynnReleaseAvailabilityContext(userPrompt, opts)
-      : Promise.resolve(buildLynnReleaseContext(userPrompt));
+      : buildLynnReleaseContext(userPrompt, opts);
   }
   return buildSearchResearchContext("【研究资料】", buildGenericResearchQueries(userPrompt), opts);
 }
@@ -993,7 +1014,7 @@ export async function fetchForKind(kind: ReportResearchKind, target: StockResear
   if (isLynnReleasePrompt(userPrompt)) {
     return isLynnReleaseAvailabilityPrompt(userPrompt)
       ? buildLynnReleaseAvailabilityContext(userPrompt, opts)
-      : buildLynnReleaseContext(userPrompt);
+      : buildLynnReleaseContext(userPrompt, opts);
   }
   if (isJapanTouristVisaPrompt(userPrompt)) return buildJapanTouristVisaContext(userPrompt);
   if (isShenzhenSocialSecurityPolicyPrompt(userPrompt)) return buildShenzhenSocialSecurityPolicyContext(userPrompt);

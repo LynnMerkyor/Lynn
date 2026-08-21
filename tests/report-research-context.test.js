@@ -1,14 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-
 import {
   buildReportResearchContext,
   buildDirectResearchAnswer,
   extractStockTargetForResearch,
   inferReportResearchKind,
 } from "../server/chat/report-research-context.js";
-
-const packageVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 
 describe("report research context intent", () => {
   it("detects composite market plus weather prompts that need a direct snapshot answer", () => {
@@ -135,14 +131,36 @@ describe("report research context intent", () => {
     expect(answer).toContain("https://help.openai.com/en/articles/9624314-model-release-notes");
   });
 
-  it("answers Lynn release prompts from the current package version, not a stale hardcoded tag", async () => {
+  it("answers Lynn release prompts from the verified Gitee latest-release API instead of the local candidate version", async () => {
     const prompt = "查 Gitee 上 Lynn 最新 release tag 是什么";
-    const context = await buildReportResearchContext(prompt);
+    const context = await buildReportResearchContext(prompt, {
+      toolWrappers: {
+        webFetch: async (url) => ({
+          text: url.includes("/releases/latest")
+            ? JSON.stringify({ tag_name: "v0.86.1", name: "Lynn v0.86.1" })
+            : "",
+        }),
+      },
+    });
     const answer = buildDirectResearchAnswer("public_data", context, prompt);
 
-    expect(answer).toContain(`v${packageVersion}`);
-    expect(answer).toContain(`https://gitee.com/merkyor/Lynn/releases/tag/v${packageVersion}`);
-    expect(answer).not.toContain("抓取失败");
+    expect(answer).toContain("v0.86.1");
+    expect(answer).toContain("https://gitee.com/merkyor/Lynn/releases/tag/v0.86.1");
+    expect(answer).not.toContain("v0.86.2");
+  });
+
+  it("does not substitute the local candidate version when Gitee latest-release verification fails", async () => {
+    const prompt = "查 Gitee 上 Lynn 最新 release tag 是什么";
+    const context = await buildReportResearchContext(prompt, {
+      toolWrappers: {
+        webFetch: async () => { throw new Error("Gitee unavailable"); },
+      },
+    });
+    const answer = buildDirectResearchAnswer("public_data", context, prompt);
+
+    expect(answer).toContain("未能从 Gitee 公开 API 核验");
+    expect(answer).toContain("https://gitee.com/merkyor/Lynn/releases");
+    expect(answer).not.toContain("v0.86.2");
   });
 
   it("short-circuits broad today tech news when no dated source is available", async () => {

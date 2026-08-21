@@ -41,26 +41,73 @@ function parseLooseAmount(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export function buildBudgetCalculationContext(text: unknown): string {
-  const source = String(text || "");
-  if (!/(?:月收入|收入)/.test(source) || !/(?:攒|存|储蓄|存款)/.test(source)) return "";
+export interface BudgetCalculation {
+  income: number;
+  rent: number;
+  fixed: number;
+  months: number;
+  goal: number;
+  fixedSpend: number;
+  remainingBeforeSaving: number;
+  monthlySaving: number;
+  disposableAfterSaving: number;
+}
 
-  const income = parseLooseAmount(source.match(/月收入\s*[：:]?\s*[¥￥]?\s*([\d,\s]+)/)?.[1]);
-  const rent = parseLooseAmount(source.match(/房租\s*[：:]?\s*[¥￥]?\s*([\d,\s]+)/)?.[1]);
-  const fixed = parseLooseAmount(source.match(/固定支出\s*[：:]?\s*[¥￥]?\s*([\d,\s]+)/)?.[1]);
-  const months = parseLooseAmount(source.match(/(\d+)\s*个?\s*月/)?.[1]);
-  const goal = parseLooseAmount(
-    source.match(/(?:攒|存|储蓄|存款)\s*[¥￥]?\s*([\d,\s]+)/)?.[1]
-      || source.match(/目标(?:金额|存款|储蓄)?\s*[：:]?\s*[¥￥]?\s*([\d,\s]+)/)?.[1],
+function parseMoneyMatch(match: RegExpMatchArray | null): number | null {
+  const value = parseLooseAmount(match?.[1]);
+  if (value === null) return null;
+  return match?.[2] === "万" ? value * 10_000 : value;
+}
+
+export function parseBudgetCalculation(text: unknown): BudgetCalculation | null {
+  const source = String(text || "");
+  if (!/(?:月收入|收入)/.test(source) || !/(?:攒|存|储蓄|存款)/.test(source)) return null;
+
+  const money = "([\\d,]+(?:\\.\\d+)?)\\s*(万)?";
+  const income = parseMoneyMatch(source.match(new RegExp(`月收入\\s*[：:]?\\s*[¥￥]?\\s*${money}`)));
+  const rent = parseMoneyMatch(source.match(new RegExp(`房租\\s*[：:]?\\s*[¥￥]?\\s*${money}`)));
+  const fixed = parseMoneyMatch(source.match(new RegExp(`固定支出\\s*[：:]?\\s*[¥￥]?\\s*${money}`)));
+  const months = parseLooseAmount(source.match(/(\d+(?:\.\d+)?)\s*个?\s*月/)?.[1]);
+  const goal = parseMoneyMatch(
+    source.match(new RegExp(`(?:攒|存|储蓄|存款)\\s*[¥￥]?\\s*${money}`))
+      || source.match(new RegExp(`目标(?:金额|存款|储蓄)?\\s*[：:]?\\s*[¥￥]?\\s*${money}`)),
   );
 
   const amounts = [income, rent, fixed, months, goal];
-  if (!amounts.every((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0)) return "";
+  if (!amounts.every((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0)) return null;
   const [incomeAmount, rentAmount, fixedAmount, monthsAmount, goalAmount] = amounts;
   const fixedSpend = rentAmount + fixedAmount;
   const remainingBeforeSaving = incomeAmount - fixedSpend;
   const monthlySaving = goalAmount / monthsAmount;
   const disposableAfterSaving = remainingBeforeSaving - monthlySaving;
+
+  return {
+    income: incomeAmount,
+    rent: rentAmount,
+    fixed: fixedAmount,
+    months: monthsAmount,
+    goal: goalAmount,
+    fixedSpend,
+    remainingBeforeSaving,
+    monthlySaving,
+    disposableAfterSaving,
+  };
+}
+
+export function buildBudgetCalculationContext(text: unknown): string {
+  const calculation = parseBudgetCalculation(text);
+  if (!calculation) return "";
+  const {
+    income: incomeAmount,
+    rent: rentAmount,
+    fixed: fixedAmount,
+    months: monthsAmount,
+    goal: goalAmount,
+    fixedSpend,
+    remainingBeforeSaving,
+    monthlySaving,
+    disposableAfterSaving,
+  } = calculation;
   const fmt = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.00$/, "");
 
   return [

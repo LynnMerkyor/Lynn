@@ -23,7 +23,6 @@ import {
   parseStructuredFields,
   textOf,
 } from "./report-research-answer-utils.js";
-import { currentLynnCliTarballName, currentLynnVersionTag } from "./release-info.js";
 function parseStockSnapshot(result: ToolExecutionResult | null | undefined): StockSnapshot | null {
   const directQuote = result?.details?.directQuotes?.[0];
   if (directQuote?.symbol && directQuote?.close) {
@@ -999,8 +998,9 @@ function buildLynnReleaseAnswer(context: unknown, userPrompt: string = ""): stri
   const text = String(context || "");
   const prompt = textOf(userPrompt);
   if (!/Lynn 发布资料/.test(text)) return "";
-  const versionTag = currentLynnVersionTag();
-  const cliTarball = currentLynnCliTarballName();
+  const verifiedTag = text.match(/Gitee latest tag:\s*(v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/)?.[1] || "";
+  const latestVerified = /Gitee latest release status:\s*verified/i.test(text) && Boolean(verifiedTag);
+  const cliVersion = verifiedTag.replace(/^v/, "");
   const asksAvailability = /(?:能打开|打不开|可达|访问状态|是否在线|连得上|reachable|available|status|HTTP\s*状态)/i.test(prompt);
   if (asksAvailability) {
     const url = "https://download.merkyorlynn.com/download.html";
@@ -1011,12 +1011,15 @@ function buildLynnReleaseAnswer(context: unknown, userPrompt: string = ""): stri
     return `本轮没有完成下载页可达性探测，暂不能确认状态：${url}。`;
   }
   if (/Gitee|release|tag/i.test(prompt)) {
-    return `Lynn 当前发布目标 tag 是 ${versionTag}。Gitee release 页面：https://gitee.com/merkyor/Lynn/releases/tag/${versionTag}；release 列表：https://gitee.com/merkyor/Lynn/releases。请以 Gitee 页面实际显示为准。`;
+    if (!latestVerified) return "本轮未能从 Gitee 公开 API 核验 Lynn 的最新 release tag，因此不使用本地构建候选版本代替线上事实。请查看：https://gitee.com/merkyor/Lynn/releases。";
+    return `Gitee 当前最新的 Lynn release tag 是 ${verifiedTag}。Release 页面：https://gitee.com/merkyor/Lynn/releases/tag/${verifiedTag}；release 列表：https://gitee.com/merkyor/Lynn/releases。`;
   }
   if (/download\.merkyorlynn\.com|镜像站|下载页|版本号/i.test(prompt)) {
-    return `Lynn 镜像下载页应显示 ${versionTag} 下载入口。页面：https://download.merkyorlynn.com/download.html；CLI 包：https://download.merkyorlynn.com/downloads/cli/${cliTarball}。`;
+    if (!latestVerified) return "本轮未能核验线上最新版本号；不要用本地构建候选版本推断镜像站内容。下载页：https://download.merkyorlynn.com/download.html。";
+    return `Lynn 当前已核验的最新公开版本是 ${verifiedTag}。镜像下载页：https://download.merkyorlynn.com/download.html；CLI 包：https://download.merkyorlynn.com/downloads/cli/lynn-cli-${cliVersion}.tgz。`;
   }
-  return `Lynn 当前版本为 ${versionTag}，Gitee release 页面：https://gitee.com/merkyor/Lynn/releases/tag/${versionTag}，镜像下载页：https://download.merkyorlynn.com/download.html。`;
+  if (!latestVerified) return "本轮未能核验 Lynn 的线上最新版本；请查看 Gitee releases：https://gitee.com/merkyor/Lynn/releases。";
+  return `Lynn 当前最新公开版本为 ${verifiedTag}，Gitee release 页面：https://gitee.com/merkyor/Lynn/releases/tag/${verifiedTag}，镜像下载页：https://download.merkyorlynn.com/download.html。`;
 }
 function buildJapanTouristVisaAnswer(userPrompt: string = ""): string {
   const prompt = textOf(userPrompt);
