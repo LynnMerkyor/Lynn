@@ -68,4 +68,13 @@ describe("dialogue quality rules", () => {
       hasToolEvidence: true,
     })).toBe("");
   });
+
+  it("rejects visible internal task narration at the start of an answer", () => {
+    expect(additionalDialogueQualityReason({
+      category: "gov_legal",
+      prompt: "租房押金纠纷怎么处理？",
+      text: "用户需要租房押金纠纷的实操步骤，分协商和证据两块。直接给结构化清单，按时间线排列，让用户能照着执行。先保存合同、付款记录和房屋交接照片。",
+      hasToolEvidence: false,
+    })).toBe("internal-task-narration-visible");
+  });
 });

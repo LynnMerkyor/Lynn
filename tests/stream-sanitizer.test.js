@@ -36,6 +36,45 @@ describe("stream sanitizer", () => {
 });
 
 describe("stream sanitizer · cross-chunk carry buffer", () => {
+  it("withholds and strips internal task narration split across chunks", () => {
+    const ss = {};
+    expect(stripStreamingPseudoToolBlocks(ss, "用户需要租房押金纠纷的实操步骤，")).toEqual({
+      text: "",
+      suppressed: false,
+    });
+    expect(stripStreamingPseudoToolBlocks(ss, "分协商和证据两块。直接给结构化清单，按时间线排列，")).toEqual({
+      text: "",
+      suppressed: false,
+    });
+    expect(stripStreamingPseudoToolBlocks(ss, "让用户能照着执行。\n\n先保存合同和付款记录。")).toEqual({
+      text: "先保存合同和付款记录。",
+      suppressed: true,
+    });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
+  it("preserves ordinary user-oriented advice", () => {
+    const ss = {};
+    const first = stripStreamingPseudoToolBlocks(ss, "用户需要先保存合同和付款记录。");
+    expect(first).toEqual({ text: "", suppressed: false });
+    const second = stripStreamingPseudoToolBlocks(ss, "直接给房东发送书面通知。然后保留送达凭证。");
+    expect(second).toEqual({
+      text: "用户需要先保存合同和付款记录。直接给房东发送书面通知。然后保留送达凭证。",
+      suppressed: false,
+    });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
+  it("drops a narration-only preface when the turn ends without an answer", () => {
+    const ss = {};
+    const result = stripStreamingPseudoToolBlocks(
+      ss,
+      "用户需要一份证据清单。直接给结构化步骤，让用户照着执行。",
+    );
+    expect(result).toEqual({ text: "", suppressed: true });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
   it("strips a complete pseudo-tool block delivered in a single chunk", () => {
     const ss = {};
     const raw = "<tool_call>{\"name\":\"web_search\"}</tool_call>\n结果在这里。";

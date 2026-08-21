@@ -3,6 +3,10 @@ import {
   findUnresolvedPseudoToolOpen,
   stripPseudoToolCallMarkup,
 } from "../../shared/pseudo-tool-call.js";
+import {
+  couldStartInternalTaskNarration,
+  stripLeadingInternalTaskNarration,
+} from "../../shared/assistant-visible-text.js";
 
 export interface StreamSanitizerResult {
   text: string;
@@ -20,6 +24,9 @@ const SANITIZER_CARRY_KEY = "sanitizerCarry";
 // tag name + attrs is well under 100 chars; 512 is a generous ceiling that still lets a stray
 // run-on fragment flush instead of holding forever.
 const SANITIZER_CARRY_MAX = 512;
+const LEADING_NARRATION_BUFFER_KEY = "leadingNarrationBuffer";
+const LEADING_NARRATION_RESOLVED_KEY = "leadingNarrationResolved";
+const LEADING_NARRATION_BUFFER_MAX = 512;
 const INTERNAL_REASONING_TAG_KEY = "internalReasoningTag";
 const INTERNAL_REASONING_TAIL_KEY = "internalReasoningTail";
 const INTERNAL_REASONING_TAG_NAMES = ["reflect", "analysis", "thinking", "reasoning", "thought"] as const;
@@ -45,6 +52,48 @@ function writeCarry(ss: unknown, value: string): void {
   if (ss && typeof ss === "object") {
     (ss as Record<string, unknown>)[SANITIZER_CARRY_KEY] = value;
   }
+}
+
+function readLeadingNarrationState(ss: unknown): { buffer: string; resolved: boolean } {
+  if (!ss || typeof ss !== "object") return { buffer: "", resolved: false };
+  const state = ss as Record<string, unknown>;
+  return {
+    buffer: typeof state[LEADING_NARRATION_BUFFER_KEY] === "string"
+      ? String(state[LEADING_NARRATION_BUFFER_KEY])
+      : "",
+    resolved: state[LEADING_NARRATION_RESOLVED_KEY] === true,
+  };
+}
+
+function writeLeadingNarrationState(ss: unknown, buffer: string, resolved: boolean): void {
+  if (!ss || typeof ss !== "object") return;
+  const state = ss as Record<string, unknown>;
+  state[LEADING_NARRATION_BUFFER_KEY] = buffer;
+  state[LEADING_NARRATION_RESOLVED_KEY] = resolved;
+}
+
+function resolveLeadingNarrationChunk(ss: unknown, incoming: string): StreamSanitizerResult | null {
+  const state = readLeadingNarrationState(ss);
+  if (state.resolved) return null;
+  const combined = state.buffer + incoming;
+  if (!couldStartInternalTaskNarration(combined)) {
+    writeLeadingNarrationState(ss, "", true);
+    return { text: combined, suppressed: false };
+  }
+
+  const stripped = stripLeadingInternalTaskNarration(combined);
+  if (stripped !== combined) {
+    writeLeadingNarrationState(ss, "", true);
+    return { text: stripped, suppressed: true };
+  }
+
+  const sentenceCount = (combined.match(/[。！？!?]/gu) || []).length;
+  if (sentenceCount >= 2 || combined.length >= LEADING_NARRATION_BUFFER_MAX) {
+    writeLeadingNarrationState(ss, "", true);
+    return { text: combined, suppressed: false };
+  }
+  writeLeadingNarrationState(ss, combined, false);
+  return { text: "", suppressed: false };
 }
 
 function readInternalReasoningState(ss: unknown): { tag: string; tail: string } {
@@ -233,7 +282,12 @@ export function stripStreamingPseudoToolBlocks(
   ss: unknown,
   chunk: unknown,
 ): StreamSanitizerResult {
-  const incoming = String(chunk || "");
+  let incoming = String(chunk || "");
+  const leading = resolveLeadingNarrationChunk(ss, incoming);
+  if (leading) {
+    if (!leading.text) return leading;
+    incoming = leading.text;
+  }
   const carry = readCarry(ss);
   const hasInternalOpen = INTERNAL_REASONING_OPEN_RE.test(incoming);
   INTERNAL_REASONING_OPEN_RE.lastIndex = 0;
@@ -254,7 +308,7 @@ export function stripStreamingPseudoToolBlocks(
     findUnclosedPipeNumStart(incoming) === -1 &&
     findUnresolvedVisibleStructuralTagStart(incoming) === -1
   ) {
-    return { text: incoming, suppressed: false };
+    return { text: incoming, suppressed: leading?.suppressed || false };
   }
   VISIBLE_STRUCTURAL_TAG_RE.lastIndex = 0;
   VISIBLE_STRUCTURAL_LABEL_RE.lastIndex = 0;
@@ -265,10 +319,10 @@ export function stripStreamingPseudoToolBlocks(
   const { emit: toProcess, carry: toCarry } = splitAtUnresolvedOpener(internal.text);
 
   let emitText = toProcess;
-  let suppressed = internal.suppressed;
+  let suppressed = internal.suppressed || leading?.suppressed || false;
   if (toProcess && containsPseudoToolSimulation(toProcess)) {
     const stripped = stripPseudoToolCallMarkup(toProcess);
-    suppressed = stripped !== toProcess;
+    suppressed = suppressed || stripped !== toProcess;
     emitText = stripped;
   }
   const visibleStripped = stripVisibleStructuralTags(emitText);
@@ -294,11 +348,15 @@ export function stripStreamingPseudoToolBlocks(
  * Call exactly once per turn end after the final delta.
  */
 export function flushStreamingPseudoToolBlocks(ss: unknown): StreamSanitizerResult {
-  const carry = readCarry(ss);
+  const leading = readLeadingNarrationState(ss);
+  writeLeadingNarrationState(ss, "", false);
+  const leadingText = leading.resolved ? "" : stripLeadingInternalTaskNarration(leading.buffer);
+  const leadingSuppressed = leadingText !== leading.buffer;
+  const carry = leadingText + readCarry(ss);
   const internal = readInternalReasoningState(ss);
   writeCarry(ss, "");
   writeInternalReasoningState(ss, "", "");
-  if (!carry) return { text: "", suppressed: Boolean(internal.tag) };
+  if (!carry) return { text: "", suppressed: Boolean(internal.tag) || leadingSuppressed };
 
   // First: did the carry's opener ever get its closer? Check the ORIGINAL carry (before any
   // strip), because stripPseudoToolCallMarkup only removes the opener tag "<tool_call>" and
@@ -322,7 +380,7 @@ export function flushStreamingPseudoToolBlocks(ss: unknown): StreamSanitizerResu
   if (!stripped.trim()) {
     return { text: "", suppressed: true };
   }
-  return { text: stripped, suppressed: stripped !== carry };
+  return { text: stripped, suppressed: stripped !== carry || leadingSuppressed };
 }
 
 export function containsNonProgressPseudoToolSimulation(raw: unknown): boolean {

@@ -853,6 +853,17 @@ function createActive(index, category, prompt) {
   };
 }
 
+function safeToolEventValue(value) {
+  if (value == null) return "";
+  try {
+    return JSON.stringify(value, (key, nested) => (
+      /(?:token|secret|password|authorization|api[_-]?key)/iu.test(key) ? "[REDACTED]" : nested
+    )).slice(0, 1200);
+  } catch {
+    return String(value).slice(0, 1200);
+  }
+}
+
 function consumeMessage(active, msg) {
   active.events += 1;
   active.rawTail = `${active.rawTail}\n${JSON.stringify(msg).slice(0, 1000)}`.slice(-4000);
@@ -871,13 +882,18 @@ function consumeMessage(active, msg) {
       id: msg.toolCallId || msg.id || "",
       name: msg.name || msg.toolName || "tool",
       success: null,
+      args: safeToolEventValue(msg.args ?? msg.params ?? msg.input),
     });
     active.toolEvents.push({ event: "start", name: msg.name || msg.toolName || "tool" });
   } else if (msg.type === "tool_end" || msg.type === "tool_execution_end") {
     const id = msg.toolCallId || msg.id || "";
     const name = msg.name || msg.toolName || "";
     const found = active.tools.find((tool) => (id && tool.id === id) || (name && tool.name === name && tool.success === null));
-    if (found) found.success = msg.success ?? !msg.isError;
+    if (found) {
+      found.success = msg.success ?? !msg.isError;
+      found.error = safeToolEventValue(msg.error ?? msg.message ?? msg.details?.error);
+      found.details = safeToolEventValue(msg.details ?? msg.result ?? msg.output);
+    }
     active.toolEvents.push({ event: "end", name: name || found?.name || "tool", ok: msg.success ?? !msg.isError });
   } else if (msg.type === "tool_progress") {
     const name = msg.name || msg.toolName || "tool";

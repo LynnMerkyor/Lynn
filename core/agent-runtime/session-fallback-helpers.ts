@@ -3,6 +3,7 @@ import {
   evidenceToReadableLines,
   sanitizeToolEvidenceText,
 } from "../../shared/evidence-safety-answer.js";
+import { stripLeadingInternalTaskNarration } from "../../shared/assistant-visible-text.js";
 import {
   STEP_DELEGATION_TOOL_KEYS,
   contentToText,
@@ -202,6 +203,7 @@ export function normalizeFinalAnswerText(content: string): string {
   let text = stripInternalReasoningMarkup(content).replace(/\r/g, "\n");
   if (!text.trim()) return text;
   const hasCodeFence = /```/.test(text);
+  text = stripLeadingInternalTaskNarration(text);
   text = stripAssistantProcessChatter(text);
   const blocks = text.split(/\n{2,}/);
   const dedupedBlocks: string[] = [];
