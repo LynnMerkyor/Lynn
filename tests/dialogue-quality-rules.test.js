@@ -77,4 +77,13 @@ describe("dialogue quality rules", () => {
       hasToolEvidence: false,
     })).toBe("internal-task-narration-visible");
   });
+
+  it("rejects model-only Chinese angle-bracket structure labels", () => {
+    expect(additionalDialogueQualityReason({
+      category: "writing",
+      prompt: "设计一个三幕式小说大纲",
+      text: "<大纲>\n## 第一幕\n主角出租了一段记忆。",
+      hasToolEvidence: false,
+    })).toBe("model-structural-label-visible");
+  });
 });

@@ -22,4 +22,9 @@ describe("assistant visible text", () => {
 
     expect(normalizeFinalAnswerText(raw)).toBe("");
   });
+
+  it("removes a model-only Chinese outline label from persisted prose", () => {
+    expect(normalizeFinalAnswerText("<大纲>\n## 第一幕\n主角出租了一段记忆。")).toBe("## 第一幕\n主角出租了一段记忆。");
+    expect(normalizeFinalAnswerText("```text\n<大纲>\n```" )).toBe("```text\n<大纲>\n```");
+  });
 });

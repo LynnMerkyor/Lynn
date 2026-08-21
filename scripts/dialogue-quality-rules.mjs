@@ -131,6 +131,9 @@ export function additionalDialogueQualityReason({ category, prompt, text, hasToo
   if (/^\s*(?:用户|提问者)(?:现在|当前)?(?:需要|想要|要求|希望)[^。！？!?\n]{1,180}[。！？!?]\s*(?:我)?(?:应当|应该|需要|可以|将|要)?(?:直接给|直接提供|给出|提供|按|分成|从)[^。！？!?\n]{1,220}(?:结构化|按.{0,40}(?:排列|整理|组织)|让(?:用户|提问者)|回答(?:应|要)|无需|不需要|分成.{0,30}(?:部分|块|类)|照着执行)[^。！？!?\n]{0,80}[。！？!?]/u.test(proseOnly)) {
     return "internal-task-narration-visible";
   }
+  if (/(?:^|\n)\s*<[^<>\n]*(?:方案|计划|流程|步骤|回答|思路|分析|总结|大纲|设定|章节规划)[^<>\n]*>\s*/u.test(proseOnly)) {
+    return "model-structural-label-visible";
+  }
   if (/<\/?(?:worldbuilding|phase|daily_structure|item|milestone|rules|rule)\b[^>]*>/iu.test(proseOnly)) {
     return "model-structural-tag-visible";
   }

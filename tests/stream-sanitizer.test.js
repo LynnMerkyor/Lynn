@@ -211,6 +211,17 @@ describe("stream sanitizer · cross-chunk carry buffer", () => {
     expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
   });
 
+  it("strips a Chinese outline label without changing the outline body", () => {
+    const ss = {};
+    const result = stripStreamingPseudoToolBlocks(ss, "<大纲>\n## 第一幕\n主角出租了一段记忆。");
+
+    expect(result).toEqual({
+      text: "## 第一幕\n主角出租了一段记忆。",
+      suppressed: true,
+    });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
   it("strips visible template and snake-case structure tags", () => {
     const ss = {};
     const result = stripStreamingPseudoToolBlocks(ss, "<template>主题：延期说明</template>\n<move_checklist>提前预约搬家公司。");

@@ -2,6 +2,7 @@ const TASK_NARRATION_ACTOR_RE = /^(?:用户|提问者)(?:现在|当前)?(?:需�
 const TASK_NARRATION_DIRECTIVE_RE = /^(?:我)?(?:应当|应该|需要|可以|将|要)?(?:直接给|直接提供|给出|提供|按|分成|从)/u;
 const TASK_NARRATION_META_RE = /(?:结构化|按.{0,40}(?:排列|整理|组织)|让(?:用户|提问者)|回答(?:应|要)|无需|不需要|分成.{0,30}(?:部分|块|类)|照着执行)/u;
 const LEADING_SENTENCE_RE = /^\s*([^。！？!?\n]{1,180}[。！？!?])\s*([^。！？!?\n]{1,220}[。！？!?])([\s\S]*)$/u;
+const VISIBLE_CHINESE_STRUCTURAL_LABEL_RE = /(^|\n)\s*<[^<>\n]*(?:方案|计划|流程|步骤|回答|思路|分析|总结|大纲|设定|章节规划)[^<>\n]*>\s*/gu;
 
 /**
  * Remove a high-confidence model planning preface accidentally exposed as
@@ -26,4 +27,8 @@ export function couldStartInternalTaskNarration(value: unknown): boolean {
   const compact = String(value || "").trimStart();
   if (!compact) return true;
   return ["用户", "提问者"].some((prefix) => prefix.startsWith(compact) || compact.startsWith(prefix));
+}
+
+export function stripVisibleChineseStructuralLabels(value: unknown): string {
+  return String(value || "").replace(VISIBLE_CHINESE_STRUCTURAL_LABEL_RE, "$1");
 }

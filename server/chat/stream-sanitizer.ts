@@ -37,7 +37,7 @@ const VISIBLE_STRUCTURAL_TAG_NAMES = [
   "item", "milestone", "rules", "rule",
 ] as const;
 const VISIBLE_STRUCTURAL_TAG_RE = /<\/?(?:plan|steps|answer|final|response|solution|outline|template|position|cancellation|reviews|worldbuilding|phase|daily_structure|item|milestone|rules|rule)\b[^>]*>/giu;
-const VISIBLE_STRUCTURAL_LABEL_RE = /(^|\n)\s*<[^<>\n]*(?:方案|计划|流程|步骤|回答|思路|分析|总结|plan|steps|answer|final|response|solution|outline|template)[^<>\n]*>\s*/giu;
+const VISIBLE_STRUCTURAL_LABEL_RE = /(^|\n)\s*<[^<>\n]*(?:方案|计划|流程|步骤|回答|思路|分析|总结|大纲|设定|章节规划|plan|steps|answer|final|response|solution|outline|template)[^<>\n]*>\s*/giu;
 const VISIBLE_SNAKE_STRUCTURAL_TAG_RE = /<\/?[a-z][a-z0-9_-]*_(?:checklist|plan|steps|template|outline|summary|answer|flow|process|list)[a-z0-9_-]*>/giu;
 
 function readCarry(ss: unknown): string {
