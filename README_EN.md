@@ -95,12 +95,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.2.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.86.1
+Lynn --version  # should print 0.86.2
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -126,7 +126,26 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details open>
-<summary><strong>Lynn v0.86.1</strong> · 2026-07-12 · GUI/CLI interaction and local-model management <em>(latest)</em></summary>
+<summary><strong>Lynn v0.86.2</strong> · 2026-08-22 · Codex app-server harness and Agent lifecycle <em>(latest)</em></summary>
+
+**v0.86.2 Agent harness and reliability update**:
+- **Codex app-server harness for Lynn Code** maps threads, turns, streaming events, plans, tool lifecycle, approval requests, compaction, and interruption into Lynn's Agent run state while preserving the original loop.
+- **`auto` is the default and decides before execution**. Lynn validates the app-server executable, protocol, Brain Responses capability, authentication, and the active provider/model route; any failed check selects the original architecture before the task starts.
+- **No feature regression in exchange for a new harness**. Attachments keep the verified Lynn multimodal bridge, `--json` keeps per-tool audit events, `ask`/`never` keep strict approval semantics, and ultra multi-worker tasks keep the original loop. Explicit `--harness codex` is limited to the verified ordinary `yolo/on-failure` path and rejects incompatible combinations; `--harness legacy` pins the original architecture.
+- **GUI and CLI share a terminal run lifecycle** for completed, failed, cancelled, partial, resumable, and tool-ledger state, reducing empty replies, double-finalization, and state left behind after cancellation.
+- **BYOK and Brain retain their routing ownership**. BYOK keeps the user-selected provider/model; StepFun, DeepSeek V4 Flash, MiMo, GLM, and other Brain models remain Brain-routed independently of harness selection.
+- **Windows local GGUF remains bundled** through the v0.86.1 built-in `llama.cpp` runtime and packaged-installer verification gate.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.2.tgz"
+```
+
+[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.2)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.86.1</strong> · 2026-07-12 · GUI/CLI interaction and local-model management</summary>
 
 **v0.86.1 UX and reliability update**:
 - Busy Ctrl+C now cancels only the active Ink turn and keeps the REPL alive; the full Ink PTY gate requires cancellation within one second and a clean final exit.
