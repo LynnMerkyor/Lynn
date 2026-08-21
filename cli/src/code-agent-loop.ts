@@ -24,6 +24,7 @@ import { createWorkspaceSnapshot, recordWorkspaceSnapshotForRequest, restoreWork
 import { selfVerifyEnabled, buildSelfVerifyPrompt, parseSelfVerifyVerdict, formatSelfVerifyCritique } from "./code-self-verify.js";
 import { applyWorkingCheckpoint, formatWorkingCheckpointFrame, workingCheckpointObservation } from "./code-working-checkpoint.js";
 import { buildEvidenceSafetyAnswer } from "../../shared/evidence-safety-answer.js";
+import type { CodexAppServerProtocol } from "./codex-harness-selection.js";
 import {
   classifyAgentRunError,
   createAgentRunLifecycle,
@@ -54,6 +55,7 @@ export interface CodeAgentLoopInput {
   onEvent?: (event: CodeAgentEvent) => void;
   requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny">;
   signal?: AbortSignal;
+  codexProtocol?: CodexAppServerProtocol;
 }
 
 export interface CodeAgentApprovalRequest {
@@ -64,6 +66,7 @@ export interface CodeAgentApprovalRequest {
 }
 
 export type CodeAgentEvent =
+  | { type: "harness.selected"; requested: "auto" | "legacy" | "codex"; selected: "legacy" | "codex"; reason: string; protocol?: CodexAppServerProtocol }
   | { type: "run.started"; runId: string; phase: "running"; revision: number }
   | { type: "run.finished"; runId: string; snapshot: AgentRunSnapshot; terminal: AgentRunTerminal }
   | { type: "step.started"; step: number; label: string }

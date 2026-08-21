@@ -19,6 +19,10 @@ export interface BrainProviderStatus {
   ok: true;
   route: string[];
   providers: BrainProviderStatusEntry[];
+  capabilities?: {
+    responses?: boolean;
+    appServerHarness?: boolean;
+  };
 }
 
 export interface BrainRouteReadiness {

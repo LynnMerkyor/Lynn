@@ -86,6 +86,10 @@ import {
   type CodeAgentLoopInput,
 } from "../code-agent-loop.js";
 import { runCodexHarnessLoop } from "../codex-harness-loop.js";
+import {
+  resolveCodeHarnessSelection,
+  type CodeHarnessMode,
+} from "../codex-harness-selection.js";
 
 export {
   codeToolDefinitions,
@@ -147,10 +151,10 @@ function sandbox(args: ParsedArgs): ToolRunContext["sandbox"] {
 const DEFAULT_MAX_STEPS = 100;
 const LONG_MAX_STEPS = 300;
 
-export function codeHarness(args: ParsedArgs): "legacy" | "codex" {
-  const value = (getStringFlag(args.flags, "harness") || process.env.LYNN_AGENT_HARNESS || "legacy").trim().toLowerCase();
-  if (value === "legacy" || value === "codex") return value;
-  throw new Error("--harness must be legacy or codex");
+export function codeHarness(args: ParsedArgs): CodeHarnessMode {
+  const value = (getStringFlag(args.flags, "harness") || process.env.LYNN_AGENT_HARNESS || "auto").trim().toLowerCase();
+  if (value === "auto" || value === "legacy" || value === "codex") return value;
+  throw new Error("--harness must be auto, legacy, or codex");
 }
 
 export function isLongRun(args: ParsedArgs): boolean {
@@ -608,11 +612,24 @@ async function runCodeTask(
   const mediaPaths = codeMediaPaths(args, preparedInput.mediaPaths);
   const reasoning = parseReasoningOptions(args);
   const stepBudget = maxSteps(args);
-  const harness = codeHarness(args);
+  const requestedHarness = codeHarness(args);
   const brainUrl = await resolveDefaultBrainUrl(args);
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const mode = await resolveCodeMode(args);
   const cliProvider = await resolveCliProviderProfile(args);
+  const harnessSelection = mockBrain
+    ? { requested: requestedHarness, selected: "legacy" as const, reason: "mock brain uses the deterministic legacy loop" }
+    : await resolveCodeHarnessSelection({
+        requested: requestedHarness,
+        cwd: context.cwd,
+        brainUrl,
+        provider: cliProvider?.profile,
+        ultra: ultraEnabled(args),
+        hasMedia: mediaPaths.length > 0,
+        machineReadable: json,
+        approval: mode.approval,
+      });
+  const harness = harnessSelection.selected;
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   let memoryFrame = buildMemoryContextFrameSync(dataDir, taskText);
   // ① Recall: inject SOPs crystallized from past similar tasks (opt-in).
@@ -676,8 +693,10 @@ async function runCodeTask(
   }
   if (json) {
     writeJsonLine({ type: "code.task.started", ts: nowIso(), task: taskText, context, mediaPaths });
+    writeJsonLine({ type: "code.harness.selected", ts: nowIso(), ...harnessSelection });
     if (resumePath) writeJsonLine({ type: "session.resumed", ts: nowIso(), path: resumePath, messages: resumeMessages.length, repairedTools: resumeDiag?.repairedTools ?? 0, compacted: resumeDiag?.compacted ?? false, tornLines: resumeDiag?.tornLines ?? 0, plan: resumePlan });
   }
+  options.onEvent?.({ type: "harness.selected", ...harnessSelection });
   if (resumePath) options.onEvent?.({ type: "session.resumed", path: resumePath, messages: resumeMessages.length });
 
   if (mockBrain) {
@@ -707,7 +726,6 @@ async function runCodeTask(
     signal: options.signal,
   };
   if (ultraEnabled(args)) {
-    if (harness === "codex") throw new Error("--harness codex cannot be combined with --ultra yet; use the default single-worker code loop");
     return runUltraCodeBranch({
       args,
       taskText,
@@ -765,6 +783,7 @@ async function runCodeTask(
     },
     requestApproval: options.requestApproval,
     signal: options.signal,
+    codexProtocol: harnessSelection.protocol,
     onCheckpoint: saveSession && liveSessionPath
       ? async (line) => {
           liveSessionPath = await appendSessionLine({
@@ -841,6 +860,9 @@ async function runCodeTask(
         maxSteps: stepBudget,
         maxStepsReached: final.maxStepsReached,
         harness,
+        harnessRequested: harnessSelection.requested,
+        harnessReason: harnessSelection.reason,
+        harnessProtocol: harnessSelection.protocol || null,
         runId: final.runId,
         terminal: final.terminal,
         cacheDiagnostics: computeCodeContextLayerDiagnostics(buildCodeRuntimeFrames({ context, toolCtx, memoryFrame }), resumeMessages.length),

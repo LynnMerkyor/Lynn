@@ -454,6 +454,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   };
 
   const handleAgentEvent = (event: CodeAgentEvent) => {
+    if (event.type === "harness.selected") pushItem({ kind: "system", text: `harness: ${event.selected} · ${event.reason}` });
     if (event.type === "provider") setProvider(event.provider);
     if (event.type === "usage") setUsage(event.summary);
     if (event.type === "step.started") pushItem({ kind: "system", text: `${event.label} · step ${event.step + 1}` });

@@ -105,10 +105,11 @@ async function withRawBrainServer(handler: (body: unknown, count: number) => str
 }
 
 describe("code agent loop · core & approvals", () => {
-  it("keeps the legacy harness by default and validates explicit selection", () => {
-    expect(codeHarness(parseArgs(["code", "task"]))).toBe("legacy");
+  it("uses the auto harness by default and validates explicit selection", () => {
+    expect(codeHarness(parseArgs(["code", "task"]))).toBe("auto");
+    expect(codeHarness(parseArgs(["code", "task", "--harness", "legacy"]))).toBe("legacy");
     expect(codeHarness(parseArgs(["code", "task", "--harness", "codex"]))).toBe("codex");
-    expect(() => codeHarness(parseArgs(["code", "task", "--harness", "unknown"]))).toThrow(/legacy or codex/);
+    expect(() => codeHarness(parseArgs(["code", "task", "--harness", "unknown"]))).toThrow(/auto, legacy, or codex/);
   });
 
   it("compacts old runtime loop turns while keeping the anchored goal", () => {

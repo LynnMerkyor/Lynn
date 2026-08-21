@@ -11,13 +11,15 @@ import {
   type AgentRunLifecycle,
   type AgentRunTerminal,
 } from "../../shared/agent-run-lifecycle.js";
-import { resolveToolApproval } from "./code-tool-render.js";
+import { redactToolArgs, resolveToolApproval } from "./code-tool-render.js";
+import type { CodeToolRequest } from "./code-tool-protocol.js";
 import { startCodexResponsesProxy } from "./codex-responses-proxy.js";
 import type { CodeAgentLoopInput, CodeAgentLoopResult } from "./code-agent-loop.js";
 import { nowIso, writeJsonLine } from "./jsonl.js";
 import type { CodePlanItem } from "./plan-tool.js";
 import type { ClientToolName } from "./tools/types.js";
 import { readVersionInfo } from "./version.js";
+import type { CodexAppServerProtocol } from "./codex-harness-selection.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -37,8 +39,38 @@ function tomlString(value: string): string {
   return JSON.stringify(value);
 }
 
-function appServerApprovalPolicy(value: CodeAgentLoopInput["toolCtx"]["approval"]): "on-request" | "never" {
-  return value === "ask" ? "on-request" : "never";
+function appServerApprovalPolicy(
+  value: CodeAgentLoopInput["toolCtx"]["approval"],
+  protocol: CodexAppServerProtocol,
+): "unlessTrusted" | "untrusted" | "never" {
+  if (value !== "ask") return "never";
+  return protocol === "v2-camel" ? "unlessTrusted" : "untrusted";
+}
+
+function appServerThreadSandbox(
+  input: CodeAgentLoopInput,
+  protocol: CodexAppServerProtocol,
+): "readOnly" | "workspaceWrite" | "dangerFullAccess" | "read-only" | "workspace-write" | "danger-full-access" {
+  const sandbox = input.toolCtx.approval === "ask" || input.toolCtx.approval === "never"
+    ? "read-only"
+    : input.toolCtx.sandbox || "workspace-write";
+  if (protocol !== "v2-camel") return sandbox;
+  if (sandbox === "read-only") return "readOnly";
+  if (sandbox === "danger-full-access") return "dangerFullAccess";
+  return "workspaceWrite";
+}
+
+function appServerTurnSandbox(
+  input: CodeAgentLoopInput,
+  protocol: CodexAppServerProtocol,
+): ReturnType<typeof appServerThreadSandbox> {
+  if (protocol !== "hybrid-kebab-thread") return appServerThreadSandbox(input, protocol);
+  const sandbox = input.toolCtx.approval === "ask" || input.toolCtx.approval === "never"
+    ? "read-only"
+    : input.toolCtx.sandbox || "workspace-write";
+  if (sandbox === "read-only") return "readOnly";
+  if (sandbox === "danger-full-access") return "dangerFullAccess";
+  return "workspaceWrite";
 }
 
 function appServerEffort(value: CodeAgentLoopInput["reasoning"]["effort"]): string | null {
@@ -279,7 +311,12 @@ function handleNotification(
       if (!tool) return;
       const mutation = lifecycle.beginTool(tool.id, tool.name, JSON.stringify(tool.args));
       if (!mutation.accepted) return;
-      if (tool.clientTool) input.onEvent?.({ type: "tool.requested", tool: tool.clientTool, args: tool.args });
+      if (tool.clientTool) {
+        const request = { tool: tool.clientTool, ...tool.args } as CodeToolRequest;
+        const args = redactToolArgs(request);
+        input.onEvent?.({ type: "tool.requested", tool: tool.clientTool, args: args as CodeToolRequest["args"] });
+        if (input.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: tool.clientTool, args });
+      }
       else input.onEvent?.({ type: "tool.progress", message: `${tool.name} · running` });
       return;
     }
@@ -292,7 +329,9 @@ function handleNotification(
       const mutation = lifecycle.finishTool(tool.id, { ok, error });
       if (!mutation.accepted) return;
       if (tool.clientTool) {
-        input.onEvent?.({ type: "tool.result", result: { ok, tool: tool.clientTool, output: item.aggregatedOutput || item.changes || item.result, ...(error ? { error } : {}) } });
+        const result = { ok, tool: tool.clientTool, output: item.aggregatedOutput || item.changes || item.result, ...(error ? { error } : {}) };
+        input.onEvent?.({ type: "tool.result", result });
+        if (input.json) writeJsonLine({ type: "code.tool.result", ts: nowIso(), ...result });
       } else {
         input.onEvent?.({ type: "tool.progress", message: `${tool.name} · ${ok ? "done" : "failed"}` });
       }
@@ -348,7 +387,12 @@ export async function runCodexHarnessLoop(input: CodeAgentLoopInput, options: Co
     throw error;
   }
   const proxyEnvKey = "LYNN_CODEX_RESPONSES_PROXY_TOKEN";
+  const protocol = input.codexProtocol || "legacy-kebab";
   const model = input.fallbackProvider?.model || "lynn-brain-router";
+  const activeProvider = input.fallbackProvider ? `cli-byok:${input.fallbackProvider.provider}` : "lynn-brain-router";
+  const fallbackFrom = input.fallbackProvider ? [{ id: "brain", reason: "harness-byok-direct" }] : undefined;
+  input.onEvent?.({ type: "provider", provider: activeProvider });
+  if (input.json) writeJsonLine({ type: "provider", ts: nowIso(), activeProvider, ...(fallbackFrom ? { fallbackFrom } : {}) });
   const configOverrides = [
     'model_provider="lynn"',
     `model_providers.lynn={name="Lynn BYOK",base_url=${tomlString(proxy.baseUrl)},env_key="${proxyEnvKey}",wire_api="responses"}`,
@@ -378,8 +422,8 @@ export async function runCodexHarnessLoop(input: CodeAgentLoopInput, options: Co
       modelProvider: "lynn",
       allowProviderModelFallback: false,
       cwd: path.resolve(input.toolCtx.cwd),
-      approvalPolicy: appServerApprovalPolicy(input.toolCtx.approval),
-      sandbox: input.toolCtx.sandbox || "workspace-write",
+      approvalPolicy: appServerApprovalPolicy(input.toolCtx.approval, protocol),
+      sandbox: appServerThreadSandbox(input, protocol),
       ephemeral: true,
     });
     const threadId = textField(asObject(threadResponse.thread).id);
@@ -392,7 +436,8 @@ export async function runCodexHarnessLoop(input: CodeAgentLoopInput, options: Co
       threadId,
       input: turnInput,
       cwd: path.resolve(input.toolCtx.cwd),
-      approvalPolicy: appServerApprovalPolicy(input.toolCtx.approval),
+      approvalPolicy: appServerApprovalPolicy(input.toolCtx.approval, protocol),
+      sandboxPolicy: { type: appServerTurnSandbox(input, protocol) },
       model,
       effort: appServerEffort(input.reasoning.effort),
     });

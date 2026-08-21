@@ -650,7 +650,13 @@ async function handleProviderStatus(req: IncomingMessage, res: ServerResponse): 
     return;
   }
   res.writeHead(200, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
-  res.end(JSON.stringify(getProviderStatusSnapshot()));
+  res.end(JSON.stringify({
+    ...getProviderStatusSnapshot(),
+    capabilities: {
+      responses: true,
+      appServerHarness: true,
+    },
+  }));
 }
 
 async function handleLocalQwen35(req: IncomingMessage, res: ServerResponse, pathname: string, method: 'GET' | 'POST'): Promise<void> {

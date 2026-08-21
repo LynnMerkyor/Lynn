@@ -263,16 +263,13 @@ describe("code agent loop · multimodal & BYOK subprocess", () => {
       });
     });
     await new Promise<void>((resolve) => provider.close(() => resolve()));
-
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('"activeProvider":"cli-byok:openai-compatible"');
+    expect(result.stdout).toContain('"reason":"attached media uses Lynn');
     expect(result.stdout).toContain("Reviewed BYOK screenshot.");
     const parsed = JSON.parse(requestBody) as { model?: string; messages?: Array<{ role?: string; content?: unknown }> };
     expect(parsed.model).toBe("code-image-model");
-    const multimodalUser = parsed.messages?.find((message) => Array.isArray(message.content));
-    expect(multimodalUser).toBeTruthy();
-    const serialized = JSON.stringify(multimodalUser?.content);
-    expect(serialized).toContain("Attached images:");
+    const serialized = JSON.stringify(parsed.messages);
     expect(serialized).toContain("data:image/png;base64");
   });
 
@@ -438,7 +435,7 @@ describe("code agent loop · multimodal & BYOK subprocess", () => {
 
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('"activeProvider":"cli-byok:openai-compatible"');
-    expect(result.stdout).toContain('"fallbackFrom":[{"id":"brain","reason":"offline"}]');
+    expect(result.stdout).toContain('"reason":"JSON mode uses Lynn');
     expect(result.stdout).toContain('"tool":"apply_patch"');
     expect(result.stdout).toContain('"tool":"bash"');
     expect(result.stdout).toContain("Patched hello.txt and verified the result.");

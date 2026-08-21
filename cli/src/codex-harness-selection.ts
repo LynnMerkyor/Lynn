@@ -1,0 +1,200 @@
+import path from "node:path";
+import {
+  CodexAppServerClient,
+  type CodexAppServerClientOptions,
+} from "../../shared/codex-app-server-client.js";
+import type { CliProviderProfile } from "./provider-profile.js";
+import { brainRouteUsable, fetchBrainProviderStatus } from "./brain-status.js";
+import { readVersionInfo } from "./version.js";
+
+export type CodeHarnessMode = "auto" | "legacy" | "codex";
+export type SelectedCodeHarness = "legacy" | "codex";
+export type CodexAppServerProtocol = "v2-camel" | "hybrid-kebab-thread" | "legacy-kebab";
+
+export interface CodeHarnessSelection {
+  requested: CodeHarnessMode;
+  selected: SelectedCodeHarness;
+  reason: string;
+  protocol?: CodexAppServerProtocol;
+}
+
+export interface CodeHarnessSelectionInput {
+  requested: CodeHarnessMode;
+  cwd: string;
+  brainUrl: string;
+  provider?: CliProviderProfile | null;
+  ultra: boolean;
+  hasMedia?: boolean;
+  machineReadable?: boolean;
+  approval?: "ask" | "on-failure" | "never" | "yolo";
+  probe?: (options: CodexAppServerClientOptions) => Promise<CodexAppServerProtocol>;
+  brainProbe?: (brainUrl: string) => Promise<{ supported: boolean; reason: string }>;
+  clientOptions?: CodexAppServerClientOptions;
+}
+
+function isLoopbackBaseUrl(baseUrl: string): boolean {
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase();
+    return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function protocolThreadSandbox(protocol: CodexAppServerProtocol): "readOnly" | "read-only" {
+  return protocol === "v2-camel" ? "readOnly" : "read-only";
+}
+
+function protocolTurnSandbox(protocol: CodexAppServerProtocol): "readOnly" | "read-only" {
+  return protocol === "legacy-kebab" ? "read-only" : "readOnly";
+}
+
+function protocolApproval(protocol: CodexAppServerProtocol): "unlessTrusted" | "untrusted" {
+  return protocol === "v2-camel" ? "unlessTrusted" : "untrusted";
+}
+
+function looksLikeProtocolMismatch(error: unknown): boolean {
+  return /invalid (?:request|params)|unknown variant|expected one of|-32602/i.test(errorMessage(error));
+}
+
+async function probeCodexAppServerProtocol(
+  protocol: CodexAppServerProtocol,
+  options: CodexAppServerClientOptions,
+): Promise<void> {
+  const cwd = path.resolve(options.cwd || process.cwd());
+  const envKey = "LYNN_CODEX_PREFLIGHT_TOKEN";
+  const provider = "lynn_preflight";
+  const client = new CodexAppServerClient({
+    ...options,
+    cwd,
+    requestTimeoutMs: options.requestTimeoutMs ?? 5_000,
+    clientVersion: options.clientVersion || readVersionInfo().version,
+    env: { [envKey]: "local-preflight-only", ...(options.env || {}) },
+    configOverrides: options.configOverrides || [
+      `model_provider="${provider}"`,
+      `model_providers.${provider}={name="Lynn preflight",base_url="http://127.0.0.1:9/v1",env_key="${envKey}",wire_api="responses"}`,
+    ],
+  });
+  try {
+    await client.start();
+    const result = await client.startThread({
+      model: "lynn-preflight",
+      modelProvider: provider,
+      allowProviderModelFallback: false,
+      cwd,
+      approvalPolicy: protocolApproval(protocol),
+      sandbox: protocolThreadSandbox(protocol),
+      ephemeral: true,
+    });
+    const thread = result.thread;
+    if (!thread || typeof thread !== "object" || Array.isArray(thread) || typeof (thread as { id?: unknown }).id !== "string") {
+      throw new Error("Codex app-server preflight did not return a thread id");
+    }
+    const threadId = (thread as { id: string }).id;
+    const turn = await client.startTurn({
+      threadId,
+      input: [{ type: "text", text: "Lynn protocol preflight only" }],
+      cwd,
+      approvalPolicy: protocolApproval(protocol),
+      sandboxPolicy: { type: protocolTurnSandbox(protocol) },
+      model: "lynn-preflight",
+    });
+    const turnId = turn.turn && typeof turn.turn === "object" && !Array.isArray(turn.turn)
+      ? (turn.turn as { id?: unknown }).id
+      : null;
+    if (typeof turnId !== "string") throw new Error("Codex app-server preflight did not return a turn id");
+    await client.interruptTurn(threadId, turnId).catch(() => undefined);
+  } finally {
+    await client.stop();
+  }
+}
+
+export async function probeCodexAppServer(options: CodexAppServerClientOptions = {}): Promise<CodexAppServerProtocol> {
+  let firstError: unknown;
+  try {
+    await probeCodexAppServerProtocol("v2-camel", options);
+    return "v2-camel";
+  } catch (error) {
+    if (!looksLikeProtocolMismatch(error)) throw error;
+    firstError = error;
+  }
+  try {
+    await probeCodexAppServerProtocol("hybrid-kebab-thread", options);
+    return "hybrid-kebab-thread";
+  } catch (error) {
+    if (!looksLikeProtocolMismatch(error)) throw error;
+    try {
+      await probeCodexAppServerProtocol("legacy-kebab", options);
+      return "legacy-kebab";
+    } catch {
+      throw firstError;
+    }
+  }
+}
+
+export async function probeBrainHarnessSupport(brainUrl: string): Promise<{ supported: boolean; reason: string }> {
+  const status = await fetchBrainProviderStatus(brainUrl);
+  if (!status) return { supported: false, reason: "Brain provider status or authentication is unavailable" };
+  if (status.capabilities?.responses !== true || status.capabilities?.appServerHarness !== true) {
+    return { supported: false, reason: "Brain does not declare Codex app-server Responses compatibility" };
+  }
+  if (!brainRouteUsable(status)) return { supported: false, reason: "Brain has no configured provider route" };
+  return { supported: true, reason: "Brain Responses route is ready" };
+}
+
+export async function resolveCodeHarnessSelection(input: CodeHarnessSelectionInput): Promise<CodeHarnessSelection> {
+  if (input.requested === "legacy") {
+    return { requested: input.requested, selected: "legacy", reason: "explicit legacy mode" };
+  }
+  if (input.requested === "codex") {
+    if (input.ultra) throw new Error("--harness codex cannot be combined with --ultra yet; use --harness auto or legacy");
+    if (input.hasMedia) throw new Error("--harness codex does not yet preserve Lynn's multimodal attachment bridge; use --harness auto or legacy");
+    if (input.machineReadable) throw new Error("--harness codex does not yet preserve Lynn's per-tool JSON audit stream; use --harness auto or legacy");
+    if (input.approval === "ask" || input.approval === "never") {
+      throw new Error(`--harness codex does not yet preserve Lynn's ${input.approval} approval semantics; use --harness auto or legacy`);
+    }
+    const protocol = await (input.probe || probeCodexAppServer)({
+      cwd: path.resolve(input.cwd),
+      ...input.clientOptions,
+    });
+    return { requested: input.requested, selected: "codex", reason: `explicit Codex app-server mode (${protocol})`, protocol };
+  }
+  if (input.ultra) {
+    return { requested: input.requested, selected: "legacy", reason: "ultra mode uses the legacy multi-worker loop" };
+  }
+  if (input.hasMedia) {
+    return { requested: input.requested, selected: "legacy", reason: "attached media uses Lynn's verified legacy multimodal bridge" };
+  }
+  if (input.machineReadable) {
+    return { requested: input.requested, selected: "legacy", reason: "JSON mode uses Lynn's verified per-tool audit stream" };
+  }
+  if (input.approval === "ask" || input.approval === "never") {
+    return { requested: input.requested, selected: "legacy", reason: `${input.approval} approval mode requires Lynn's strict tool-approval semantics` };
+  }
+  if (input.provider && !input.provider.apiKey && !isLoopbackBaseUrl(input.provider.baseUrl)) {
+    return { requested: input.requested, selected: "legacy", reason: "remote BYOK provider has no API key" };
+  }
+  if (!input.provider) {
+    const brain = await (input.brainProbe || probeBrainHarnessSupport)(input.brainUrl);
+    if (!brain.supported) {
+      return { requested: input.requested, selected: "legacy", reason: brain.reason };
+    }
+  }
+  try {
+    const protocol = await (input.probe || probeCodexAppServer)({
+      cwd: path.resolve(input.cwd),
+      ...input.clientOptions,
+    });
+    return { requested: input.requested, selected: "codex", reason: `Codex app-server, authentication, provider, and ${protocol} protocol preflight passed`, protocol };
+  } catch (error) {
+    return {
+      requested: input.requested,
+      selected: "legacy",
+      reason: `Codex app-server preflight failed: ${errorMessage(error)}`,
+    };
+  }
+}
