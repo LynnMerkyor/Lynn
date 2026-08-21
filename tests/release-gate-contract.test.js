@@ -43,4 +43,12 @@ describe('release gate contract', () => {
     expect(gate).toContain("j.capabilities?.appServerHarness === true");
     expect(gate).toContain('prod 运行态缺 Responses/app-server harness capabilities');
   });
+
+  it('builds the CLI before agent regression in a clean checkout', () => {
+    const preflight = readPackage().scripts['release:preflight'];
+    expect(preflight.indexOf('npm run build:cli')).toBeGreaterThan(-1);
+    expect(preflight.indexOf('npm run build:cli')).toBeLessThan(
+      preflight.indexOf('npm run test:agent-regression'),
+    );
+  });
 });
