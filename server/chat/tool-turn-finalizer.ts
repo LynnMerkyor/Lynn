@@ -44,6 +44,12 @@ export function buildToolCompletionSummary(ss: any): string {
   if (okCount + failCount === 0) return "";
   const realtimeFailureFallback = buildRealtimeToolFailureFallbackSummary(ss, failedTools, failCount);
   if (realtimeFailureFallback) return realtimeFailureFallback;
+  const directWebAnswer = buildDirectWebFetchEvidenceAnswer(ss);
+  if (directWebAnswer) {
+    if (failCount === 0) return directWebAnswer;
+    const failDetail = failedTools.length ? `(${failedTools.slice(0, 3).join("、")})` : "";
+    return `${directWebAnswer}\n\n另有 ${failCount} 个后续操作失败${failDetail}；上方结论只采用已成功读取的页面内容。`;
+  }
   const evidenceFallback = buildRealtimeEvidenceFallbackSummary(ss);
   if (evidenceFallback) {
     if (failCount === 0) return evidenceFallback;
@@ -170,6 +176,11 @@ function isWebFetchToolName(value: unknown): boolean {
   return name === "web_fetch" || name === "webfetch";
 }
 
+function isWebContentToolName(value: unknown): boolean {
+  const name = canonicalToolName(value);
+  return isWebFetchToolName(name) || name === "browser";
+}
+
 function looksLikeToolEvidenceDismissal(value: unknown): boolean {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   if (!text) return false;
@@ -204,14 +215,18 @@ function firstUsefulSentence(value: unknown): string {
 
 export function buildDirectWebFetchEvidenceAnswer(ss: any): string {
   const prompt = String(ss?.originalPromptText || ss?.effectivePromptText || "");
+  if (!/(?:访问|打开|概括|总结|摘要|summari[sz]e|summary).{0,80}(?:https?:\/\/|www\.|\b[a-z0-9-]+\.[a-z]{2,}\b)|(?:https?:\/\/|www\.|\b[a-z0-9-]+\.[a-z]{2,}\b).{0,80}(?:访问|打开|概括|总结|摘要|summari[sz]e|summary)/iu.test(prompt)) {
+    return "";
+  }
   const tools = Array.isArray(ss?.lastSuccessfulTools) ? ss.lastSuccessfulTools : [];
-  const tool = [...tools].reverse().find((item: any) => isWebFetchToolName(item?.name) && String(item?.outputPreview || "").trim());
+  const tool = [...tools].reverse().find((item: any) => isWebContentToolName(item?.name) && String(item?.outputPreview || "").trim());
   if (!tool) return "";
   if (/(?:抓取出错|抓取失败|HTTP\s+\d{3}|Forbidden|fetch failed|request timeout|aborted)/iu.test(String(tool.outputPreview || ""))) return "";
 
   const lines = splitEvidenceLines(tool.outputPreview);
   const sourceLine = lines.find((line) => /^来源[:：]/.test(line)) || "";
-  const source = sourceLine.replace(/^来源[:：]\s*/, "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const source = sourceLine.replace(/^来源[:：]\s*/, "").replace(/\s*\([^)]*\)\s*$/, "").trim()
+    || String(tool?.url || "").trim();
   const contentLines = lines
     .filter((line) => !/^来源[:：]/.test(line))
     .filter((line) => !/^Learn more\b/i.test(line))
@@ -239,6 +254,8 @@ function successfulToolEvidenceText(ss: any): string {
       tool?.name,
       tool?.command,
       tool?.filePath,
+      tool?.url,
+      tool?.query,
       tool?.outputPreview,
     ].filter(Boolean).join(" "))
     .join("\n");

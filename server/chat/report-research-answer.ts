@@ -252,8 +252,12 @@ function buildDirectMarketAnswer(context: unknown, userPrompt: string = ""): str
     `**${symbol}**`,
     "- 未检索到明确的最近可用行情，建议继续用券商、交易所或 Stooq/Yahoo 等行情源核验。",
   ].join("\n"))).join("\n\n");
+  const isAshareAnomalyPrompt = /(?:A\s*股|a\s*股).{0,16}异动|异动.{0,16}(?:A\s*股|a\s*股)/u.test(userPrompt);
+  const anomalyScope = isAshareAnomalyPrompt
+    ? [`当前直连行情只返回 ${items.length} 只 A 股代表性样本，不是全市场异动榜。`, buildAshareSampleExtremes(items)].filter(Boolean)
+    : ["根据已获取的最近可用行情："];
   return [
-    "根据已获取的最近可用行情：",
+    ...anomalyScope,
     "",
     rows,
     "",
@@ -261,6 +265,18 @@ function buildDirectMarketAnswer(context: unknown, userPrompt: string = ""): str
     "",
     "以上信息仅作行情展示，不构成任何投资建议、买卖建议或收益承诺。",
   ].join("\n");
+}
+
+function buildAshareSampleExtremes(items: ReturnType<typeof parseStooqItems>): string {
+  const parsed = items.map((item) => {
+    const pct = Number(item.change.match(/([+-]?\d+(?:\.\d+)?)%/)?.[1]);
+    return { item, pct };
+  }).filter((entry) => Number.isFinite(entry.pct));
+  if (!parsed.length) return "";
+  const strongest = [...parsed].sort((a, b) => b.pct - a.pct)[0];
+  const weakest = [...parsed].sort((a, b) => a.pct - b.pct)[0];
+  const label = (entry: typeof strongest) => `${entry.item.name || entry.item.symbol}（${entry.item.symbol}，${entry.pct >= 0 ? "+" : ""}${entry.pct.toFixed(2)}%）`;
+  return `样本中涨幅最高的是 ${label(strongest)}，跌幅最大的是 ${label(weakest)}；这只能说明该样本快照，不能外推为全市场排名。`;
 }
 function indexFallbackTargetFromPrompt(userPrompt: string = ""): IndexFallbackTarget | null {
   const prompt = String(userPrompt || "");

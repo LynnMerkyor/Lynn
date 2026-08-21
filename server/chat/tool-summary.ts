@@ -13,6 +13,9 @@ export interface ToolSuccessRecord {
   command: string;
   filePath: string;
   outputPreview: string;
+  url: string;
+  query: string;
+  action: string;
 }
 
 export interface ToolSummaryState extends TurnRetryState {
@@ -124,6 +127,9 @@ export function rememberSuccessfulTool(
     command: typeof args.command === "string" ? args.command : "",
     filePath: typeof filePath === "string" ? filePath : "",
     outputPreview: typeof toolSummary?.outputPreview === "string" ? toolSummary.outputPreview : "",
+    url: typeof args.url === "string" ? args.url : "",
+    query: typeof args.query === "string" ? args.query : "",
+    action: typeof args.action === "string" ? args.action : "",
   };
   ss.lastSuccessfulTools = [...(ss.lastSuccessfulTools || []), record].slice(-8);
   if (toolName === "bash" && record.command) {

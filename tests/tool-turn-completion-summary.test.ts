@@ -218,6 +218,27 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
     expect(selected).not.toContain("这轮检索拿到的可核验线索有限");
   });
 
+  it("prefers a successful browser page snapshot over a failed duplicate search", () => {
+    const state = {
+      originalPromptText: "访问 example.com 并用一句话概括页面内容",
+      successfulToolCount: 1,
+      hasFailedTool: true,
+      lastFailedTools: ["web_search"],
+      lastSuccessfulTools: [{
+        name: "browser",
+        action: "navigate",
+        url: "https://example.com/",
+        outputPreview: "Navigated to Example Domain\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.",
+      }],
+    };
+
+    const out = buildToolCompletionSummary(state);
+    expect(out).toContain("example.com 页面是 Example Domain");
+    expect(out).toContain("用于文档示例");
+    expect(out).toContain("后续操作失败(web_search)");
+    expect(out).not.toContain("没有拿到可核验内容");
+  });
+
   it("does not turn web_fetch errors into page summaries", () => {
     const state = {
       originalPromptText: "查一下中国游客去日本旅行签证最新材料要求，列来源和不确定点",

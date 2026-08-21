@@ -54,6 +54,7 @@ type BrowserToolContent =
 type BrowserToolResult = {
   content: BrowserToolContent[];
   details: Record<string, unknown>;
+  isError?: boolean;
 };
 
 interface BrowserStatusFields {
@@ -87,6 +88,7 @@ function err(text: string): BrowserToolResult {
   return {
     content: [{ type: "text", text: t("error.browserError", { msg: text }) }],
     details: { error: text },
+    isError: true,
   };
 }
 

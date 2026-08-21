@@ -54,6 +54,7 @@ interface WebFetchToolParams {
 type WebFetchToolResult = {
   content: Array<{ type: "text"; text: string }>;
   details: FetchWebContentDetails;
+  isError?: boolean;
 };
 
 function errorMessage(err: unknown): string {
@@ -282,6 +283,7 @@ export function createWebFetchTool() {
         return {
           content: [{ type: "text", text: t("error.fetchEmptyUrl") }],
           details: {},
+          isError: true,
         };
       }
 
@@ -302,6 +304,7 @@ export function createWebFetchTool() {
             ? t("error.fetchTimeout", { sec: FETCH_TIMEOUT / 1000, url })
             : t("error.fetchError", { msg: errorMessage(err) }) }],
           details: {},
+          isError: true,
         };
       }
     },

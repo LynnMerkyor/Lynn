@@ -26,9 +26,10 @@ const INTERNAL_REASONING_TAG_NAMES = ["reflect", "analysis", "thinking", "reason
 const INTERNAL_REASONING_OPEN_RE = /<(reflect|analysis|thinking|reasoning|thought)\s*>/giu;
 const VISIBLE_STRUCTURAL_TAG_NAMES = [
   "plan", "steps", "answer", "final", "response", "solution", "outline", "template",
-  "position", "cancellation", "reviews",
+  "position", "cancellation", "reviews", "worldbuilding", "phase", "daily_structure",
+  "item", "milestone", "rules", "rule",
 ] as const;
-const VISIBLE_STRUCTURAL_TAG_RE = /<\/?(?:plan|steps|answer|final|response|solution|outline|template|position|cancellation|reviews)>/giu;
+const VISIBLE_STRUCTURAL_TAG_RE = /<\/?(?:plan|steps|answer|final|response|solution|outline|template|position|cancellation|reviews|worldbuilding|phase|daily_structure|item|milestone|rules|rule)\b[^>]*>/giu;
 const VISIBLE_STRUCTURAL_LABEL_RE = /(^|\n)\s*<[^<>\n]*(?:方案|计划|流程|步骤|回答|思路|分析|总结|plan|steps|answer|final|response|solution|outline|template)[^<>\n]*>\s*/giu;
 const VISIBLE_SNAKE_STRUCTURAL_TAG_RE = /<\/?[a-z][a-z0-9_-]*_(?:checklist|plan|steps|template|outline|summary|answer|flow|process|list)[a-z0-9_-]*>/giu;
 
@@ -156,9 +157,40 @@ function stripVisibleStructuralTags(text: string): string {
   VISIBLE_STRUCTURAL_LABEL_RE.lastIndex = 0;
   VISIBLE_SNAKE_STRUCTURAL_TAG_RE.lastIndex = 0;
   return text
-    .replace(VISIBLE_STRUCTURAL_TAG_RE, "")
+    .replace(VISIBLE_STRUCTURAL_TAG_RE, (tag) => formatVisibleStructuralTag(tag))
     .replace(VISIBLE_SNAKE_STRUCTURAL_TAG_RE, "")
     .replace(VISIBLE_STRUCTURAL_LABEL_RE, "$1");
+}
+
+function structuralTagAttribute(tag: string, name: string): string {
+  const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*(["'])(.*?)\\1`, "iu"));
+  return String(match?.[2] || "").trim();
+}
+
+function formatVisibleStructuralTag(tag: string): string {
+  const closing = /^<\//u.test(tag);
+  const name = tag.match(/^<\/?\s*([a-z][a-z0-9_-]*)/iu)?.[1]?.toLowerCase() || "";
+  if (!name || closing) return "";
+  if (name === "phase") {
+    const label = structuralTagAttribute(tag, "name") || "阶段";
+    const days = structuralTagAttribute(tag, "days");
+    const goal = structuralTagAttribute(tag, "goal");
+    const dayLabel = days ? `（第 ${days.replace(/-/g, "–")} 天）` : "";
+    const goalLine = goal ? `\n\n**目标：** ${goal}` : "";
+    return `\n\n## ${label}${dayLabel}${goalLine}\n`;
+  }
+  if (name === "daily_structure") {
+    const minutes = structuralTagAttribute(tag, "minutes");
+    return `\n\n### 每日${minutes ? ` ${minutes} 分钟` : "安排"}\n`;
+  }
+  if (name === "item") {
+    const minutes = structuralTagAttribute(tag, "minutes");
+    return `\n- ${minutes ? `**${minutes} 分钟**：` : ""}`;
+  }
+  if (name === "milestone") return "\n\n**阶段目标：** ";
+  if (name === "rules") return "\n\n## 执行规则\n";
+  if (name === "rule") return "\n- ";
+  return "";
 }
 
 /**

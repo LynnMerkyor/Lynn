@@ -68,4 +68,29 @@ describe("report research answer module", () => {
     expect(answer).not.toContain("工具：");
     expect(answer).not.toContain("stock_market");
   });
+
+  it("labels A-share anomaly results as a representative sample", () => {
+    const context = [
+      "1. 300308.SZ 最近可用行情",
+      "- 名称: 中际旭创",
+      "- 价格: 943.00 CNY",
+      "- 涨跌/涨跌幅: 38.80 / 4.29%",
+      "- 时间戳: 20260821161442",
+      "来源: 腾讯行情",
+      "https://gu.qq.com/sz300308/gp",
+      "2. 600519.SH 最近可用行情",
+      "- 名称: 贵州茅台",
+      "- 价格: 1272.83 CNY",
+      "- 涨跌/涨跌幅: -18.67 / -1.45%",
+      "- 时间戳: 20260821161449",
+      "来源: 腾讯行情",
+      "https://gu.qq.com/sh600519/gp",
+    ].join("\n");
+
+    const answer = buildDirectResearchAnswer("market", context, "今天 A 股有什么异动？");
+    expect(answer).toContain("2 只 A 股代表性样本");
+    expect(answer).toContain("不是全市场异动榜");
+    expect(answer).toContain("中际旭创（300308.SZ，+4.29%）");
+    expect(answer).toContain("贵州茅台（600519.SH，-1.45%）");
+  });
 });

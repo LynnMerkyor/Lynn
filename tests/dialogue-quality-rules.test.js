@@ -38,4 +38,34 @@ describe("dialogue quality rules", () => {
 
     expect(reason).toBe("creative-character-profile-too-thin");
   });
+
+  it("rejects visible model-only structure tags but ignores fenced examples", () => {
+    expect(additionalDialogueQualityReason({
+      category: "education",
+      prompt: "做一个 90 天学习计划",
+      text: '<phase name="Foundation">每天练习</phase>',
+      hasToolEvidence: false,
+    })).toBe("model-structural-tag-visible");
+    expect(additionalDialogueQualityReason({
+      category: "code",
+      prompt: "写一个 XML 示例",
+      text: '```xml\n<phase name="Foundation">每天练习</phase>\n```',
+      hasToolEvidence: false,
+    })).toBe("");
+  });
+
+  it("requires a sample boundary for A-share anomaly snapshots", () => {
+    expect(additionalDialogueQualityReason({
+      category: "realtime",
+      prompt: "今天 A 股有什么异动？",
+      text: "中际旭创上涨 4.29%。",
+      hasToolEvidence: true,
+    })).toBe("a-share-anomaly-answer-missing-sample-boundary");
+    expect(additionalDialogueQualityReason({
+      category: "realtime",
+      prompt: "今天 A 股有什么异动？",
+      text: "当前只覆盖代表性样本，不是全市场异动榜；样本中中际旭创上涨 4.29%。",
+      hasToolEvidence: true,
+    })).toBe("");
+  });
 });

@@ -127,6 +127,14 @@ function hasStaleCrossDomainLeak(prompt, text) {
 
 export function additionalDialogueQualityReason({ category, prompt, text, hasToolEvidence }) {
   const rawText = String(text || "");
+  const proseOnly = rawText.replace(/```[\s\S]*?```/g, "");
+  if (/<\/?(?:worldbuilding|phase|daily_structure|item|milestone|rules|rule)\b[^>]*>/iu.test(proseOnly)) {
+    return "model-structural-tag-visible";
+  }
+  if (/(?:A\s*股|a\s*股).{0,16}异动|异动.{0,16}(?:A\s*股|a\s*股)/u.test(String(prompt || ""))
+    && !/(?:样本|代表性|全市场)/u.test(rawText)) {
+    return "a-share-anomaly-answer-missing-sample-boundary";
+  }
   if (hasStaleCrossDomainLeak(prompt, rawText)) {
     return "answer-leaked-unrelated-domain-context";
   }

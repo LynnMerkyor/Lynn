@@ -197,6 +197,42 @@ describe("stream sanitizer · cross-chunk carry buffer", () => {
     expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
   });
 
+  it("turns model-generated planning XML into readable Markdown", () => {
+    const ss = {};
+    const raw = [
+      '<phase name="Foundation" days="1-30" goal="建立开口肌肉记忆">',
+      '<daily_structure minutes="30">',
+      '<item minutes="5">朗读热身</item>',
+      '<milestone>能完成简单问答</milestone>',
+      '</daily_structure>',
+      '</phase>',
+      '<rules><rule>每天录音</rule></rules>',
+    ].join("\n");
+    const result = stripStreamingPseudoToolBlocks(ss, raw);
+
+    expect(result.suppressed).toBe(true);
+    expect(result.text).toContain("## Foundation（第 1–30 天）");
+    expect(result.text).toContain("**目标：** 建立开口肌肉记忆");
+    expect(result.text).toContain("### 每日 30 分钟");
+    expect(result.text).toContain("- **5 分钟**：朗读热身");
+    expect(result.text).toContain("**阶段目标：** 能完成简单问答");
+    expect(result.text).toContain("## 执行规则");
+    expect(result.text).toContain("- 每天录音");
+    expect(result.text).not.toMatch(/<\/?(?:phase|daily_structure|item|milestone|rules|rule)\b/);
+  });
+
+  it("strips worldbuilding wrappers without touching table comparisons", () => {
+    const ss = {};
+    const result = stripStreamingPseudoToolBlocks(
+      ss,
+      "<worldbuilding>\n| 人口占比 |\n|---|\n| <0.1% |\n</worldbuilding>",
+    );
+
+    expect(result.text).toContain("| <0.1% |");
+    expect(result.text).not.toContain("worldbuilding");
+    expect(result.suppressed).toBe(true);
+  });
+
   it("withholds split visible planning tags across chunks", () => {
     const ss = {};
     const r1 = stripStreamingPseudoToolBlocks(ss, "正文\n<st");
