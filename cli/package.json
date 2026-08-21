@@ -20,6 +20,7 @@
     "prepack": "npm run build",
     "stress:cli": "npm run build && node scripts/stress-cli.mjs",
     "test": "vitest run tests --reporter=dot",
+    "test:fleet": "vitest run tests/code-tools.test.ts tests/code-agent-loop*.test.ts tests/worker-run*.test.ts tests/providers.test.ts tests/brain-render.test.ts tests/status-bar.test.ts tests/vision*.test.ts --reporter=dot",
     "test:voice": "vitest run tests/voice.test.ts --reporter=dot",
     "typecheck": "tsc --noEmit"
   },
