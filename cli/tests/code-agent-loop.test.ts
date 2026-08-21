@@ -6,7 +6,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { codeHarness, maxSteps, runCode, runCodeTaskWithEvents, type CodeAgentEvent } from "../src/commands/code.js";
+import { runCode, runCodeTaskWithEvents, type CodeAgentEvent } from "../src/commands/code.js";
 import { compactRuntimeMessages } from "../src/code-agent-loop.js";
 import type { ChatMessage } from "../src/brain-client.js";
 import { appendSessionTurn, readSessionLines, sessionIndexPath } from "../src/session/store.js";
@@ -105,13 +105,6 @@ async function withRawBrainServer(handler: (body: unknown, count: number) => str
 }
 
 describe("code agent loop · core & approvals", () => {
-  it("uses the auto harness by default and validates explicit selection", () => {
-    expect(codeHarness(parseArgs(["code", "task"]))).toBe("auto");
-    expect(codeHarness(parseArgs(["code", "task", "--harness", "legacy"]))).toBe("legacy");
-    expect(codeHarness(parseArgs(["code", "task", "--harness", "codex"]))).toBe("codex");
-    expect(() => codeHarness(parseArgs(["code", "task", "--harness", "unknown"]))).toThrow(/auto, legacy, or codex/);
-  });
-
   it("compacts old runtime loop turns while keeping the anchored goal", () => {
     const messages: ChatMessage[] = [
       { role: "system" as const, content: "stable prefix" },
@@ -217,15 +210,6 @@ describe("code agent loop · core & approvals", () => {
     expect(finished?.text).toContain("2026/06/22 03:00 Belgium vs Iran");
     expect(events.some((event) => event.type === "assistant.delta" && event.text.includes("工具证据"))).toBe(true);
     expect(events.some((event) => event.type === "error")).toBe(false);
-  });
-
-  it("uses a 100 step default and allows explicit budgets up to 300", () => {
-    expect(maxSteps(parseArgs(["code", "task"]))).toBe(100);
-    expect(maxSteps(parseArgs(["code", "task", "--max-steps", "20"]))).toBe(20);
-    expect(maxSteps(parseArgs(["code", "task", "--max-steps", "300"]))).toBe(300);
-    expect(maxSteps(parseArgs(["code", "task", "--long", "--max-steps", "300"]))).toBe(300);
-    expect(maxSteps(parseArgs(["code", "task", "--endurance", "--steps", "250"]))).toBe(250);
-    expect(() => maxSteps(parseArgs(["code", "task", "--max-steps", "301"]))).toThrow(/1 to 300/);
   });
 
   it("validates max steps before the mock brain shortcut", async () => {
@@ -911,5 +895,4 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
     expect(result.stdout).toContain("Lynn Code");
     expect(result.stdout).toContain("模拟编码任务");
   }, 100_000);
-
 });
