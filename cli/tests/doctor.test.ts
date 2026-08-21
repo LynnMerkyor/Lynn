@@ -3,13 +3,23 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { renderDoctor, runDoctor } from "../src/commands/doctor.js";
+import {
+  DOCTOR_ROUTE_SMOKE_MAX_TOKENS,
+  DOCTOR_ROUTE_SMOKE_TIMEOUT_MS,
+  renderDoctor,
+  runDoctor,
+} from "../src/commands/doctor.js";
 import { writeCliProviderProfile } from "../src/provider-profile.js";
 
 describe("doctor command", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+  });
+
+  it("allows a real provider enough time and output budget for route smoke", () => {
+    expect(DOCTOR_ROUTE_SMOKE_TIMEOUT_MS).toBe(20_000);
+    expect(DOCTOR_ROUTE_SMOKE_MAX_TOKENS).toBe(64);
   });
 
   it("supports offline diagnostics", async () => {

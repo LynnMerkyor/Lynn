@@ -34,6 +34,9 @@ export interface BrainRouteSmokeResult {
   message: string;
 }
 
+export const DOCTOR_ROUTE_SMOKE_TIMEOUT_MS = 20_000;
+export const DOCTOR_ROUTE_SMOKE_MAX_TOKENS = 64;
+
 export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
   const version = readVersionInfo();
   const brainUrl = await resolveDefaultBrainUrl(args);
@@ -71,7 +74,7 @@ export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
           if (hasFlag(args.flags, "no-route-smoke")) {
             checks.push({ name: "brain-smoke", ok: true, message: "skipped (--no-route-smoke)" });
           } else {
-            brainSmoke = await smokeBrainRoute(brainUrl, 5000);
+            brainSmoke = await smokeBrainRoute(brainUrl);
             checks.push({
               name: "brain-smoke",
               ok: brainSmoke.ok,
@@ -112,7 +115,7 @@ export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
   };
 }
 
-export async function smokeBrainRoute(brainUrl: string, timeoutMs = 5000): Promise<BrainRouteSmokeResult> {
+export async function smokeBrainRoute(brainUrl: string, timeoutMs = DOCTOR_ROUTE_SMOKE_TIMEOUT_MS): Promise<BrainRouteSmokeResult> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   let activeProvider = "";
@@ -126,7 +129,7 @@ export async function smokeBrainRoute(brainUrl: string, timeoutMs = 5000): Promi
       body: JSON.stringify({
         model: "lynn-brain-router",
         stream: true,
-        max_tokens: 8,
+        max_tokens: DOCTOR_ROUTE_SMOKE_MAX_TOKENS,
         messages: [{ role: "user", content: "Reply with OK." }],
         extra_body: { enable_thinking: false },
       }),
@@ -142,7 +145,7 @@ export async function smokeBrainRoute(brainUrl: string, timeoutMs = 5000): Promi
         body: JSON.stringify({
           model: "lynn-brain-router",
           stream: true,
-          max_tokens: 8,
+          max_tokens: DOCTOR_ROUTE_SMOKE_MAX_TOKENS,
           messages: [{ role: "user", content: "Reply with OK." }],
           extra_body: { enable_thinking: false },
         }),

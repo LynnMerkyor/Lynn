@@ -172,7 +172,7 @@ export async function probeCodeHarnessRoute(input: CodeHarnessRouteProbeInput): 
       body: JSON.stringify({
         model: input.provider?.model || "lynn-brain-router",
         input: "Reply with OK.",
-        max_output_tokens: 8,
+        max_output_tokens: 64,
         stream: false,
       }),
       signal: controller.signal,
