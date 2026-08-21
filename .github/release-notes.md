@@ -1,42 +1,41 @@
-# Lynn v0.86.1 Release Notes / 发布说明
+# Lynn v0.86.2 Release Notes / 发布说明
 
-> 发布日期: 2026-07-12 · GUI/CLI 交互、本地模型下载与发布门禁更新
+> 发布日期: 2026-08-22 · Codex app-server harness、GUI/CLI Loop 稳定性与 Windows 本地模型运行时更新
 
 ## 国内镜像站下载（推荐）
 
 国内用户请优先使用镜像站地址；GitHub Assets 仅作为备用下载。两个 GitHub 仓库与 Gitee Release 保留相同版本记录。
 
-- **GitHub Releases**: https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.1
-- **GitHub Releases（镜像仓）**: https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.1
-- **Gitee Releases**: https://gitee.com/merkyor/Lynn/releases/tag/v0.86.1
+- **GitHub Releases**: https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.2
+- **GitHub Releases（镜像仓）**: https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.2
+- **Gitee Releases**: https://gitee.com/merkyor/Lynn/releases
 - **下载页**: https://download.merkyorlynn.com/download.html
 
 ```bash
 # Node.js 20 LTS or 22 LTS with npm.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.2.tgz"
 Lynn
 ```
 
-- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.1-macOS-arm64.dmg
-- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.1-macOS-x64.dmg
-- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.1-Windows-Setup.exe
+- **macOS Apple Silicon / ARM64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.2-macOS-arm64.dmg
+- **macOS Intel / x64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.2-macOS-x64.dmg
+- **Windows x64**: https://download.merkyorlynn.com/downloads/Lynn-0.86.2-Windows-Setup.exe
 
 ## 中文重点
 
-- **CLI 中断符合直觉**:忙碌时 Ctrl+C 取消当前回答而不退出，空闲时才退出；真实 Ink PTY 门禁覆盖取消、继续提问、粘贴和正常退出。
-- **终端历史与输入更稳定**:已完成内容进入稳定历史，流式 Markdown 批量刷新，工具开始与结果更新同一行，输入光标支持左右移动、Home、End、Delete 和退格。
-- **本地 27B 下载可控**:默认 Qwen3.6-27B Coding Q4 imatrix MTP 支持分片续传、暂停、继续、取消和删除，并展示总进度、速度与剩余时间。
-- **GUI 找内容更直接**:会话搜索常驻，长对话提供回到底部按钮，低频输入工具收进“更多”，停止回答与错误原因使用用户可理解的状态文案。
-- **异构复核只在必要时升级**:DS V4 Flash 先异步快审；医疗、法律、金融或时效事实回答只有在一审发现疑点时，才限时调用一次 MiMo 2.5 Pro Token Plan 仲裁。超时保留 DS V4 结论，不阻塞原回答、不自动重答、不进入普通模型降级链。
-- **推荐不再打扰低配设备**:不满足条件的设备不会主动弹出端侧模型引导；合适设备可稍后七天或永久关闭推荐。
-- **安全基线保持不变**:V0.86 的浏览器权限、IPC/SSRF、OS 沙箱、本地服务鉴权、per-session 准入、工具取消和跨轮隔离继续生效。
-- **发布门禁扩大**:根仓、Brain、Agent regression、CLI100、GUI100、真实安装、完整 Ink PTY、语音、架构循环与生产 Brain 漂移均为硬门槛。
+- **Codex app-server harness 默认自动选择**:GUI 与 CLI 的编码任务默认使用 `auto`。每次启动前先探测 app-server 可执行文件、协议版本、认证、provider/model 和 Brain 能力；全部兼容才进入 Codex harness，否则在任务开始前直接使用 Lynn 原架构。
+- **新旧架构互不污染**:`legacy` 与 `codex` 仍可显式选择。多模态附件、JSON 逐工具审计、Ultra、多数严格审批场景以及不兼容的 BYOK/Brain 路由继续使用已验证的原 Loop；任务运行中不会临时切换 harness。
+- **GUI/CLI Loop 生命周期更稳**:统一记录请求与实际选择的 harness、协议和原因，补强完成、取消、失败、续跑与可见回答的终态处理，避免工具或上游异常留下半轮状态。
+- **Windows 本地 GGUF 开箱即用**:Windows 安装包内置固定版本的 `llama-server.exe`、所需 DLL、许可证与逐文件 SHA-256 清单；导入本地 GGUF 不再要求用户手工安装 llama.cpp。
+- **Windows 运行时做真实加载门禁**:从最终 NSIS 安装器反解实际 payload，在 Windows 上执行内置 `llama-server.exe`，加载固定 SHA-256 的 GGUF，等待健康检查并连续完成两次生成，验证服务在稳定窗口内保持存活。
+- **Brain 能力门改为运行态硬检查**:发布门禁同时验证镜像代码声明与生产 `/v2/providers/status` 的 `responses` / `appServerHarness` 能力，避免本地代码与线上路由能力不一致。
+- **发布门禁保持完整**:根仓、Brain、Agent regression、CLI100、GUI100、全部 UI、真实安装、Ink PTY、语音、Windows 模拟/真机、本地模型实机和生产 Brain 漂移均为发布硬门槛。
 
 ## English highlights
 
-- Ctrl+C cancels an active Ink turn without killing the REPL; idle Ctrl+C exits normally.
-- Settled terminal history is stable, stream updates are batched, tool rows update in place, and the input cursor is fully movable.
-- The default Qwen3.6-27B Coding Q4 imatrix MTP download supports segmented resume, pause, cancel, delete, aggregate progress, speed, and ETA.
-- Session search, long-chat navigation, composer organization, stop feedback, and human-readable errors improve desktop usability.
-- DS V4 performs fast asynchronous review; only high-stakes or current-fact concerns escalate once to time-bounded MiMo 2.5 Pro arbitration. Arbitration never blocks or rewrites the original answer.
-- The V0.86 browser, IPC/SSRF, sandbox, local-server, session-admission, cancellation, and cross-turn isolation baseline remains enabled.
+- Code tasks now default to an `auto` Codex app-server harness. Lynn probes the executable, protocol, authentication, provider/model, and Brain capability before the run; incompatible configurations select the legacy loop before any task or tool starts.
+- Explicit `legacy` and `codex` modes remain available. Multimodal attachments, JSON per-tool auditing, Ultra, strict approval semantics, and unsupported BYOK/Brain routes stay on Lynn's verified legacy architecture.
+- GUI and CLI now record the requested and selected harness, protocol, and selection reason, with stronger completed/cancelled/failed/resumable terminal-state handling.
+- The Windows installer bundles a pinned llama.cpp CPU runtime, required DLLs, its license, and a per-file SHA-256 manifest, so local GGUF import no longer requires a manual llama.cpp installation.
+- The Windows release gate extracts the final NSIS payload, starts the packaged `llama-server.exe`, loads a pinned GGUF, waits for health, runs two completions, and verifies that the server remains alive.
+- Release verification now requires both source declarations and live production Brain `responses` / `appServerHarness` capabilities.

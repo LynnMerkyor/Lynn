@@ -41,8 +41,8 @@
       "downloadUrl": "https://download.merkyorlynn.com/download",
       "screenshot": "https://raw.githubusercontent.com/LynnMerkyor/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
       "image": "https://raw.githubusercontent.com/LynnMerkyor/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
-      "softwareVersion": "0.86.1",
-      "datePublished": "2026-07-12",
+      "softwareVersion": "0.86.2",
+      "datePublished": "2026-08-22",
       "fileSize": "180MB",
       "inLanguage": "zh-CN",
       "license": "https://opensource.org/licenses/Apache-2.0",
@@ -66,6 +66,7 @@
         "写作工作台 + Diff 视图 + 对比外部修改",
         "本地工具：edit/write/read/bash/grep/find 全链路",
         "MCP 接入、平台 Agent 协作、自动定时任务",
+        "Codex app-server harness 自动兼容探测与原 Loop 回退",
         "macOS 签名校验、权限审批模式"
       ],
       "publisher": {
@@ -105,11 +106,11 @@
       <main>
         <section class="hero">
           <div class="hero-copy">
-            <span class="eyebrow">Lynn 0.86.1</span>
-            <h1>交互更稳，长任务更顺手。</h1>
+            <span class="eyebrow">Lynn 0.86.2</span>
+            <h1>自动选择更强的 Agent Loop。</h1>
             <p class="lead">
               Lynn 是一个有心跳、有记忆、会主动行动、还能多 Agent 协作的桌面 AI
-              助手。V0.86.1 在 V0.86 安全基线上重做 CLI 中断、历史与输入体验，并补齐本地 27B 下载续传、暂停、取消、删除和聚合进度；GUI 的会话查找、长对话定位与错误提示也更直观。公开 27B Coding Q4 imatrix MTP 继续作为默认端侧模型；打包流程统一经过 GUI100/CLI100 发布门禁。
+              助手。V0.86.2 为 GUI 与 CLI 加入默认 <code>auto</code> 的 Codex app-server harness：启动前完成协议、认证、provider/model 与 Brain 能力探测，兼容才启用，否则直接使用原架构。Windows 安装包同时内置 llama.cpp，本地 GGUF 不再要求手工准备运行时；发布仍统一经过 GUI100、CLI100、全部 UI 与真实安装包门禁。
             </p>
             <div class="hero-actions">
               <a class="button button-primary" href="./download.html">下载 Lynn</a>
@@ -294,6 +295,6 @@
       </footer>
     </div>
 
-    <script src="./app.js?v=0.86.1"></script>
+    <script src="./app.js?v=0.86.2"></script>
   </body>
 </html>
