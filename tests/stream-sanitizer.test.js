@@ -222,6 +222,17 @@ describe("stream sanitizer · cross-chunk carry buffer", () => {
     expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
   });
 
+  it("strips a Chinese framework label without changing the answer body", () => {
+    const ss = {};
+    const result = stripStreamingPseudoToolBlocks(ss, "<STAR 框架：处理线上事故>\n先说明事故影响范围。");
+
+    expect(result).toEqual({
+      text: "先说明事故影响范围。",
+      suppressed: true,
+    });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
   it("strips visible template and snake-case structure tags", () => {
     const ss = {};
     const result = stripStreamingPseudoToolBlocks(ss, "<template>主题：延期说明</template>\n<move_checklist>提前预约搬家公司。");
