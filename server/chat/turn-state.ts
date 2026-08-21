@@ -2,6 +2,8 @@ import { MoodParser, XingParser, ThinkTagParser, LynnProgressParser } from "../.
 import { createSessionStreamState } from "../session-stream-store.js";
 import type { SessionStreamEntry } from "../session-stream-store.js";
 import type { ToolSuccessRecord } from "./tool-summary.js";
+import { createAgentRunLifecycle } from "../../shared/agent-run-lifecycle.js";
+import type { AgentRunLifecycle } from "../../shared/agent-run-lifecycle.js";
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 type IntervalHandle = ReturnType<typeof setInterval>;
@@ -35,6 +37,8 @@ export function createEmptyToolStormGuard(): ToolStormGuardSnapshot {
 }
 
 export interface ChatTurnState extends SessionStreamStateFields {
+  runLifecycle: AgentRunLifecycle;
+  lifecycleToolCallQueues: Map<string, string[]>;
   thinkTagParser: ThinkTagParser;
   progressParser: LynnProgressParser;
   moodParser: MoodParser;
@@ -111,6 +115,8 @@ export interface ChatTurnState extends SessionStreamStateFields {
 
 export function createChatTurnState(): ChatTurnState {
   return {
+    runLifecycle: createAgentRunLifecycle({ scope: "gui" }),
+    lifecycleToolCallQueues: new Map(),
     thinkTagParser: new ThinkTagParser(),
     progressParser: new LynnProgressParser(),
     moodParser: new MoodParser(),

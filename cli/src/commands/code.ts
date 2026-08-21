@@ -83,7 +83,9 @@ import {
   runCodeAgentLoop,
   type CodeAgentApprovalRequest,
   type CodeAgentEvent,
+  type CodeAgentLoopInput,
 } from "../code-agent-loop.js";
+import { runCodexHarnessLoop } from "../codex-harness-loop.js";
 
 export {
   codeToolDefinitions,
@@ -144,6 +146,12 @@ function sandbox(args: ParsedArgs): ToolRunContext["sandbox"] {
 
 const DEFAULT_MAX_STEPS = 100;
 const LONG_MAX_STEPS = 300;
+
+export function codeHarness(args: ParsedArgs): "legacy" | "codex" {
+  const value = (getStringFlag(args.flags, "harness") || process.env.LYNN_AGENT_HARNESS || "legacy").trim().toLowerCase();
+  if (value === "legacy" || value === "codex") return value;
+  throw new Error("--harness must be legacy or codex");
+}
 
 export function isLongRun(args: ParsedArgs): boolean {
   return hasFlag(args.flags, "long", "endurance");
@@ -600,6 +608,7 @@ async function runCodeTask(
   const mediaPaths = codeMediaPaths(args, preparedInput.mediaPaths);
   const reasoning = parseReasoningOptions(args);
   const stepBudget = maxSteps(args);
+  const harness = codeHarness(args);
   const brainUrl = await resolveDefaultBrainUrl(args);
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const mode = await resolveCodeMode(args);
@@ -698,6 +707,7 @@ async function runCodeTask(
     signal: options.signal,
   };
   if (ultraEnabled(args)) {
+    if (harness === "codex") throw new Error("--harness codex cannot be combined with --ultra yet; use the default single-worker code loop");
     return runUltraCodeBranch({
       args,
       taskText,
@@ -735,7 +745,7 @@ async function runCodeTask(
     if (json) writeJsonLine({ type: "session.checkpoint", ts: nowIso(), path: liveSessionPath, line: "user" });
     options.onEvent?.({ type: "session.checkpoint", path: liveSessionPath, line: "user" });
   }
-  const final = await runCodeAgentLoop({
+  const loopInput: CodeAgentLoopInput = {
     task: taskText,
     context,
     brainUrl,
@@ -770,7 +780,10 @@ async function runCodeTask(
           options.onEvent?.({ type: "session.checkpoint", path: liveSessionPath, line: line.type });
         }
       : undefined,
-  });
+  };
+  const final = harness === "codex"
+    ? await runCodexHarnessLoop(loopInput)
+    : await runCodeAgentLoop(loopInput);
   if (saveSession) {
     if (liveSessionPath && final.text.trim()) {
       const existingLines = await readSessionLines(liveSessionPath).catch(() => []);
@@ -827,6 +840,9 @@ async function runCodeTask(
         reasoning,
         maxSteps: stepBudget,
         maxStepsReached: final.maxStepsReached,
+        harness,
+        runId: final.runId,
+        terminal: final.terminal,
         cacheDiagnostics: computeCodeContextLayerDiagnostics(buildCodeRuntimeFrames({ context, toolCtx, memoryFrame }), resumeMessages.length),
         usageSummary: final.usageSummary,
         usageRecords: final.usageRecords,
@@ -841,9 +857,13 @@ async function runCodeTask(
     : null;
   options.onEvent?.({
     type: "task.finished",
-    ok: !final.maxStepsReached,
+    ok: final.terminal.ok,
     text: final.text,
     usageSummary: final.usageSummary,
+    runId: final.runId,
+    code: final.terminal.code,
+    resumable: final.terminal.resumable,
+    partial: final.terminal.partial,
     maxStepsReached: final.maxStepsReached,
     resumeCommand: resumeCommand || undefined,
     sessionPath: savedSessionPath,
@@ -867,10 +887,13 @@ async function runCodeTask(
     writeJsonLine({
       type: "code.task.finished",
       ts: nowIso(),
-      ok: !final.maxStepsReached,
+      ok: final.terminal.ok,
+      runId: final.runId,
+      code: final.terminal.code,
+      resumable: final.terminal.resumable,
+      partial: final.terminal.partial,
       contentReturned: !!final.text.trim(),
       ...(final.usageSummary ? { usageSummary: final.usageSummary } : {}),
-      ...(final.maxStepsReached ? { code: "max_steps_reached" } : {}),
       ...(savedSessionPath ? { sessionPath: savedSessionPath } : {}),
       ...(resumeCommand ? { resumeCommand } : {}),
     });

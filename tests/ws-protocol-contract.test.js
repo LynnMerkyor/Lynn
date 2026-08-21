@@ -111,6 +111,7 @@ describe("WebSocket protocol contract", () => {
           "review_progress",
           "review_result",
           "review_start",
+          "run_start",
           "security_mode",
           "session_relay",
           "session_title",
@@ -216,6 +217,11 @@ describe("WebSocket protocol contract", () => {
             "reviewId",
             "reviewerName",
           ],
+          "run_start": [
+            "runId",
+            "runPhase",
+            "runRevision",
+          ],
           "security_mode": [
             "mode",
           ],
@@ -300,6 +306,11 @@ describe("WebSocket protocol contract", () => {
     expect(validateServerEvent({ type: "text_delta" })).toMatchObject({
       ok: false,
       errors: [expect.stringContaining("missing required field")],
+    });
+    expect(validateServerEvent({ type: "run_start", runId: "gui-1", runPhase: "running", runRevision: 1 }).ok).toBe(true);
+    expect(validateServerEvent({ type: "run_start", runId: "gui-1" })).toMatchObject({
+      ok: false,
+      errors: [expect.stringContaining("runPhase, runRevision")],
     });
     expect(validateServerEvent({ type: "renamed_event" })).toMatchObject({
       ok: false,

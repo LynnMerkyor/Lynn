@@ -1140,7 +1140,8 @@ async function runRound({
   attemptTimeoutCapMs,
   providerOrder,
   strictProviderOrder,
-}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache; skipProviders?: ReadonlySet<ProviderId>; sanitizeSynthesisOpening?: boolean; bufferContent?: boolean; attemptTimeoutCapMs?: number }): Promise<RunRoundResult> {
+  augmentContext = true,
+}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache; skipProviders?: ReadonlySet<ProviderId>; sanitizeSynthesisOpening?: boolean; bufferContent?: boolean; attemptTimeoutCapMs?: number; augmentContext?: boolean }): Promise<RunRoundResult> {
   const errors: Array<{ providerId: ProviderId; error: string }> = [];
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
   // (例:"StepFun → Spark fallback"),不再让 cascade decision 对 UI 不可见。
@@ -1266,7 +1267,9 @@ async function runRound({
       const providerAttempt = createProviderAttemptSignal(provider, signal, capabilityRequired, attemptTimeoutCapMs);
       log && log('info', `→ provider ${providerId}`);
       try {
-        const searchContext = await applySearchContext({ messages, provider, signal: providerAttempt.signal, log, requestCache });
+        const searchContext = augmentContext
+          ? await applySearchContext({ messages, provider, signal: providerAttempt.signal, log, requestCache })
+          : { messages, meta: { applied: false, source: '', query: '', hit: false, ms: 0, cached: null, sourceStatus: undefined } };
         let effectiveMessages = searchContext.messages || messages;
         if (searchContext.meta.applied) {
           await onChunk(
@@ -1282,7 +1285,9 @@ async function runRound({
             { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
           );
         }
-        const audioContext = await applyAudioTranscribe({ messages: effectiveMessages, provider, signal: providerAttempt.signal, log, requestCache: audioCache });
+        const audioContext = augmentContext
+          ? await applyAudioTranscribe({ messages: effectiveMessages, provider, signal: providerAttempt.signal, log, requestCache: audioCache })
+          : { messages: effectiveMessages, meta: { applied: false, source: '', transcripts: 0, total: 0, ms: 0 } };
         effectiveMessages = audioContext.messages || effectiveMessages;
         if (audioContext.meta?.applied) {
           await onChunk(
@@ -1401,7 +1406,7 @@ async function runRound({
   throw err;
 }
 
-export async function run({ messages, tools, capabilityRequired, signal, onChunk, log, extraBody, reasoningEffort, providerOrder, strictProviderOrder }: RouterRunOptions): Promise<RouterRunResult> {
+export async function run({ messages, tools, capabilityRequired, signal, onChunk, log, extraBody, reasoningEffort, providerOrder, strictProviderOrder, manageServerTools = true }: RouterRunOptions): Promise<RouterRunResult> {
   const turnUserPrompt = originalUserPrompt(messages || []);
   const requestProviderOrder = providerOrder?.length
     ? [...new Set(providerOrder)]
@@ -1428,9 +1433,15 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     }
   }
 
-  const internalLynnUxTurn = shouldSuppressWebToolsForInternalLynnUx(messages);
-  const explicitNoToolTurn = shouldSuppressToolsForCurrentTurn(messages);
-  const mergedTools = strictProviderOrder ? (tools || []) : explicitNoToolTurn ? [] : mergeWithServerTools(tools, messages);
+  const internalLynnUxTurn = manageServerTools && shouldSuppressWebToolsForInternalLynnUx(messages);
+  const explicitNoToolTurn = manageServerTools && shouldSuppressToolsForCurrentTurn(messages);
+  const mergedTools = !manageServerTools
+    ? (tools || [])
+    : strictProviderOrder
+      ? (tools || [])
+      : explicitNoToolTurn
+        ? []
+        : mergeWithServerTools(tools, messages);
   let workingMessages: ChatMessage[] = [...(messages || [])];
   if (internalLynnUxTurn) {
     workingMessages = [{
@@ -1498,7 +1509,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     }
   };
 
-  if (process.env.BRAIN_V2_DIRECT_KNOWN_OFFICIAL !== '0') {
+  if (manageServerTools && process.env.BRAIN_V2_DIRECT_KNOWN_OFFICIAL !== '0') {
     const query = turnUserPrompt;
     const answer = buildDirectKnownOfficialAnswer(query);
     if (answer) {
@@ -1595,7 +1606,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     }
   }
 
-  for (const plan of strictProviderOrder ? [] : buildDirectEvidencePrefetchPlans(messages || [], workingMessages)) {
+  for (const plan of (!manageServerTools || strictProviderOrder) ? [] : buildDirectEvidencePrefetchPlans(messages || [], workingMessages)) {
     const directResult = await prefetchDirectEvidenceTool({
       toolName: plan.toolName,
       providerId: plan.providerId,
@@ -1632,9 +1643,10 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         skipProviders: skippedProviders,
         sanitizeSynthesisOpening: summarizeFromEvidenceOnly || hasGroundedEvidenceContext,
         bufferContent: shouldBufferProviderContent || hasCallableTools,
+        augmentContext: manageServerTools,
       });
     } catch (error) {
-      if (strictProviderOrder) throw error;
+      if (strictProviderOrder || !manageServerTools) throw error;
       const deterministicAnswer = buildDeterministicSportsEvidenceAnswer(workingMessages, turnUserPrompt);
       if (deterministicAnswer) {
         const providerId = (lastProviderId || 'deepseek-chat') as ProviderId;
@@ -1703,6 +1715,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
           skipProviders: recoverySkip,
           sanitizeSynthesisOpening: false,
           bufferContent: true,
+          augmentContext: manageServerTools,
           attemptTimeoutCapMs: positiveEnvNumber('BRAIN_V2_LAST_CHANCE_TIMEOUT_MS', 20_000),
         });
       } catch {
@@ -1781,8 +1794,12 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       return { ok: true, providerId: lastProviderId, iterations: iter };
     }
 
-    const serverCalls = result.toolCalls.filter((tc) => isServerTool(tc.function?.name));
-    const clientCalls = result.toolCalls.filter((tc) => !isServerTool(tc.function?.name));
+    const serverCalls = manageServerTools
+      ? result.toolCalls.filter((tc) => isServerTool(tc.function?.name))
+      : [];
+    const clientCalls = manageServerTools
+      ? result.toolCalls.filter((tc) => !isServerTool(tc.function?.name))
+      : result.toolCalls;
 
     // 客户端工具 (client 自己执行) → 透传 tool_calls 到客户端,loop 退出
     if (clientCalls.length > 0) {

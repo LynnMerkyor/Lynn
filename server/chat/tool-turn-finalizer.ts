@@ -23,6 +23,11 @@ import {
   latestPersistedMessageText,
   sessionLineId,
 } from "./session-persistence.js";
+import {
+  finishGuiRun,
+  guiRunTerminalFields,
+  terminalForGuiCloseReason,
+} from "./agent-run-state.js";
 
 /**
  * 工具回合结束但模型没有产出收尾文本时的事实行(issue #72 第三类的 GUI 变体:
@@ -502,6 +507,11 @@ export function createToolTurnFinalizer({
 
   function closeStreamWithVisibleFallback(sessionPath: any, ss: any, text: any, reason: any, opts: any = {}) {
     if (!sessionPath || !ss || ss._turnClosed || hasStreamEvent(ss, "turn_end")) return false;
+    const runFinished = finishGuiRun(ss, terminalForGuiCloseReason(reason, {
+      partial: !!ss.hasOutput,
+      forced: true,
+    }));
+    if (!runFinished.accepted) return false;
     ss._turnClosed = true;
     clearTurnTimers(ss);
     editRollbackStore.discardPendingForSession(sessionPath, ss.activeStreamToken || null);
@@ -519,7 +529,7 @@ export function createToolTurnFinalizer({
       }
     }
     maybeAppendCodeVerificationPostscript(sessionPath, ss);
-    emitStreamEvent(sessionPath, ss, { type: "turn_end" });
+    emitStreamEvent(sessionPath, ss, { type: "turn_end", ...guiRunTerminalFields(runFinished.snapshot, reason) });
     lifecycleHooks.run("turn_close", { sessionPath, ss, reason, forced: true });
     broadcast({ type: "status", isStreaming: false, sessionPath });
     finishSessionStream(ss);

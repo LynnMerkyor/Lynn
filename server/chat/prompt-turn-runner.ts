@@ -4,6 +4,7 @@ import { t } from "../i18n.js";
 import { classifyRouteIntent } from "../../shared/task-route-intent.js";
 import { beginSessionStream } from "../session-stream-store.js";
 import { prepareChatTurnState } from "./stream-state.js";
+import { guiRunStartFields } from "./agent-run-state.js";
 import {
   LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS,
   resolveLocalQwen35DirectMaxTokens,
@@ -202,6 +203,7 @@ export function createPromptTurnRunner({
       const streamToken = beginSessionStream(ss);
       ss.activeStreamToken = streamToken;
       ss.streamSource = "user";
+      emitStreamEvent(promptSessionPath, ss, { type: "run_start", ...guiRunStartFields(ss) });
       scheduleTurnHardAbort(promptSessionPath, ss);
       schedulePersistedFinalAnswerPoll(promptSessionPath, ss);
       broadcast({ type: "status", isStreaming: true, sessionPath: promptSessionPath });

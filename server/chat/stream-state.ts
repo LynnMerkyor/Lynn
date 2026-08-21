@@ -9,6 +9,7 @@ import {
   createChatTurnState,
 } from "./turn-state.js";
 import type { ChatTurnState } from "./turn-state.js";
+import { createAgentRunLifecycle } from "../../shared/agent-run-lifecycle.js";
 
 export interface SessionLike extends ChatTurnState {
   lastAccessTime?: number;
@@ -211,6 +212,9 @@ export function prepareChatTurnState(ss: SessionLike, options: PrepareChatTurnSt
   clearSlowToolTimers(ss);
   resetTurnParsers(ss);
   resetToolEvidenceState(ss);
+  ss.runLifecycle = createAgentRunLifecycle({ scope: "gui" });
+  ss.runLifecycle.start();
+  ss.lifecycleToolCallQueues = new Map();
 
   ss.isThinking = false;
   ss.hasThinking = false;
@@ -255,6 +259,7 @@ export function resetCompletedTurnState(ss: SessionLike): void {
   clearTurnTimers(ss);
   clearSlowToolTimers(ss);
   ss.activeStreamToken = null;
+  ss.lifecycleToolCallQueues = new Map();
   ss.degenerationAbortRequested = false;
   ss.progressMarkerCount = 0;
   ss._turnEndDeferred = false;

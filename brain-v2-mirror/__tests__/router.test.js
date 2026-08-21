@@ -176,6 +176,43 @@ function makeToolThenContentAdapter(reasoningSeen) {
 }
 
 describe('Router', () => {
+  it('acts as a model-only transport when an external harness owns the tool loop', async () => {
+    const fetchMock = vi.fn(() => { throw new Error('Brain must not execute or prefetch tools'); });
+    vi.stubGlobal('fetch', fetchMock);
+    let receivedTools = null;
+    mockState.adapterFn = async function* ({ tools }) {
+      receivedTools = tools;
+      yield {
+        type: 'tool_call_delta',
+        delta: [{
+          index: 0,
+          id: 'external-web-search',
+          type: 'function',
+          function: { name: 'web_search', arguments: '{"query":"Lynn"}' },
+        }],
+      };
+      yield { type: 'finish', reason: 'tool_calls' };
+    };
+
+    const tools = [{
+      type: 'function',
+      function: { name: 'web_search', description: 'external harness tool', parameters: { type: 'object' } },
+    }];
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: 'search Lynn' }],
+      tools,
+      manageServerTools: false,
+      onChunk: (chunk) => chunks.push(chunk),
+    });
+
+    expect(result).toMatchObject({ ok: true, iterations: 1, forwardedToClient: true, clientToolCalls: 1 });
+    expect(result.toolCalls?.[0]?.function?.name).toBe('web_search');
+    expect(receivedTools).toEqual(tools);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress')).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('honors a strict signed-review provider order without falling through', async () => {
     mockState.adapterFn = async function* ({ provider }) {
       mockState.adapterCalls.push(provider.id);

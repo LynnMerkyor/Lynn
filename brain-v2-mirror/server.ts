@@ -14,6 +14,11 @@ import { createDailyQuota, parseDailyLimit } from './daily-quota.js';
 import { recordDeviceRegisterEvent } from './device-register-analytics.js';
 import { errorMessage, errorName, providerId, type ChatMessage, type ToolDefinition } from './types.js';
 import { attachRealtimeUpgrade } from './voice-realtime-proxy.js';
+import {
+  normalizeResponsesRequest,
+  ResponsesCompatEmitter,
+  writeResponsesSse,
+} from './responses-compat.js';
 
 // H4 fix (2026-05-24): agentKey 是长期 bearer,不能进 INFO 日志 plaintext。
 // 用 sha256 头 8 个 hex 做指纹 — 足够区分会话,不可反推。
@@ -171,6 +176,113 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse, 
     }
   }
   emitter.done();
+}
+
+async function handleResponses(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
+  let body: JsonObject;
+  try {
+    body = await readJsonBody(req);
+  } catch (error) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { type: 'invalid_request_error', message: 'invalid request body: ' + errorMessage(error) } }));
+    return;
+  }
+
+  let normalized;
+  try {
+    normalized = normalizeResponsesRequest(body);
+  } catch (error) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { type: 'invalid_request_error', message: errorMessage(error) } }));
+    return;
+  }
+
+  let device = null;
+  try {
+    device = await verifySignedRequest(req, { pathname, method: 'POST', log });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      res.writeHead(error.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { type: 'authentication_error', message: error.message } }));
+      return;
+    }
+    log('error', 'responses auth unexpected: ' + errorMessage(error));
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { type: 'server_error', message: 'internal auth error' } }));
+    return;
+  }
+
+  const ctrl = new AbortController();
+  let clientDisconnected = false;
+  req.on('close', () => {
+    if (!res.writableEnded) {
+      clientDisconnected = true;
+      ctrl.abort();
+    }
+  });
+
+  if (normalized.stream) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Brain-Version': VERSION,
+      'X-Lynn-Harness-Mode': 'model-only',
+    });
+  }
+
+  const emitter = new ResponsesCompatEmitter(
+    normalized.model,
+    normalized.stream,
+    (event) => {
+      if (!clientDisconnected) writeResponsesSse(res, event);
+    },
+    undefined,
+    normalized.toolNameMap,
+  );
+  emitter.start();
+  const id = `resp-bridge-${Date.now()}`;
+  log('info', `[${id}] start agent=${_agentFingerprint(device?.key)} msgs=${normalized.messages.length} tools=${normalized.tools.length} mode=model-only`);
+
+  let responseBody: JsonObject;
+  try {
+    const result = await routerRun({
+      messages: normalized.messages,
+      tools: normalized.tools,
+      capabilityRequired: detectCapability(normalized.messages),
+      extraBody: normalized.extraBody,
+      reasoningEffort: normalized.reasoningEffort,
+      manageServerTools: false,
+      signal: ctrl.signal,
+      onChunk: async (chunk, meta) => {
+        if (!clientDisconnected) emitter.onChunk(chunk, meta);
+      },
+      log,
+    });
+    responseBody = result.ok
+      ? emitter.complete()
+      : emitter.fail(result.error || 'model routing failed');
+    log('info', `[${id}] done provider=${result.providerId} iter=${result.iterations}` + (result.forwardedToClient ? ' tool_calls_forwarded' : ''));
+  } catch (error) {
+    responseBody = emitter.fail(errorMessage(error));
+    if (clientDisconnected || errorName(error) === 'AbortError') {
+      log('info', `[${id}] aborted`);
+    } else {
+      log('error', `[${id}] route failed: ${errorMessage(error)}`);
+    }
+  }
+
+  if (clientDisconnected) return;
+  if (normalized.stream) {
+    res.end();
+  } else {
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'X-Brain-Version': VERSION,
+      'X-Lynn-Harness-Mode': 'model-only',
+    });
+    res.end(JSON.stringify(responseBody));
+  }
 }
 
 // [deep-research v1 handler]
@@ -634,6 +746,10 @@ const server = http.createServer(async (req, res) => {
     return handleChatCompletions(req, res, url.pathname);
   }
 
+  if (req.method === 'POST' && (url.pathname === '/v2/responses' || url.pathname === '/v1/responses')) {
+    return handleResponses(req, res, url.pathname);
+  }
+
   if (req.method === 'POST' && (url.pathname === '/v2/devices/register' || url.pathname === '/v1/devices/register')) {
     return handleDeviceRegister(req, res);
   }
@@ -684,7 +800,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       brain: 'v2', version: VERSION,
-      endpoints: ['POST /v1/chat/completions', 'POST /v2/chat/completions', 'POST /api/v1/chat/completions', 'POST /v1/devices/register', 'GET /v1/providers/status', 'POST /v1/web-search', 'POST /v1/voice/asr', 'POST /v1/voice/tts', 'GET /v2/local-qwen35-9b/status', 'POST /v2/local-qwen35-9b/setup', 'GET /health'],
+      endpoints: ['POST /v1/chat/completions', 'POST /v2/chat/completions', 'POST /v1/responses', 'POST /v2/responses', 'POST /api/v1/chat/completions', 'POST /v1/devices/register', 'GET /v1/providers/status', 'POST /v1/web-search', 'POST /v1/voice/asr', 'POST /v1/voice/tts', 'GET /v2/local-qwen35-9b/status', 'POST /v2/local-qwen35-9b/setup', 'GET /health'],
     }));
     return;
   }
@@ -700,7 +816,7 @@ attachRealtimeUpgrade(server, { verifySignedRequest, log, host: HOST, port: PORT
 
 server.listen(PORT, HOST, () => {
   log('info', 'brain v2 listening http://' + HOST + ':' + PORT);
-  log('info', 'endpoints: POST /v1/chat/completions  POST /v2/chat/completions  POST /v1/voice/asr  POST /v1/voice/tts  GET /health');
+  log('info', 'endpoints: POST /v1/chat/completions  POST /v1/responses  POST /v2/chat/completions  POST /v2/responses  POST /v1/voice/asr  POST /v1/voice/tts  GET /health');
 });
 
 process.on('unhandledRejection', (reason) => {

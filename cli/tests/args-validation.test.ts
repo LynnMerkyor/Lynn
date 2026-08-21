@@ -13,6 +13,10 @@ describe("CLI argument validation", () => {
     expect(findUnknownLongFlags(["code", "--", "--not-a-lynn-flag"])).toEqual([]);
   });
 
+  it("accepts the explicit harness selector", () => {
+    expect(findUnknownLongFlags(["code", "--harness", "codex", "task"])).toEqual([]);
+  });
+
   it("renders focused command help", () => {
     expect(commandUsage("doctor")).toContain("Lynn doctor");
     expect(commandUsage("doctor")).toContain("Lynn help");

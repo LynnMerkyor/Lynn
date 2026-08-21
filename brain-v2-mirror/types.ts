@@ -135,6 +135,12 @@ export interface RouterRunOptions {
   /** Signed first-party calls may pin a single provider for bounded review arbitration. */
   providerOrder?: readonly ProviderId[];
   strictProviderOrder?: boolean;
+  /**
+   * When false, Brain acts as a model-only transport for an external harness.
+   * It must not inject/execute server tools or augment the conversation with
+   * pre-search/audio context; the external harness owns the complete tool loop.
+   */
+  manageServerTools?: boolean;
 }
 
 export interface RouterRunResult {

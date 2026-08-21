@@ -6,7 +6,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { maxSteps, runCode, runCodeTaskWithEvents, type CodeAgentEvent } from "../src/commands/code.js";
+import { codeHarness, maxSteps, runCode, runCodeTaskWithEvents, type CodeAgentEvent } from "../src/commands/code.js";
 import { compactRuntimeMessages } from "../src/code-agent-loop.js";
 import type { ChatMessage } from "../src/brain-client.js";
 import { appendSessionTurn, readSessionLines, sessionIndexPath } from "../src/session/store.js";
@@ -105,6 +105,12 @@ async function withRawBrainServer(handler: (body: unknown, count: number) => str
 }
 
 describe("code agent loop · core & approvals", () => {
+  it("keeps the legacy harness by default and validates explicit selection", () => {
+    expect(codeHarness(parseArgs(["code", "task"]))).toBe("legacy");
+    expect(codeHarness(parseArgs(["code", "task", "--harness", "codex"]))).toBe("codex");
+    expect(() => codeHarness(parseArgs(["code", "task", "--harness", "unknown"]))).toThrow(/legacy or codex/);
+  });
+
   it("compacts old runtime loop turns while keeping the anchored goal", () => {
     const messages: ChatMessage[] = [
       { role: "system" as const, content: "stable prefix" },
@@ -452,6 +458,54 @@ describe("code agent loop · core & approvals", () => {
     expect(events.some((event) => event.type === "tool.requested" && event.tool === "apply_patch")).toBe(true);
     expect(events.some((event) => event.type === "tool.result" && event.result.ok)).toBe(true);
     expect(events.some((event) => event.type === "task.finished" && event.ok)).toBe(true);
+    const runStarted = events.find((event): event is Extract<CodeAgentEvent, { type: "run.started" }> => event.type === "run.started");
+    const runFinished = events.find((event): event is Extract<CodeAgentEvent, { type: "run.finished" }> => event.type === "run.finished");
+    const taskFinished = events.find((event): event is Extract<CodeAgentEvent, { type: "task.finished" }> => event.type === "task.finished");
+    expect(runStarted?.runId).toBeTruthy();
+    expect(runFinished?.runId).toBe(runStarted?.runId);
+    expect(runFinished?.terminal).toMatchObject({ code: "completed", ok: true, resumable: false });
+    expect(taskFinished).toMatchObject({ runId: runStarted?.runId, code: "completed", resumable: false, partial: false });
+  });
+
+  it("executes a duplicated structured tool call id only once", async () => {
+    const events: CodeAgentEvent[] = [];
+    await withRawBrainServer((_body, count) => count <= 2
+      ? rawSsePayloads([
+          JSON.stringify({
+            choices: [{
+              delta: {
+                tool_calls: [{
+                  index: 0,
+                  id: "duplicate-call",
+                  type: "function",
+                  function: {
+                    name: "write_file",
+                    arguments: JSON.stringify({ path: "deduped.txt", text: count === 1 ? "once\n" : "twice\n" }),
+                  },
+                }],
+              },
+            }],
+          }),
+        ])
+      : sse("Finished after suppressing the duplicate call id."),
+    async (brainUrl) => {
+      await expect(runCodeTaskWithEvents(parseArgs([
+        "code",
+        "write exactly once",
+        "--cwd",
+        tmp,
+        "--brain-url",
+        brainUrl,
+        "--approval",
+        "yolo",
+        "--max-steps",
+        "3",
+      ]), "write exactly once", (event) => events.push(event))).resolves.toBe(0);
+    });
+
+    await expect(fs.readFile(path.join(tmp, "deduped.txt"), "utf8")).resolves.toBe("once\n");
+    expect(events.filter((event) => event.type === "tool.result" && event.result.ok)).toHaveLength(1);
+    expect(events.some((event) => event.type === "tool.loop_guard" && event.tool === "write_file")).toBe(true);
   });
 
   it("runs a dangerous write after one-time UI approval in ask mode", async () => {

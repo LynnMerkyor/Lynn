@@ -61,6 +61,8 @@ describe("chat turn state boundaries", () => {
     expect(ss.persistedAssistantTextBaseline).toBe(21);
     expect(ss.persistedAssistantMessageBaseline).toBe(4);
     expect(ss.lastActivity).toBe(Date.now());
+    expect(ss.runLifecycle.snapshot()).toMatchObject({ scope: "gui", phase: "running" });
+    expect(ss.lifecycleToolCallQueues.size).toBe(0);
 
     expect(ss.hasToolCall).toBe(false);
     expect(ss.hasRealtimeEvidenceToolCall).toBe(false);

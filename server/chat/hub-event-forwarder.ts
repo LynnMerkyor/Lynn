@@ -35,6 +35,12 @@ import {
   updateToolStormGuard,
 } from "./tool-storm-guard.js";
 import { resolveTurnEndFallback } from "./turn-end-fallback.js";
+import {
+  beginGuiToolRun,
+  finishGuiRun,
+  finishGuiToolRun,
+  guiRunTerminalFields,
+} from "./agent-run-state.js";
 
 type AnyRecord = Record<string, any>;
 type ExtractableContent = Parameters<typeof extractText>[0];
@@ -230,6 +236,15 @@ export function createHubEventForwarder({
       }
     } else if (event.type === "tool_execution_start") {
       if (!ss) return;
+      const lifecycleToolStart = beginGuiToolRun(ss, {
+        toolCallId: event.toolCallId,
+        name: event.toolName,
+        args: event.args,
+      });
+      if (!lifecycleToolStart.accepted) {
+        debugLog()?.warn("ws", `[AGENT-RUN v1] suppressed duplicate/conflicting tool_start · call=${lifecycleToolStart.callId || "missing"} · tool=${event.toolName || ""} · session=${sessionPath}`);
+        return;
+      }
       ss.hasToolCall = true;
       if (isRealtimeEvidenceToolName(event.toolName)) ss.hasRealtimeEvidenceToolCall = true;
       ss.activeToolCallCount = Math.max(0, Number(ss.activeToolCallCount || 0)) + 1;
@@ -296,6 +311,30 @@ export function createHubEventForwarder({
       }
     } else if (event.type === "tool_execution_end") {
       if (!ss) return;
+      const {
+        rawDetails,
+        publicDetails,
+        summary: toolSummary,
+        toolName,
+        normalizedArgs,
+        toolIsError,
+        publicSummary,
+      } = summarizeToolExecution(event);
+
+      const lifecycleToolEnd = finishGuiToolRun(ss, {
+        toolCallId: event.toolCallId,
+        name: toolName,
+        ok: !toolIsError,
+        error: toolIsError ? publicSummary : null,
+      });
+      if (!lifecycleToolEnd.accepted && lifecycleToolEnd.snapshot.terminal) {
+        debugLog()?.warn("ws", `[AGENT-RUN v1] suppressed late tool_end after terminal · call=${lifecycleToolEnd.callId || "missing"} · tool=${toolName} · session=${sessionPath}`);
+        return;
+      }
+      if (lifecycleToolEnd.duplicate) {
+        debugLog()?.warn("ws", `[AGENT-RUN v1] suppressed duplicate tool_end · call=${lifecycleToolEnd.callId || "missing"} · tool=${toolName} · session=${sessionPath}`);
+        return;
+      }
       ss.activeToolCallCount = Math.max(0, Number(ss.activeToolCallCount || 0) - 1);
       ss.lastToolExecutionActivity = Date.now();
       if (Number(ss.activeToolCallCount || 0) === 0) {
@@ -310,16 +349,6 @@ export function createHubEventForwarder({
       } catch {
         // Timer cleanup should never fail the tool result path.
       }
-
-      const {
-        rawDetails,
-        publicDetails,
-        summary: toolSummary,
-        toolName,
-        normalizedArgs,
-        toolIsError,
-        publicSummary,
-      } = summarizeToolExecution(event);
 
       emitStreamEvent(sessionPath, ss, {
         type: "tool_end",
@@ -635,13 +664,16 @@ export function createHubEventForwarder({
         hasOutput: ss.hasOutput,
         hasToolCall: hasToolEvidence,
       });
+      ss._turnClosed = true;
+      const runFinished = finishGuiRun(ss, { code: "completed", partial: false });
+      if (!runFinished.accepted) return;
       clearTurnTimers(ss);
       if (ss.isThinking) {
         ss.isThinking = false;
         emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
       }
       maybeAppendCodeVerificationPostscript(sessionPath, ss);
-      emitStreamEvent(sessionPath, ss, { type: "turn_end" });
+      emitStreamEvent(sessionPath, ss, { type: "turn_end", ...guiRunTerminalFields(runFinished.snapshot, "turn_end") });
       broadcast({ type: "status", isStreaming: false, sessionPath });
       void emitModelHintFromSessionTail(sessionPath, ss, emitStreamEvent);
       finishSessionStream(ss);

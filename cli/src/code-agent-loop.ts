@@ -24,6 +24,13 @@ import { createWorkspaceSnapshot, recordWorkspaceSnapshotForRequest, restoreWork
 import { selfVerifyEnabled, buildSelfVerifyPrompt, parseSelfVerifyVerdict, formatSelfVerifyCritique } from "./code-self-verify.js";
 import { applyWorkingCheckpoint, formatWorkingCheckpointFrame, workingCheckpointObservation } from "./code-working-checkpoint.js";
 import { buildEvidenceSafetyAnswer } from "../../shared/evidence-safety-answer.js";
+import {
+  classifyAgentRunError,
+  createAgentRunLifecycle,
+  type AgentRunLifecycle,
+  type AgentRunSnapshot,
+  type AgentRunTerminal,
+} from "../../shared/agent-run-lifecycle.js";
 
 const MAX_AUTOVERIFY_REVERIFIES = 3;
 const MAX_PLAN_REMINDERS = 2;
@@ -57,6 +64,8 @@ export interface CodeAgentApprovalRequest {
 }
 
 export type CodeAgentEvent =
+  | { type: "run.started"; runId: string; phase: "running"; revision: number }
+  | { type: "run.finished"; runId: string; snapshot: AgentRunSnapshot; terminal: AgentRunTerminal }
   | { type: "step.started"; step: number; label: string }
   | { type: "provider"; provider: string }
   | { type: "usage"; summary: string }
@@ -77,7 +86,7 @@ export type CodeAgentEvent =
   | { type: "session.resumed"; path: string; messages: number }
   | { type: "session.checkpoint"; path: string; line: "user" | "assistant" | "tool" }
   | { type: "session.saved"; path: string }
-  | { type: "task.finished"; ok: boolean; text: string; usageSummary: string | null; maxStepsReached?: boolean; resumeCommand?: string; sessionPath?: string | null }
+  | { type: "task.finished"; ok: boolean; text: string; usageSummary: string | null; runId?: string; code?: AgentRunTerminal["code"]; resumable?: boolean; partial?: boolean; maxStepsReached?: boolean; resumeCommand?: string; sessionPath?: string | null }
   | { type: "error"; message: string };
 
 export interface CodeAgentLoopResult {
@@ -85,6 +94,19 @@ export interface CodeAgentLoopResult {
   maxStepsReached: boolean;
   usageSummary: string | null;
   usageRecords: Array<{ usage: unknown; durationMs: number }>;
+  runId: string;
+  terminal: AgentRunTerminal;
+}
+
+interface CodeAgentLoopCoreResult {
+  text: string;
+  maxStepsReached: boolean;
+  usageSummary: string | null;
+  usageRecords: Array<{ usage: unknown; durationMs: number }>;
+}
+
+interface InternalCodeAgentLoopInput extends CodeAgentLoopInput {
+  lifecycle: AgentRunLifecycle;
 }
 
 interface ClientToolStormState {
@@ -211,6 +233,69 @@ function completedToolCallsAfter(messages: readonly ChatMessage[], assistantInde
 }
 
 export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<CodeAgentLoopResult> {
+  const lifecycle = createAgentRunLifecycle({ scope: "cli" });
+  const started = lifecycle.start();
+  inputData.onEvent?.({
+    type: "run.started",
+    runId: started.snapshot.runId,
+    phase: "running",
+    revision: started.snapshot.revision,
+  });
+  if (inputData.json) {
+    writeJsonLine({
+      type: "code.run.started",
+      ts: nowIso(),
+      runId: started.snapshot.runId,
+      phase: "running",
+      revision: started.snapshot.revision,
+    });
+  }
+  try {
+    const core = await runCodeAgentLoopCore({ ...inputData, lifecycle });
+    const finished = lifecycle.finish({
+      code: core.maxStepsReached ? "max_steps_reached" : "completed",
+      partial: core.maxStepsReached && !!core.text.trim(),
+    });
+    const terminal = finished.snapshot.terminal!;
+    inputData.onEvent?.({ type: "run.finished", runId: finished.snapshot.runId, snapshot: finished.snapshot, terminal });
+    if (inputData.json) {
+      writeJsonLine({
+        type: "code.run.finished",
+        ts: nowIso(),
+        runId: finished.snapshot.runId,
+        phase: finished.snapshot.phase,
+        code: terminal.code,
+        ok: terminal.ok,
+        resumable: terminal.resumable,
+        partial: terminal.partial,
+      });
+    }
+    return { ...core, runId: finished.snapshot.runId, terminal };
+  } catch (error) {
+    const finished = lifecycle.finish(classifyAgentRunError(error, {
+      signal: inputData.signal,
+      partial: false,
+    }));
+    const terminal = finished.snapshot.terminal!;
+    inputData.onEvent?.({ type: "run.finished", runId: finished.snapshot.runId, snapshot: finished.snapshot, terminal });
+    if (inputData.json) {
+      writeJsonLine({
+        type: "code.run.finished",
+        ts: nowIso(),
+        runId: finished.snapshot.runId,
+        phase: finished.snapshot.phase,
+        code: terminal.code,
+        ok: terminal.ok,
+        resumable: terminal.resumable,
+        partial: terminal.partial,
+        message: terminal.message,
+      });
+    }
+    throw error;
+  }
+}
+
+async function runCodeAgentLoopCore(inputData: InternalCodeAgentLoopInput): Promise<CodeAgentLoopCoreResult> {
   inputData.signal?.throwIfAborted();
   const frames = buildCodeRuntimeFrames(inputData);
   const initialPrompt = buildCodePrompt(inputData.task, inputData.context, inputData.imagePaths);
@@ -376,13 +461,31 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
         continue;
       }
       const stormVerdict = observeClientToolRequest(toolStorm, toolRequest);
+      const lifecycleCallId = toolRequest.toolCallId || `lynn_call_${step}_${toolIndex}`;
+      const lifecycleToolStart = inputData.lifecycle.beginTool(
+        lifecycleCallId,
+        toolRequest.tool,
+        toolRequestFingerprint(toolRequest),
+      );
       if (!isMetaTool(toolRequest.tool)) toolCallCount += 1;
       if (inputData.json) writeJsonLine({ type: "code.tool.requested", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest) });
       const preview = formatDangerousToolPreview(toolRequest.tool, toolRequest.args, supportsColor(inputData.output));
       inputData.onEvent?.({ type: "tool.requested", tool: toolRequest.tool, args: redactToolArgs(toolRequest) as CodeToolRequest["args"], preview });
       if (!inputData.json && !inputData.onEvent && !isMetaTool(toolRequest.tool)) renderClientToolStart(toolRequest);
       let toolResult: ClientToolResult;
-      if (stormVerdict.suppress) {
+      if (!lifecycleToolStart.accepted) {
+        toolResult = {
+          ok: false,
+          tool: toolRequest.tool,
+          error: lifecycleToolStart.conflict
+            ? "Conflicting reuse of a tool call id was suppressed by Lynn CLI. No action was performed."
+            : "Duplicate tool call id was suppressed by Lynn CLI. No action was performed twice.",
+        };
+        if (inputData.json) {
+          writeJsonLine({ type: "code.tool.loop_guard", ts: nowIso(), tool: toolRequest.tool, args: redactToolArgs(toolRequest), repeats: 2, reason: "duplicate_call_id" });
+        }
+        inputData.onEvent?.({ type: "tool.loop_guard", tool: toolRequest.tool, repeats: 2 });
+      } else if (stormVerdict.suppress) {
         toolResult = {
           ok: false,
           tool: toolRequest.tool,
@@ -401,12 +504,14 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
             inputData.toolCtx.approval === "ask" &&
             !approvalSession.approveAll
           ) {
+            inputData.lifecycle.transition("waiting_approval");
             const decision = await inputData.requestApproval({
               tool: toolRequest.tool,
               args: redactToolArgs(toolRequest) as CodeToolRequest["args"],
               cwd: inputData.toolCtx.cwd,
               preview,
             });
+            inputData.lifecycle.transition("waiting_tool");
             if (decision === "deny") throw new Error(`${toolRequest.tool} cancelled by user`);
             if (decision === "approve_all") approvalSession.approveAll = true;
             effectiveApproval = "yolo";
@@ -473,6 +578,11 @@ export async function runCodeAgentLoop(inputData: CodeAgentLoopInput): Promise<C
           };
         }
       }
+      inputData.lifecycle.finishTool(lifecycleCallId, {
+        ok: toolResult.ok,
+        cancelled: /cancelled by user/i.test(String(toolResult.error || "")),
+        error: toolResult.error || null,
+      });
       let autoVerifyObservation: string | null = null;
       if (
         mutated
