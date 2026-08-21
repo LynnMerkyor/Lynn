@@ -63,7 +63,7 @@
     "test:cli-terminal-ime": "npm run build:cli && node scripts/cli-terminal-ime-smoke.mjs",
     "test:cli-terminal-soak": "npm run build:cli && node scripts/cli-terminal-app-smoke.mjs",
     "test:voice-router": "npm test -- --run tests/voice-asr-providers.test.js tests/voice-ws-route.test.js",
-    "test:voice-cli": "npm run build:cli && npm --prefix cli test -- voice && node scripts/cli-voice-smoke.mjs && node scripts/cli-voice-repl-pty-smoke.mjs",
+    "test:voice-cli": "npm run build:cli && npm --prefix cli run test:voice && node scripts/cli-voice-smoke.mjs && node scripts/cli-voice-repl-pty-smoke.mjs",
     "test:voice-gui": "npm test -- --run desktop/src/react/settings/tabs/VoiceTab.test.tsx desktop/src/react/components/chat/TtsControlButton.test.tsx tests/tts-bridge-cosyvoice-stream.test.js",
     "test:gui-feedback": "npm test -- --run desktop/src/react/__tests__/services/ws-message-handler.test.ts",
     "test:packaged-cli": "node scripts/packaged-cli-runtime-smoke.mjs",
