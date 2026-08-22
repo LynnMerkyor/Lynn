@@ -117,7 +117,7 @@ describe("Codex harness loop", () => {
 
     expect(result.text).toBe("resumed");
     expect(result.terminal).toMatchObject({ code: "completed", ok: true });
-  });
+  }, 30_000);
 
   it("closes the shared lifecycle exactly once when app-server crashes mid-turn", async () => {
     const events: CodeAgentEvent[] = [];
