@@ -1145,6 +1145,7 @@ describe("chat route event forwarding", () => {
       connections[0].handlers.onMessage({
         data: JSON.stringify({ type: "prompt", text: "删除当前目录下 delete-me.txt，保留 keep.txt" }),
       }, connections[0].client);
+      await vi.advanceTimersByTimeAsync(0);
 
       subscribed({
         type: "tool_authorization",
@@ -1190,6 +1191,7 @@ describe("chat route event forwarding", () => {
       connections[0].handlers.onMessage({
         data: JSON.stringify({ type: "prompt", text: "删除当前目录下 delete-me.txt，保留 keep.txt" }),
       }, connections[0].client);
+      await vi.advanceTimersByTimeAsync(0);
 
       subscribed({
         type: "tool_authorization",
