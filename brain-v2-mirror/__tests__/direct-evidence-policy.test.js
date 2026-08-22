@@ -7,6 +7,7 @@ const envKeys = [
   'BRAIN_V2_DIRECT_MARKET_PREFETCH',
   'BRAIN_V2_DIRECT_EXCHANGE_PREFETCH',
   'BRAIN_V2_DIRECT_CALENDAR_PREFETCH',
+  'BRAIN_V2_DIRECT_STRUCTURED_OFFICIAL_PREFETCH',
 ];
 
 afterEach(() => {
@@ -54,6 +55,18 @@ describe('direct evidence prefetch policy', () => {
     expect(buildDirectEvidencePrefetchPlans([
       { role: 'user', content: '明天 NHL 赛程是什么？' },
     ])).toEqual([expect.objectContaining({ kind: 'sports', toolName: 'sports_score' })]);
+  });
+
+  it('prefetches structured official sources for Hugging Face, arXiv, and earthquakes', () => {
+    for (const content of [
+      'https://huggingface.co/google/gemma-4-E4B-it 的 SHA 和文件数',
+      '核验 arXiv 2606.04101 的标题',
+      '最近中国有地震吗？',
+    ]) {
+      expect(buildDirectEvidencePrefetchPlans([
+        { role: 'user', content },
+      ])).toEqual([expect.objectContaining({ kind: 'official_source', toolName: 'web_search' })]);
+    }
   });
 
   it('does not prefetch realtime evidence when the latest turn explicitly forbids tools', () => {

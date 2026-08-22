@@ -120,6 +120,31 @@ describe('official source mesh', () => {
     expect(result.items[0].snippet).toContain('sha=abc123');
   });
 
+  it('falls back to the domestic Hugging Face metadata mirror when the official API is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockRejectedValueOnce(new Error('connect ETIMEDOUT'))
+      .mockResolvedValueOnce(jsonResponse({
+        id: 'google/gemma-4-E4B-it',
+        downloads: 5351536,
+        likes: 1495,
+        private: false,
+        lastModified: '2026-08-20T00:00:00Z',
+        pipeline_tag: 'any-to-any',
+        sha: 'ee0ef6023621cff504d758262d4e04895a5af4a2',
+        siblings: Array.from({ length: 9 }, (_, index) => ({ rfilename: `file-${index}` })),
+      })));
+
+    const result = await lookupOfficialSources('https://huggingface.co/google/gemma-4-E4B-it 的 SHA 和文件数');
+
+    expect(result.provider).toBe('huggingface_mirror_api');
+    expect(result.summary).toContain('domestic mirror API');
+    expect(result.summary).toContain('sha ee0ef6023621cff504d758262d4e04895a5af4a2');
+    expect(result.items[0].snippet).toContain('files=9');
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch.mock.calls[0][0]).toContain('huggingface.co/api/models/google/gemma-4-E4B-it');
+    expect(global.fetch.mock.calls[1][0]).toContain('hf-mirror.com/api/models/google/gemma-4-E4B-it');
+  });
+
   it('parses explicit targets without treating vague words as package names', () => {
     expect(__testing__.parseGitHubTarget('看 https://github.com/LynnMerkyor/Lynn/issues/5')).toEqual({ owner: 'LynnMerkyor', repo: 'Lynn', issue: '5' });
     expect(__testing__.parseHuggingFaceRepo('https://huggingface.co/google/gemma-4-E4B-it')).toBe('google/gemma-4-E4B-it');

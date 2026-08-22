@@ -97,6 +97,12 @@ function shouldUseCliDirectResearchAnswer(kind: string, promptText: string, dire
   if (!CLI_DIRECT_RESEARCH_KINDS.has(kind)) return false;
   const answer = directAnswer.trim();
   if (!answer) return false;
+  if (kind === "sports" && /(?:专用体育比分源返回失败|暂未形成可核验|directSourceStatus.{0,24}unavailable|体育查询失败|all search sources failed)/i.test(answer)) {
+    return false;
+  }
+  if (kind === "news" && /(?:地震|震级|震中|余震|earthquake|seismic)/i.test(promptText)) {
+    return false;
+  }
   if (kind === "public_data"
     && /(?:DGX\s*Spark|RTX\s*Spark|download\.merkyorlynn\.com|Lynn\s+v?\d+\.\d+\.\d+|Gitee.*Lynn|CUDA\s*Toolkit\s*13|Python\s*3\.13|Node\.?js|Kimi\s*K2\.7\s*Code|GLM\s*5\.0\s*Turbo|Responses\s*API|Anthropic\s+docs?.{0,24}Claude\s+Code|Claude\s+Code.{0,24}Anthropic\s+docs?|Claude.{0,24}(?:最新|公开).{0,12}模型|Claude.{0,12}(?:模型).{0,24}(?:最新|公开)|Apple.{0,32}notarization|notarization.{0,32}Apple|Apple.{0,24}公证|苹果.{0,24}公证|Microsoft\s+Windows\s+on\s+Arm|Windows\s+on\s+Arm|(?:日本|赴日).{0,40}(?:旅游|旅行|游客).{0,40}(?:签证|材料|要求)|(?:签证|材料|要求).{0,40}(?:日本|赴日).{0,40}(?:旅游|旅行|游客)|深圳.{0,24}(?:2026|最新|当前|现在).{0,40}(?:社保|社会保险).{0,40}(?:缴费|基数|政策|变化)|(?:个人所得税|个税).{0,24}(?:专项附加扣除|扣除).{0,40}(?:最新|规则|注意|来源)|(?:专项附加扣除).{0,40}(?:个人所得税|个税|最新|规则|注意|来源))/i.test(promptText)) {
     return true;
@@ -114,9 +120,21 @@ function shouldUseCliDirectResearchAnswer(kind: string, promptText: string, dire
   return true;
 }
 
+function shouldBypassCliDirectResearchPrefetch(kind: string, promptText: string): boolean {
+  if (kind === "news" && /(?:地震|震级|震中|余震|earthquake|seismic)/i.test(promptText)) return true;
+  if (kind === "sports" && /(?:\bMLB\b|\bNHL\b|美国职业棒球|美职棒|大联盟|国家冰球联盟|北美冰球)/i.test(promptText)) return true;
+  return false;
+}
+
+export const __testing__ = {
+  shouldBypassCliDirectResearchPrefetch,
+  shouldUseCliDirectResearchAnswer,
+};
+
 async function tryBuildCliDirectResearchAnswer(promptText: string): Promise<{ answer: string; kind: string; toolName: string } | null> {
   const kind = inferReportResearchKind(promptText);
   if (!CLI_DIRECT_RESEARCH_KINDS.has(kind)) return null;
+  if (shouldBypassCliDirectResearchPrefetch(kind, promptText)) return null;
   const context = await buildReportResearchContext(promptText, { userPrompt: promptText });
   const answer = buildDirectResearchAnswer(kind, context, promptText);
   if (!shouldUseCliDirectResearchAnswer(kind, promptText, answer)) return null;

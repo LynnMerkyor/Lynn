@@ -64,6 +64,7 @@ beforeEach(() => {
   process.env.BRAIN_V2_DIRECT_EXCHANGE_PREFETCH = '0';
   process.env.BRAIN_V2_DIRECT_CALENDAR_PREFETCH = '0';
   process.env.BRAIN_V2_DIRECT_OFFICIAL_MODEL_PREFETCH = '0';
+  process.env.BRAIN_V2_DIRECT_STRUCTURED_OFFICIAL_PREFETCH = '0';
   webSearchTesting.cache.clear();
   webSearchTesting.structuredCache.clear();
   searchContextTesting.clearCache();
@@ -92,6 +93,7 @@ afterEach(() => {
   delete process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH;
   delete process.env.BRAIN_V2_DIRECT_EXCHANGE_PREFETCH;
   delete process.env.BRAIN_V2_DIRECT_CALENDAR_PREFETCH;
+  delete process.env.BRAIN_V2_DIRECT_STRUCTURED_OFFICIAL_PREFETCH;
   delete process.env.BRAIN_V2_LOCAL_PROBE_TIMEOUT_COOLDOWN_MS;
   delete process.env.BRAIN_V2_LOCAL_PROBE_THROW_COOLDOWN_MS;
   delete process.env.BRAIN_V2_LOCAL_PROBE_4XX_COOLDOWN_MS;
@@ -1622,6 +1624,53 @@ describe('Router', () => {
     expect(visible).toContain('10月1日至7日');
     expect(visible).toContain('9月20日（周日）、10月10日（周六）上班');
     expect(visible).toContain('gov.cn');
+  });
+
+  it('prefetches Hugging Face metadata through the domestic mirror without exposing stock tools', async () => {
+    process.env.BRAIN_V2_DIRECT_STRUCTURED_OFFICIAL_PREFETCH = '1';
+    mockState.providers = {
+      'step-3.7-flash': makeProvider('step-3.7-flash'),
+      'deepseek-chat': makeProvider('deepseek-chat'),
+    };
+    mockState.order = ['step-3.7-flash', 'deepseek-chat'];
+    const captured = [];
+    const chunks = [];
+    vi.stubGlobal('fetch', vi.fn()
+      .mockRejectedValueOnce(new Error('connect ETIMEDOUT'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 'google/gemma-4-E4B-it',
+          downloads: 5351536,
+          likes: 1495,
+          private: false,
+          lastModified: '2026-08-20T00:00:00Z',
+          sha: 'ee0ef6023621cff504d758262d4e04895a5af4a2',
+          siblings: Array.from({ length: 9 }, (_, index) => ({ rfilename: `file-${index}` })),
+        }),
+      }));
+    mockState.adapterFn = async function* ({ provider, messages, tools }) {
+      mockState.adapterCalls.push(provider.id);
+      captured.push({ messages, tools });
+      yield { type: 'content', delta: '提交 SHA 为 ee0ef6023621cff504d758262d4e04895a5af4a2，共 9 个文件。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+
+    const result = await run({
+      messages: [{ role: 'user', content: 'https://huggingface.co/google/gemma-4-E4B-it 这个模型的提交SHA和文件数是多少' }],
+      onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'step-3.7-flash', iterations: 1 });
+    expect(mockState.adapterCalls).toEqual(['step-3.7-flash']);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'web_search' && chunk.event === 'end')).toBe(true);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'stock_market')).toBe(false);
+    expect(captured[0]?.tools).toEqual([]);
+    const promptText = captured[0]?.messages.map((message) => String(message.content || '')).join('\n') || '';
+    expect(promptText).toContain('provider: huggingface_mirror_api');
+    expect(promptText).toContain('sha=ee0ef6023621cff504d758262d4e04895a5af4a2');
+    expect(promptText).toContain('files=9');
   });
 
   it('answers MLB schedule prompts directly from the official Stats API', async () => {

@@ -295,8 +295,21 @@ function parseHuggingFaceRepo(query) {
 async function lookupHuggingFace(query) {
   const repo = parseHuggingFaceRepo(query);
   if (!repo) return null;
-  const url = `https://huggingface.co/api/models/${repo}`;
-  const data = await fetchJson(url);
+  const officialUrl = `https://huggingface.co/api/models/${repo}`;
+  const mirrorBase = compact(process.env.HF_METADATA_MIRROR_BASE || 'https://hf-mirror.com').replace(/\/$/, '');
+  const mirrorUrl = `${mirrorBase}/api/models/${repo}`;
+  let data;
+  let provider = 'huggingface_official_api';
+  try {
+    data = await fetchJson(officialUrl);
+  } catch (officialError) {
+    try {
+      data = await fetchJson(mirrorUrl);
+      provider = 'huggingface_mirror_api';
+    } catch (mirrorError) {
+      throw new Error(`Hugging Face metadata unavailable: official=${officialError?.message || officialError}; mirror=${mirrorError?.message || mirrorError}`);
+    }
+  }
   if (!data?.id) return null;
   const page = `https://huggingface.co/${data.id}`;
   const siblings = Array.isArray(data.siblings) ? data.siblings : [];
@@ -309,7 +322,8 @@ async function lookupHuggingFace(query) {
     `files=${siblings.length}`,
     `sha=${data.sha || ''}`,
   ].filter(Boolean).join('; ');
-  return sourceResult('huggingface_official_api', query, [{ title: data.id, url: page, snippet }], `Hugging Face Hub metadata for ${data.id}: ${data.downloads ?? 0} downloads, ${data.likes ?? 0} likes, ${siblings.length} files; last modified ${data.lastModified || 'unknown'}.`);
+  const routeLabel = provider === 'huggingface_official_api' ? 'official API' : 'domestic mirror API';
+  return sourceResult(provider, query, [{ title: data.id, url: page, snippet }], `Hugging Face Hub metadata via ${routeLabel} for ${data.id}: ${data.downloads ?? 0} downloads, ${data.likes ?? 0} likes, ${siblings.length} files; last modified ${data.lastModified || 'unknown'}; sha ${data.sha || 'unknown'}.`);
 }
 
 // ── arXiv paper metadata ────────────────────────────────────────────

@@ -4,14 +4,15 @@ import {
   shouldPreferWeatherTool,
   shouldPreferExchangeRateTool,
   shouldPreferCalendarTool,
+  shouldPreferStructuredOfficialSearchTool,
 } from './tool-exec/index.js';
 import { providerId, type ChatMessage, type ProviderId } from './types.js';
 
-export type DirectEvidenceKind = 'weather' | 'sports' | 'market' | 'exchange' | 'calendar';
+export type DirectEvidenceKind = 'weather' | 'sports' | 'market' | 'exchange' | 'calendar' | 'official_source';
 
 export interface DirectEvidencePrefetchPlan {
   kind: DirectEvidenceKind;
-  toolName: 'weather' | 'sports_score' | 'stock_market' | 'exchange_rate' | 'calendar';
+  toolName: 'weather' | 'sports_score' | 'stock_market' | 'exchange_rate' | 'calendar' | 'web_search';
   providerId: ProviderId;
   continuationRequirement: string;
 }
@@ -85,6 +86,19 @@ export function buildDirectEvidencePrefetchPlans(
       toolName: 'calendar',
       providerId: STEP_FLASH_PROVIDER_ID,
       continuationRequirement: '【接续要求】上方 calendar 是本轮已经预取的国务院节假日证据。不要再调用工具，直接回答放假和调休日期并保留官方来源。',
+    });
+  }
+
+  if (
+    process.env.BRAIN_V2_DIRECT_STRUCTURED_OFFICIAL_PREFETCH !== '0'
+    && shouldPreferStructuredOfficialSearchTool(intentMessages)
+    && !hasEvidenceLedger(evidenceMessages, 'web_search')
+  ) {
+    plans.push({
+      kind: 'official_source',
+      toolName: 'web_search',
+      providerId: STEP_FLASH_PROVIDER_ID,
+      continuationRequirement: '【接续要求】上方 web_search 是本轮已经预取的结构化官方来源证据。不要再调用其他工具；只基于其中的仓库元数据、论文元数据或地震目录回答，并保留 provider、SHA、日期和来源链接。',
     });
   }
 

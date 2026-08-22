@@ -6,11 +6,33 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { mergePromptAndStdin, runPrompt } from "../src/commands/prompt.js";
+import { __testing__, mergePromptAndStdin, runPrompt } from "../src/commands/prompt.js";
 
 const cliRoot = fileURLToPath(new URL("..", import.meta.url));
 
 describe("prompt stdin handling", () => {
+  it("sends failed local sports and earthquake-news answers back to Brain", () => {
+    expect(__testing__.shouldBypassCliDirectResearchPrefetch("sports", "今天 MLB 有哪些比赛")).toBe(true);
+    expect(__testing__.shouldBypassCliDirectResearchPrefetch("sports", "明天 NHL 有哪些比赛")).toBe(true);
+    expect(__testing__.shouldBypassCliDirectResearchPrefetch("news", "最近中国有地震吗")).toBe(true);
+    expect(__testing__.shouldBypassCliDirectResearchPrefetch("sports", "今晚世界杯有比赛吗")).toBe(false);
+    expect(__testing__.shouldUseCliDirectResearchAnswer(
+      "sports",
+      "今天 MLB 有哪些比赛",
+      "本轮专用体育比分源返回失败，暂未形成可核验比分/赛程结论。",
+    )).toBe(false);
+    expect(__testing__.shouldUseCliDirectResearchAnswer(
+      "news",
+      "最近中国有地震吗",
+      "今天可核验新闻较少，我已自动扩展到最近 7 天。",
+    )).toBe(false);
+    expect(__testing__.shouldUseCliDirectResearchAnswer(
+      "weather",
+      "明天深圳天气如何",
+      "深圳明天雷暴，26-32°C。",
+    )).toBe(true);
+  });
+
   it("uses stdin as the whole prompt for dash", () => {
     expect(mergePromptAndStdin("-", "file body\n")).toBe("file body");
   });

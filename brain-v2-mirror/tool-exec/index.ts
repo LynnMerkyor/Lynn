@@ -307,6 +307,7 @@ const DIRECT_WEATHER_RE = /(?:天气|下雨|降雨|雨吗|气温|温度|预警|�
 const DIRECT_EXCHANGE_RATE_RE = /(?=.*(?:\b[A-Z]{3}\s*[\/-]\s*[A-Z]{3}\b|美元|欧元|英镑|日元|港币|港元|澳元|加元|瑞郎|韩元|新加坡元|泰铢|人民币))(?=.*(?:汇率|兑|换算|外汇|forex|exchange\s*rate|rate|\b[A-Z]{3}\s*[\/-]\s*[A-Z]{3}\b))/i;
 const DIRECT_CALENDAR_RE = /(?:2026|今年).{0,24}(?:放假|假期|节假日|调休|上班|元旦|春节|清明|劳动节|五一|端午|中秋|国庆)|(?:元旦|春节|清明|劳动节|五一|端午|中秋|国庆).{0,24}(?:2026|今年|放假|假期|调休|上班)/i;
 const OFFICIAL_MODEL_RELEASE_RE = /(?:(?:OpenAI|ChatGPT|GPT|Claude|Anthropic).{0,32}(?:模型|model|发布|release|新模型|最新|最近|recent|latest|公开|代)|(?:模型|model|发布|release|新模型|最新|最近|recent|latest|公开|代).{0,32}(?:OpenAI|ChatGPT|GPT|Claude|Anthropic))/i;
+const STRUCTURED_OFFICIAL_SOURCE_RE = /(?:https?:\/\/(?:www\.)?huggingface\.co\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+|https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|pdf)\/\d{4}\.\d{4,5}|\barXiv\s*[:：]?\s*\d{4}\.\d{4,5}|地震|震级|震中|余震|earthquake|seismic)/i;
 const EXPLICIT_NO_TOOL_RE = /(?:不要|别|禁止|无需|不需要)(?:再)?(?:调用|使用|用|开启|触发)?[^。！？!?,，\n]{0,8}(?:任何)?(?:工具|联网|搜索|检索)|(?:without|do\s+not|don't|dont|no)\s+(?:use|using|call|calling)?\s*(?:any\s+)?(?:tools?|web|search)/i;
 
 function latestUserText(messages) {
@@ -355,7 +356,7 @@ export function shouldPreferStockMarketTool(messages) {
     .slice(-1)
     .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''))
     .join('\n');
-  return !DIRECT_EXCHANGE_RATE_RE.test(text) && (
+  return !DIRECT_EXCHANGE_RATE_RE.test(text) && !STRUCTURED_OFFICIAL_SOURCE_RE.test(text) && (
     DIRECT_STOCK_MARKET_RE.test(text)
     || (STOCK_TICKER_RE.test(text) && STOCK_QUOTE_INTENT_RE.test(text))
   );
@@ -395,6 +396,12 @@ export function shouldPreferOfficialModelSearchTool(messages) {
   return OFFICIAL_MODEL_RELEASE_RE.test(text);
 }
 
+export function shouldPreferStructuredOfficialSearchTool(messages) {
+  if (!Array.isArray(messages)) return false;
+  if (shouldSuppressToolsForCurrentTurn(messages)) return false;
+  return STRUCTURED_OFFICIAL_SOURCE_RE.test(latestUserText(messages));
+}
+
 const INHERENTLY_LIVE_LOOKUP_RE = /(?:天气|气温|下雨|降雨|空气质量|AQI|比分|赛程|股价|金价|行情|汇率|快递.{0,8}(?:状态|到哪|进度)|新闻|weather|forecast|air\s*quality|score|fixture|stock\s*price|gold\s*price|exchange\s*rate|tracking|news)/i;
 const EXTERNAL_EVIDENCE_TOOL_NAMES = new Set([
   'web_search',
@@ -424,7 +431,8 @@ export function shouldExposeExternalEvidenceTools(messages) {
     || shouldPreferExchangeRateTool(messages)
     || shouldPreferCalendarTool(messages)
     || shouldPreferWeatherTool(messages)
-    || shouldPreferOfficialModelSearchTool(messages);
+    || shouldPreferOfficialModelSearchTool(messages)
+    || shouldPreferStructuredOfficialSearchTool(messages);
 }
 
 function policyToolName(name) {
@@ -453,6 +461,7 @@ export function mergeWithServerTools(clientTools, messages) {
   const preferCalendar = messages !== undefined && shouldPreferCalendarTool(messages);
   const preferWeather = messages !== undefined && shouldPreferWeatherTool(messages);
   const preferOfficialModelSearch = messages !== undefined && shouldPreferOfficialModelSearchTool(messages);
+  const preferStructuredOfficialSearch = messages !== undefined && shouldPreferStructuredOfficialSearchTool(messages);
   for (const st of SERVER_TOOLS) {
     if (seen.has(policyToolName(st.function.name))) continue;
     if (!allowGated && GATED_TOOLS.has(st.function.name)) continue;
@@ -464,6 +473,7 @@ export function mergeWithServerTools(clientTools, messages) {
     if (preferCalendar && ['web_search', 'web_fetch', 'live_news', 'parallel_research'].includes(st.function.name)) continue;
     if (preferWeather && ['web_search', 'web_fetch', 'live_news', 'calendar', 'parallel_research'].includes(st.function.name)) continue;
     if (preferOfficialModelSearch && ['web_fetch', 'live_news', 'parallel_research', 'calendar'].includes(st.function.name)) continue;
+    if (preferStructuredOfficialSearch && ['web_fetch', 'live_news', 'parallel_research', 'calendar', 'stock_market', 'stock_research', 'sports_score', 'weather', 'exchange_rate', 'express_tracking'].includes(st.function.name)) continue;
     list.push(st);
   }
   // MCP 工具(akshare 等):同步快照注入;预热未完时为空,下一回合自然出现。

@@ -163,6 +163,21 @@ describe('tool-exec dispatcher', () => {
     expect(tools).not.toContain('parallel_research');
   });
 
+  it('routes Hugging Face, arXiv, and earthquake metadata to web_search without stock or news tools', () => {
+    for (const content of [
+      'https://huggingface.co/google/gemma-4-E4B-it 的 SHA 和文件数是多少',
+      '请核验 arXiv 2606.04101 的论文标题',
+      '最近中国有地震吗',
+    ]) {
+      const messages = [{ role: 'user', content }];
+      const tools = mergeWithServerTools([], messages).map((tool) => tool.function.name);
+      expect(tools).toContain('web_search');
+      expect(tools).not.toContain('stock_market');
+      expect(tools).not.toContain('live_news');
+      expect(tools).not.toContain('sports_score');
+    }
+  });
+
   it('prefers the weather tool for direct air quality prompts', () => {
     const messages = [{ role: 'user', content: '北京今天空气质量怎么样？' }];
     const tools = mergeWithServerTools([], messages).map((tool) => tool.function.name);
