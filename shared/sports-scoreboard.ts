@@ -580,7 +580,7 @@ function relativeSportsScopeNote(query: unknown, range: SportsDateRange): string
     return `查询口径: “今晚/今夜”按北京时间 ${start} 晚间至 ${end} 后续赛程处理；不是“昨晚”。`;
   }
   if (/(今天|今日|today)/i.test(text)) {
-    return `查询口径: “今天/今日”按北京时间 ${start} 当日比赛处理。`;
+    return `查询口径: “今天/今日”按北京时间 ${beijingYmd()} 当日比赛处理。`;
   }
   if (/(昨晚|昨天|昨日|yesterday)/i.test(text)) {
     return `查询口径: “昨晚/昨天/昨日”按北京时间 ${start} 至 ${end} 中午前后的已结束比赛处理。`;

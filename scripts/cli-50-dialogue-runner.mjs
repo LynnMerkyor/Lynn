@@ -158,8 +158,8 @@ function gapContainsRelativeLabel(gap) {
 
 function containsMislabeledRelativeDate(prompt, text) {
   if (!/(今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)/.test(prompt)) return false;
-  const labelBeforeDate = /(今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)([^\n。；;，,]{0,32}?)(?:(?:(\d{4})年\s*)?(\d{1,2})月\s*(\d{1,2})日|(\d{4})-(\d{1,2})-(\d{1,2}))/g;
-  const dateBeforeLabel = /(?:(?:(\d{4})年\s*)?(\d{1,2})月\s*(\d{1,2})日|(\d{4})-(\d{1,2})-(\d{1,2}))([^\n。；;，,]{0,32}?)(今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)/g;
+  const labelBeforeDate = /(今天\/今日|今晚\/今夜|明天\/明日|昨晚\/昨天\/昨日|今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)([^\n。；;，,]{0,32}?)(?:(?:(\d{4})年\s*)?(\d{1,2})月\s*(\d{1,2})日|(\d{4})-(\d{1,2})-(\d{1,2}))/g;
+  const dateBeforeLabel = /(?:(?:(\d{4})年\s*)?(\d{1,2})月\s*(\d{1,2})日|(\d{4})-(\d{1,2})-(\d{1,2}))([^\n。；;，,]{0,32}?)(今天\/今日|今晚\/今夜|明天\/明日|昨晚\/昨天\/昨日|今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)/g;
   let match;
   while ((match = labelBeforeDate.exec(text))) {
     const label = match[1];

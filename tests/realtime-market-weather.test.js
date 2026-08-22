@@ -611,6 +611,31 @@ describe("realtime market/weather tools", () => {
     }
   });
 
+  it("keeps the visible today scope on the Beijing calendar day while widening the ESPN fetch window", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-08-22T08:45:00+08:00"));
+      vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ events: [] })));
+
+      const prompt = "今天世界杯赛程发我一下";
+      const result = await createSportsScoreTool().execute("test", {
+        query: prompt,
+        maxResults: 5,
+      });
+      const text = result.content[0].text;
+      const answer = buildDirectResearchAnswer("sports", `【体育比分工具资料】\n\n${text}`, prompt);
+
+      expect(text).toContain("dateRange: 20260821-20260823");
+      expect(text).toContain("查询口径: “今天/今日”按北京时间 2026-08-22 当日比赛处理。");
+      expect(text).not.toContain("查询口径: “今天/今日”按北京时间 2026-08-21");
+      expect(answer).toContain("今天没有世界杯比赛");
+      expect(answer).toContain("2026-08-22 当日比赛处理");
+      expect(answer).not.toContain("2026-08-21 当日比赛处理");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("retries transient ESPN scoreboard failures before deferring World Cup schedule answers", async () => {
     vi.useFakeTimers();
     try {
