@@ -134,7 +134,7 @@ export function additionalDialogueQualityReason({ category, prompt, text, hasToo
   if (/(?:^|\n)\s*<[^<>\n]*(?:方案|计划|流程|步骤|回答|思路|分析|总结|大纲|设定|章节规划)[^<>\n]*>\s*/u.test(proseOnly)) {
     return "model-structural-label-visible";
   }
-  if (/<\/?(?:worldbuilding|phase|daily_structure|item|milestone|rules|rule)\b[^>]*>/iu.test(proseOnly)) {
+  if (/<\/?(?:worldbuilding|worldbuilding_table|phase|daily_structure|item|milestone|rules|rule)\b[^>]*>/iu.test(proseOnly)) {
     return "model-structural-tag-visible";
   }
   if (/(?:A\s*股|a\s*股).{0,16}异动|异动.{0,16}(?:A\s*股|a\s*股)/u.test(String(prompt || ""))

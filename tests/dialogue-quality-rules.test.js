@@ -52,6 +52,12 @@ describe("dialogue quality rules", () => {
       text: '```xml\n<phase name="Foundation">每天练习</phase>\n```',
       hasToolEvidence: false,
     })).toBe("");
+    expect(additionalDialogueQualityReason({
+      category: "writing",
+      prompt: "整理一个世界观设定表",
+      text: '<worldbuilding_table>\n| 阶层 | 货币 |\n</worldbuilding_table>',
+      hasToolEvidence: false,
+    })).toBe("model-structural-tag-visible");
   });
 
   it("requires a sample boundary for A-share anomaly snapshots", () => {

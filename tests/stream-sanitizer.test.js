@@ -314,6 +314,28 @@ describe("stream sanitizer · cross-chunk carry buffer", () => {
     expect(result.suppressed).toBe(true);
   });
 
+  it("strips worldbuilding table wrappers while preserving the Markdown table", () => {
+    const ss = {};
+    const result = stripStreamingPseudoToolBlocks(
+      ss,
+      "<worldbuilding_table>\n| 阶层 | 货币 |\n|---|---|\n| 底层 | 信用点 |\n</worldbuilding_table>",
+    );
+
+    expect(result.text).toContain("| 阶层 | 货币 |");
+    expect(result.text).not.toContain("worldbuilding_table");
+    expect(result.suppressed).toBe(true);
+  });
+
+  it("withholds a split worldbuilding table wrapper", () => {
+    const ss = {};
+    const first = stripStreamingPseudoToolBlocks(ss, "<worldbuilding_");
+    const second = stripStreamingPseudoToolBlocks(ss, "table>正文</worldbuilding_table>");
+
+    expect(first).toEqual({ text: "", suppressed: false });
+    expect(second).toEqual({ text: "正文", suppressed: true });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
   it("withholds split visible planning tags across chunks", () => {
     const ss = {};
     const r1 = stripStreamingPseudoToolBlocks(ss, "正文\n<st");
