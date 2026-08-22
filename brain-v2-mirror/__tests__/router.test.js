@@ -61,6 +61,8 @@ beforeEach(() => {
   process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH = '0';
   process.env.BRAIN_V2_DIRECT_MARKET_PREFETCH = '0';
   process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH = '0';
+  process.env.BRAIN_V2_DIRECT_EXCHANGE_PREFETCH = '0';
+  process.env.BRAIN_V2_DIRECT_CALENDAR_PREFETCH = '0';
   process.env.BRAIN_V2_DIRECT_OFFICIAL_MODEL_PREFETCH = '0';
   webSearchTesting.cache.clear();
   webSearchTesting.structuredCache.clear();
@@ -88,6 +90,8 @@ afterEach(() => {
   delete process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH;
   delete process.env.BRAIN_V2_DIRECT_MARKET_PREFETCH;
   delete process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH;
+  delete process.env.BRAIN_V2_DIRECT_EXCHANGE_PREFETCH;
+  delete process.env.BRAIN_V2_DIRECT_CALENDAR_PREFETCH;
   delete process.env.BRAIN_V2_LOCAL_PROBE_TIMEOUT_COOLDOWN_MS;
   delete process.env.BRAIN_V2_LOCAL_PROBE_THROW_COOLDOWN_MS;
   delete process.env.BRAIN_V2_LOCAL_PROBE_4XX_COOLDOWN_MS;
@@ -1559,6 +1563,107 @@ describe('Router', () => {
     expect(promptText).toContain('stock_market');
     expect(promptText).toContain('纳斯达克');
     expect(promptText).toContain('26166.60');
+  });
+
+  it('answers exchange-rate prompts directly from Sina and ECB evidence', async () => {
+    process.env.BRAIN_V2_DIRECT_EXCHANGE_PREFETCH = '1';
+    const chunks = [];
+    const fields = Array(18).fill('');
+    fields[0] = '02:52:27';
+    fields[1] = '6.7118';
+    fields[10] = '0';
+    fields[11] = '0';
+    fields[17] = '2026-08-22';
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (String(url).includes('hq.sinajs.cn')) {
+        return { ok: true, status: 200, text: async () => `var hq_str_fx_susdcny="${fields.join(',')}";` };
+      }
+      if (String(url).includes('data-api.ecb.europa.eu')) {
+        return { ok: true, status: 200, text: async () => 'CURRENCY,TIME_PERIOD,OBS_VALUE\nUSD,2026-08-21,1.2\nCNY,2026-08-21,8.4\n' };
+      }
+      throw new Error(`unexpected url ${url}`);
+    }));
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'provider should not run' };
+    };
+
+    const result = await run({
+      messages: [{ role: 'user', content: '现在 USD/CNY 是多少？请区分市场快照与官方参考汇率。' }],
+      onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'step-3.7-flash', iterations: 0 });
+    expect(mockState.adapterCalls).toEqual([]);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'exchange_rate' && chunk.event === 'end')).toBe(true);
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toContain('provider: sina_fx');
+    expect(visible).toContain('provider: ecb_official');
+    expect(visible).toContain('市场快照用于观察当前报价');
+  });
+
+  it('answers official holiday prompts directly from State Council evidence', async () => {
+    process.env.BRAIN_V2_DIRECT_CALENDAR_PREFETCH = '1';
+    const chunks = [];
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'provider should not run' };
+    };
+
+    const result = await run({
+      messages: [{ role: 'user', content: '2026年国庆节怎么调休？' }],
+      onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'step-3.7-flash', iterations: 0 });
+    expect(mockState.adapterCalls).toEqual([]);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'calendar' && chunk.event === 'end')).toBe(true);
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).toContain('10月1日至7日');
+    expect(visible).toContain('9月20日（周日）、10月10日（周六）上班');
+    expect(visible).toContain('gov.cn');
+  });
+
+  it('answers MLB schedule prompts directly from the official Stats API', async () => {
+    process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH = '1';
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-22T04:00:00Z'));
+    const chunks = [];
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        dates: [{ games: [{
+          gameDate: '2026-08-22T01:10:00Z',
+          status: { abstractGameState: 'Final', detailedState: 'Final' },
+          teams: {
+            away: { score: 3, team: { name: 'Away Club' } },
+            home: { score: 2, team: { name: 'Home Club' } },
+          },
+        }] }],
+      }),
+    })));
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'provider should not run' };
+    };
+
+    try {
+      const result = await run({
+        messages: [{ role: 'user', content: '今天 MLB 有哪些比赛？' }],
+        onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
+      });
+
+      expect(result).toMatchObject({ ok: true, providerId: 'step-3.7-flash', iterations: 0 });
+      expect(mockState.adapterCalls).toEqual([]);
+      expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'sports_score' && chunk.event === 'end')).toBe(true);
+      const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+      expect(visible).toContain('provider: mlb_official');
+      expect(visible).toContain('Away Club 3-2 Home Club');
+      expect(visible).toContain('statsapi.mlb.com');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('answers air quality prompts directly from weather evidence without provider inference', async () => {

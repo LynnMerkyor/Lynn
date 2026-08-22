@@ -283,6 +283,80 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
     expect(global.fetch.mock.calls[0][0]).toContain('site.api.espn.com');
   });
 
+  it('uses MLB official Stats API when web_search receives an MLB schedule query', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-22T04:00:00Z'));
+    try {
+      global.fetch = vi.fn().mockResolvedValueOnce(jsonResp({
+        dates: [{
+          games: [{
+            gameDate: '2026-08-22T01:10:00Z',
+            status: { abstractGameState: 'Final', detailedState: 'Final' },
+            teams: {
+              away: { score: 3, team: { name: 'Away Club' } },
+              home: { score: 2, team: { name: 'Home Club' } },
+            },
+          }],
+        }],
+      }));
+
+      const r = await webSearchStructured('今天MLB有哪些比赛？');
+
+      expect(r.ok).toBe(true);
+      expect(r.provider).toBe('mlb_official');
+      expect(r.summary).toContain('北京时间查询日期: 2026-08-22');
+      expect(r.summary).toContain('Away Club 3-2 Home Club');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch.mock.calls[0][0]).toContain('statsapi.mlb.com');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses Sina and ECB FX sources when web_search receives an exchange-rate query', async () => {
+    const fields = Array(18).fill('');
+    fields[0] = '02:52:27';
+    fields[1] = '6.7118';
+    fields[10] = '0';
+    fields[11] = '0';
+    fields[17] = '2026-08-22';
+    global.fetch = vi.fn().mockImplementation(async (url) => {
+      if (String(url).includes('hq.sinajs.cn')) {
+        return { ok: true, status: 200, text: async () => `var hq_str_fx_susdcny="${fields.join(',')}";` };
+      }
+      if (String(url).includes('data-api.ecb.europa.eu')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => 'CURRENCY,TIME_PERIOD,OBS_VALUE\nUSD,2026-08-21,1.2\nCNY,2026-08-21,8.4\n',
+        };
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    const r = await webSearchStructured('现在 USD/CNY 是多少？');
+
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('sina_fx+ecb_official');
+    expect(r.summary).toContain('1 美元 = 6.7118 人民币');
+    expect(r.summary).toContain('USD/CNY: 1 USD = 7 CNY');
+    expect(r.items).toHaveLength(2);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the State Council holiday source when web_search receives a 2026 holiday query', async () => {
+    global.fetch = vi.fn();
+
+    const r = await webSearchStructured('2026年国庆节怎么调休？');
+
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('gov_cn_official');
+    expect(r.summary).toContain('10月1日至7日');
+    expect(r.summary).toContain('9月20日（周日）、10月10日（周六）上班');
+    expect(r.items[0].url).toContain('gov.cn');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('formats source-grade searches with a generic evidence policy hint', async () => {
     global.fetch = vi.fn().mockResolvedValueOnce(mimoResp('MiMo citation answer', 'https://sports.example/game'));
 

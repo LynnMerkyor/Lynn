@@ -12,7 +12,7 @@ import {
   normalizeSearchQueryIntent,
 } from "../evidence-quality.js";
 import { makeLruCache } from "./_helpers.js";
-import { sportsScore } from "./utility.js";
+import { calendar, exchangeRate, sportsScore } from "./utility.js";
 import { lookupOfficialSources } from "./official-source-mesh.js";
 const cache = makeLruCache(200, 5 * 60 * 1e3);
 const structuredCache = makeLruCache(200, 5 * 60 * 1e3);
@@ -591,8 +591,19 @@ function refineStructuredResultForQuery(query, value) {
 }
 function shouldUseDirectSportsScoreboard(query) {
   const q = String(query || "");
-  if (!isSportsScoreOrScheduleQuery(q) || isSportsPredictionQuery(q)) return false;
+  const knownOfficialLeague = /(?:\bMLB\b|美国职业棒球|美职棒|大联盟|\bNHL\b|国家冰球联盟|北美冰球|冰球联盟)/i.test(q);
+  if ((!isSportsScoreOrScheduleQuery(q) && !knownOfficialLeague) || isSportsPredictionQuery(q)) return false;
   return /(今晚|今夜|今天|今日|昨晚|昨天|昨日|明天|明日|已出|已经|比分|赛果|结果|完赛|半决赛|准决赛|四分之一决赛|八强|决赛|today|tonight|yesterday|tomorrow|score|result|final|semifinal|semi-final|quarterfinal)/i.test(q);
+}
+function shouldUseDirectExchangeRate(query) {
+  const q = String(query || "");
+  const hasPair = /\b[A-Z]{3}\s*[\/-]\s*[A-Z]{3}\b/i.test(q)
+    || /美元|欧元|英镑|日元|港币|港元|澳元|加元|瑞郎|韩元|新加坡元|泰铢|人民币/i.test(q);
+  return hasPair && /汇率|兑|换算|外汇|forex|exchange\s*rate|rate|[A-Z]{3}\s*[\/-]\s*[A-Z]{3}/i.test(q);
+}
+function shouldUseOfficialCalendar(query) {
+  const q = String(query || "");
+  return /(?:2026|今年).{0,24}(?:放假|假期|节假日|调休|上班|元旦|春节|清明|劳动节|五一|端午|中秋|国庆)|(?:元旦|春节|清明|劳动节|五一|端午|中秋|国庆).{0,24}(?:2026|今年|放假|假期|调休|上班)/i.test(q);
 }
 function isUsableStructuredResult(value) {
   const items = usefulItems(value?.items);
@@ -695,6 +706,20 @@ async function webSearchStructured(query, { log } = {}) {
   if (cached) {
     log && log("info", "tool-exec/web_search_structured cache HIT q=" + q);
     return cached;
+  }
+  if (shouldUseDirectExchangeRate(q)) {
+    const exchangeDirect = await structuredExchangeRateFallback(q, [], { log });
+    if (exchangeDirect) {
+      structuredCache.set(q.toLowerCase(), exchangeDirect);
+      return exchangeDirect;
+    }
+  }
+  if (shouldUseOfficialCalendar(q)) {
+    const calendarDirect = await structuredCalendarFallback(q, [], { log });
+    if (calendarDirect) {
+      structuredCache.set(q.toLowerCase(), calendarDirect);
+      return calendarDirect;
+    }
   }
   if (shouldUseDirectSportsScoreboard(q)) {
     const sportsDirect = await structuredSportsScoreFallback(q, [], { log });
@@ -806,37 +831,84 @@ async function webSearchStructured(query, { log } = {}) {
   structuredCache.set(q.toLowerCase(), result);
   return result;
 }
+function structuredKnownToolText(query, text, acceptedProviders, previousSources = []) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed?.error || parsed?.ok === false || parsed?.directSourceStatus === "unavailable") return null;
+  } catch {
+    // formatted evidence
+  }
+  const providers = [...trimmed.matchAll(/^provider:\s*([^\n]+)$/gim)]
+    .map((match) => String(match[1] || "").trim())
+    .filter((provider) => acceptedProviders.has(provider));
+  if (!providers.length) return null;
+  const urls = [...trimmed.matchAll(/^source:\s*(.+)$/gim)]
+    .flatMap((match) => String(match[1] || "").split(/\s*\|\s*/u))
+    .map((url) => url.trim())
+    .filter((url) => /^https?:\/\//i.test(url));
+  if (!urls.length) return null;
+  const provider = [...new Set(providers)].join("+");
+  const items = [...new Set(urls)].map((url, index) => ({
+    title: `${provider} official source${urls.length > 1 ? ` ${index + 1}` : ""}`,
+    url,
+    snippet: trimmed.replace(/\s+/g, " ").slice(0, 240),
+  }));
+  return {
+    ok: true,
+    query,
+    evidencePolicy: classifySearchEvidencePolicy(query),
+    provider,
+    items,
+    summary: trimmed,
+    sources: [
+      ...(Array.isArray(previousSources) ? previousSources : []),
+      { name: provider, ok: true, items, summary: trimmed },
+    ],
+  };
+}
+async function structuredExchangeRateFallback(query, previousSources, { log } = {}) {
+  try {
+    const result = structuredKnownToolText(
+      query,
+      await exchangeRate(query),
+      new Set(["sina_fx", "ecb_official"]),
+      previousSources,
+    );
+    if (result) log && log("info", `tool-exec/web_search_structured exchange fallback source=${result.provider} q=${query}`);
+    return result;
+  } catch (error) {
+    log && log("warn", "tool-exec/web_search_structured exchange fallback failed: " + (error?.message || String(error)));
+    return null;
+  }
+}
+async function structuredCalendarFallback(query, previousSources, { log } = {}) {
+  try {
+    const result = structuredKnownToolText(
+      query,
+      calendar(query),
+      new Set(["gov_cn_official"]),
+      previousSources,
+    );
+    if (result) log && log("info", `tool-exec/web_search_structured calendar fallback source=${result.provider} q=${query}`);
+    return result;
+  } catch (error) {
+    log && log("warn", "tool-exec/web_search_structured calendar fallback failed: " + (error?.message || String(error)));
+    return null;
+  }
+}
 async function structuredSportsScoreFallback(query, previousSources, { log } = {}) {
   try {
     const text = await sportsScore(query);
-    const trimmed = String(text || "").trim();
-    if (!trimmed) return null;
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (parsed?.error || parsed?.status === "no_direct_source" || parsed?.status === "no_score_events") return null;
-    } catch {
-      // formatted sports evidence
-    }
-    if (!/^provider:\s*espn_scoreboard/im.test(trimmed)) return null;
-    const source = trimmed.match(/^source:\s*(.+)$/im)?.[1]?.trim() || "https://site.api.espn.com/";
-    const item = {
-      title: "ESPN scoreboard",
-      url: source,
-      snippet: trimmed.replace(/\s+/g, " ").slice(0, 240)
-    };
-    log && log("info", "tool-exec/web_search_structured sports fallback source=espn_scoreboard q=" + query);
-    return {
-      ok: true,
+    const result = structuredKnownToolText(
       query,
-      evidencePolicy: classifySearchEvidencePolicy(query),
-      provider: "espn_scoreboard",
-      items: [item],
-      summary: trimmed,
-      sources: [
-        ...(Array.isArray(previousSources) ? previousSources : []),
-        { name: "espn_scoreboard", ok: true, items: [item], summary: trimmed }
-      ]
-    };
+      text,
+      new Set(["espn_scoreboard", "mlb_official", "nhl_official"]),
+      previousSources,
+    );
+    if (result) log && log("info", `tool-exec/web_search_structured sports fallback source=${result.provider} q=${query}`);
+    return result;
   } catch (error) {
     log && log("warn", "tool-exec/web_search_structured sports fallback failed: " + (error?.message || String(error)));
     return null;
@@ -918,7 +990,9 @@ const __testing__ = {
   classifySearchEvidencePolicy,
   isSportsScoreOrScheduleQuery,
   buildEvidencePolicyHint,
-  needsSourceGradeEvidence
+  needsSourceGradeEvidence,
+  shouldUseDirectExchangeRate,
+  shouldUseOfficialCalendar,
 };
 export {
   __testing__,

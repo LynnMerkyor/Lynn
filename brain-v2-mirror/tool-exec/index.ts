@@ -298,12 +298,14 @@ const EXPLICIT_EXTERNAL_LOOKUP_RE = /(?:(?<!检)(?<!复)查|查询|搜索(?!结�
 const INTERNAL_SEARCH_FAILURE_RE = /(?:三次|多次|几次)?搜索(?:都)?没(?:有)?结果|搜索失败|工具成功但最后可能空答/i;
 const CODE_SNIPPET_TOOL_SUPPRESS_RE = /(?:写|给|提供|生成|解释).{0,40}(?:TypeScript|JavaScript|Node\.?js|CSS|bash|shell|zod|Electron|React|useMemo|Vitest|JSON\s*schema|IPC\s*handler|函数|schema|伪代码|布局|beforeEach|命令|行数|wc|find)/i;
 const CODE_EXECUTION_RE = /(?:运行|执行|帮我跑|实际跑|检查|验证|写入|保存到|创建文件|改文件|run|execute|write\s+to|save\s+to|create\s+file)/i;
-const DIRECT_SPORTS_SCORE_RE = /(?=.*(?:世界杯|世足|FIFA|NBA|足球|篮球|网球|F1|体育))(?=.*(?:赛程|比分|赛果|几场|对阵|比赛|夺冠|预测|score|fixture|match|predict))/i;
+const DIRECT_SPORTS_SCORE_RE = /(?=.*(?:世界杯|世足|FIFA|NBA|MLB|NHL|美国职业棒球|美职棒|大联盟|国家冰球联盟|冰球|足球|篮球|棒球|网球|F1|体育))(?=.*(?:赛程|比分|赛果|几场|对阵|比赛|夺冠|预测|score|fixture|match|predict))/i;
 const DIRECT_STOCK_MARKET_RE = /(?=.*(?:指数|股票|股价|行情|金价|黄金|原油|基金|汇率|加密货币|比特币|stock|market|index|gold|oil|fund|forex|crypto))(?=.*(?:点位|多少|最新|行情|涨跌|收盘|现在|价格|股价|报价|quote|price|level))/i;
 const STOCK_TICKER_RE = /\b[A-Z]{2,6}\b/;
 const STOCK_QUOTE_INTENT_RE = /(?:点位|多少|最新|行情|涨跌|收盘|现在|价格|股价|报价|quote|price|level)/i;
 const DIRECT_AIR_QUALITY_RE = /空气质量|空气污染|AQI|PM\s*2\.?5|PM10|雾霾|霾|air\s*quality|pollution/i;
 const DIRECT_WEATHER_RE = /(?:天气|下雨|降雨|雨吗|气温|温度|预警|暴雨|雷暴|雷电|台风|weather|forecast|rain|alert|warning)/i;
+const DIRECT_EXCHANGE_RATE_RE = /(?=.*(?:\b[A-Z]{3}\s*[\/-]\s*[A-Z]{3}\b|美元|欧元|英镑|日元|港币|港元|澳元|加元|瑞郎|韩元|新加坡元|泰铢|人民币))(?=.*(?:汇率|兑|换算|外汇|forex|exchange\s*rate|rate|\b[A-Z]{3}\s*[\/-]\s*[A-Z]{3}\b))/i;
+const DIRECT_CALENDAR_RE = /(?:2026|今年).{0,24}(?:放假|假期|节假日|调休|上班|元旦|春节|清明|劳动节|五一|端午|中秋|国庆)|(?:元旦|春节|清明|劳动节|五一|端午|中秋|国庆).{0,24}(?:2026|今年|放假|假期|调休|上班)/i;
 const OFFICIAL_MODEL_RELEASE_RE = /(?:(?:OpenAI|ChatGPT|GPT|Claude|Anthropic).{0,32}(?:模型|model|发布|release|新模型|最新|最近|recent|latest|公开|代)|(?:模型|model|发布|release|新模型|最新|最近|recent|latest|公开|代).{0,32}(?:OpenAI|ChatGPT|GPT|Claude|Anthropic))/i;
 const EXPLICIT_NO_TOOL_RE = /(?:不要|别|禁止|无需|不需要)(?:再)?(?:调用|使用|用|开启|触发)?[^。！？!?,，\n]{0,8}(?:任何)?(?:工具|联网|搜索|检索)|(?:without|do\s+not|don't|dont|no)\s+(?:use|using|call|calling)?\s*(?:any\s+)?(?:tools?|web|search)/i;
 
@@ -353,8 +355,22 @@ export function shouldPreferStockMarketTool(messages) {
     .slice(-1)
     .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''))
     .join('\n');
-  return DIRECT_STOCK_MARKET_RE.test(text)
-    || (STOCK_TICKER_RE.test(text) && STOCK_QUOTE_INTENT_RE.test(text));
+  return !DIRECT_EXCHANGE_RATE_RE.test(text) && (
+    DIRECT_STOCK_MARKET_RE.test(text)
+    || (STOCK_TICKER_RE.test(text) && STOCK_QUOTE_INTENT_RE.test(text))
+  );
+}
+
+export function shouldPreferExchangeRateTool(messages) {
+  if (!Array.isArray(messages)) return false;
+  if (shouldSuppressToolsForCurrentTurn(messages)) return false;
+  return DIRECT_EXCHANGE_RATE_RE.test(latestUserText(messages));
+}
+
+export function shouldPreferCalendarTool(messages) {
+  if (!Array.isArray(messages)) return false;
+  if (shouldSuppressToolsForCurrentTurn(messages)) return false;
+  return DIRECT_CALENDAR_RE.test(latestUserText(messages));
 }
 
 export function shouldPreferWeatherTool(messages) {
@@ -405,6 +421,8 @@ export function shouldExposeExternalEvidenceTools(messages) {
     || INHERENTLY_LIVE_LOOKUP_RE.test(text)
     || shouldPreferSportsScoreTool(messages)
     || shouldPreferStockMarketTool(messages)
+    || shouldPreferExchangeRateTool(messages)
+    || shouldPreferCalendarTool(messages)
     || shouldPreferWeatherTool(messages)
     || shouldPreferOfficialModelSearchTool(messages);
 }
@@ -431,6 +449,8 @@ export function mergeWithServerTools(clientTools, messages) {
   const suppressInternalReasoningTools = messages !== undefined && shouldSuppressWebToolsForInternalLynnUx(messages);
   const preferSportsScore = messages !== undefined && shouldPreferSportsScoreTool(messages);
   const preferStockMarket = messages !== undefined && shouldPreferStockMarketTool(messages);
+  const preferExchangeRate = messages !== undefined && shouldPreferExchangeRateTool(messages);
+  const preferCalendar = messages !== undefined && shouldPreferCalendarTool(messages);
   const preferWeather = messages !== undefined && shouldPreferWeatherTool(messages);
   const preferOfficialModelSearch = messages !== undefined && shouldPreferOfficialModelSearchTool(messages);
   for (const st of SERVER_TOOLS) {
@@ -440,6 +460,8 @@ export function mergeWithServerTools(clientTools, messages) {
     if (suppressInternalReasoningTools) continue;
     if (preferSportsScore && ['web_search', 'web_fetch', 'live_news', 'calendar', 'parallel_research'].includes(st.function.name)) continue;
     if (preferStockMarket && ['web_search', 'web_fetch', 'live_news', 'calendar', 'parallel_research'].includes(st.function.name)) continue;
+    if (preferExchangeRate && ['web_search', 'web_fetch', 'live_news', 'calendar', 'parallel_research', 'stock_market'].includes(st.function.name)) continue;
+    if (preferCalendar && ['web_search', 'web_fetch', 'live_news', 'parallel_research'].includes(st.function.name)) continue;
     if (preferWeather && ['web_search', 'web_fetch', 'live_news', 'calendar', 'parallel_research'].includes(st.function.name)) continue;
     if (preferOfficialModelSearch && ['web_fetch', 'live_news', 'parallel_research', 'calendar'].includes(st.function.name)) continue;
     list.push(st);

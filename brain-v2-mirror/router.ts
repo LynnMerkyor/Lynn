@@ -688,6 +688,30 @@ function buildDeterministicSportsFactAnswer(messages: ChatMessage[], promptOverr
   return buildDeterministicSportsEvidenceAnswer(messages, prompt);
 }
 
+function buildDeterministicSportsToolAnswer(query: string, toolResult: unknown): string | null {
+  const raw = String(toolResult || '').trim();
+  if (/^provider:\s*(?:mlb_official|nhl_official)$/im.test(raw) && /^source:\s*https?:\/\//im.test(raw)) return raw;
+  return buildDeterministicSportsFactAnswer([
+    { role: 'user', content: query },
+    { role: 'tool', content: raw },
+  ], query);
+}
+
+function buildDeterministicExchangeAnswer(query: string, toolResult: unknown): string | null {
+  if (!/\b[A-Z]{3}\s*[\/-]\s*[A-Z]{3}\b/i.test(query)
+    && !/(?:美元|欧元|英镑|日元|港币|港元|澳元|加元|瑞郎|韩元|人民币).{0,24}(?:汇率|兑|外汇|换算)|(?:汇率|外汇|换算).{0,24}(?:美元|欧元|英镑|日元|港币|港元|澳元|加元|瑞郎|韩元|人民币)/i.test(query)) return null;
+  const raw = String(toolResult || '').trim();
+  if (!/^provider:\s*(?:sina_fx|ecb_official)$/im.test(raw) || !/^source:\s*https?:\/\//im.test(raw)) return null;
+  return raw;
+}
+
+function buildDeterministicCalendarAnswer(query: string, toolResult: unknown): string | null {
+  if (!/(?:放假|假期|节假日|调休|上班|元旦|春节|清明|劳动节|五一|端午|中秋|国庆)/i.test(query)) return null;
+  const raw = String(toolResult || '').trim();
+  if (!/^provider:\s*gov_cn_official$/im.test(raw) || !/^source:\s*https?:\/\//im.test(raw)) return null;
+  return raw;
+}
+
 function buildDeterministicAirQualityAnswer(prompt: unknown, result: unknown): string | null {
   const question = String(prompt || '');
   if (!/空气质量|空气污染|AQI|PM\s*2\.?5|PM10|雾霾|霾|air\s*quality|pollution/i.test(question)) return null;
@@ -990,6 +1014,7 @@ const GROUNDED_TOOL_NAMES = new Set([
   'stock_market',
   'weather',
   'exchange_rate',
+  'calendar',
   'parallel_research',
 ]);
 
@@ -1659,10 +1684,11 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
           || buildDeterministicAirQualityAnswer(query, toolResult)
           || buildDeterministicWeatherAnswer(query, toolResult)
         : plan.kind === 'sports'
-          ? (query, toolResult) => buildDeterministicSportsFactAnswer([
-            { role: 'user', content: query },
-            { role: 'tool', content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult) },
-          ], query)
+          ? (query, toolResult) => buildDeterministicSportsToolAnswer(query, toolResult)
+        : plan.kind === 'exchange'
+          ? (query, toolResult) => buildDeterministicExchangeAnswer(query, toolResult)
+        : plan.kind === 'calendar'
+          ? (query, toolResult) => buildDeterministicCalendarAnswer(query, toolResult)
         : undefined,
     });
     if (directResult) return directResult;

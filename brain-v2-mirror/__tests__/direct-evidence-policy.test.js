@@ -5,6 +5,8 @@ const envKeys = [
   'BRAIN_V2_DIRECT_WEATHER_PREFETCH',
   'BRAIN_V2_DIRECT_SPORTS_PREFETCH',
   'BRAIN_V2_DIRECT_MARKET_PREFETCH',
+  'BRAIN_V2_DIRECT_EXCHANGE_PREFETCH',
+  'BRAIN_V2_DIRECT_CALENDAR_PREFETCH',
 ];
 
 afterEach(() => {
@@ -33,6 +35,25 @@ describe('direct evidence prefetch policy', () => {
     ];
 
     expect(buildDirectEvidencePrefetchPlans(intent, evidence)).toEqual([]);
+  });
+
+  it('selects dedicated exchange and official calendar evidence without generic search', () => {
+    expect(buildDirectEvidencePrefetchPlans([
+      { role: 'user', content: '现在 USD/CNY 是多少？' },
+    ])).toEqual([expect.objectContaining({ kind: 'exchange', toolName: 'exchange_rate' })]);
+
+    expect(buildDirectEvidencePrefetchPlans([
+      { role: 'user', content: '2026 年国庆节怎么调休？' },
+    ])).toEqual([expect.objectContaining({ kind: 'calendar', toolName: 'calendar' })]);
+  });
+
+  it('recognizes MLB and NHL as direct sports evidence intents', () => {
+    expect(buildDirectEvidencePrefetchPlans([
+      { role: 'user', content: '今天 MLB 有哪些比赛？' },
+    ])).toEqual([expect.objectContaining({ kind: 'sports', toolName: 'sports_score' })]);
+    expect(buildDirectEvidencePrefetchPlans([
+      { role: 'user', content: '明天 NHL 赛程是什么？' },
+    ])).toEqual([expect.objectContaining({ kind: 'sports', toolName: 'sports_score' })]);
   });
 
   it('does not prefetch realtime evidence when the latest turn explicitly forbids tools', () => {
