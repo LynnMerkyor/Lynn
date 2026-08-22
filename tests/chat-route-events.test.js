@@ -1157,7 +1157,7 @@ describe("chat route event forwarding", () => {
         identifier: "rm",
       }, "/sessions/current.jsonl");
 
-      await vi.advanceTimersByTimeAsync(45_000);
+      await vi.advanceTimersByTimeAsync(45_001);
 
       const visibleText = clients[0].sent
         .filter((evt) => evt.type === "text_delta")
