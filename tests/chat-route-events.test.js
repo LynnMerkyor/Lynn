@@ -1139,7 +1139,7 @@ describe("chat route event forwarding", () => {
     }));
   });
 
-  it("closes a tool authorization turn when no final event arrives after confirmation flow", async () => {
+  windowsCiIt("closes a tool authorization turn when no final event arrives after confirmation flow", async () => {
     vi.useFakeTimers();
     try {
       engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
