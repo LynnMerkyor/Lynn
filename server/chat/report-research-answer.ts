@@ -727,6 +727,26 @@ function buildBoundedSportsNoMatchAnswer(text: string, prompt: string): string {
 
   const league = text.match(/^league:\s*([^\n]+)$/im)?.[1]?.trim() || "相关赛事";
   const leagueLabel = /^FIFA World Cup$/i.test(league) ? "世界杯" : league;
+  const teamLabels: Record<string, string> = {
+    England: "英格兰",
+    Croatia: "克罗地亚",
+    "United States": "美国队",
+    Spain: "西班牙",
+    "Saudi Arabia": "沙特",
+    Belgium: "比利时",
+    Iran: "伊朗",
+    Germany: "德国",
+    Netherlands: "荷兰",
+    Sweden: "瑞典",
+    Japan: "日本",
+    Tunisia: "突尼斯",
+  };
+  const teams = (text.match(/^teams:\s*([^\n]+)$/im)?.[1] || "")
+    .split(",")
+    .map((team) => team.trim())
+    .filter(Boolean)
+    .map((team) => teamLabels[team] || team);
+  const subjectLabel = teams.length ? teams.join("与") : leagueLabel;
   const timeLabel = /(?:今晚|今夜|tonight)/i.test(prompt)
     ? "今晚"
     : /(?:今天|今日|today)/i.test(prompt)
@@ -738,8 +758,11 @@ function buildBoundedSportsNoMatchAnswer(text: string, prompt: string): string {
           : "本轮查询时间范围内";
   const scope = text.match(/^查询口径:\s*([^\n]+)$/im)?.[1]?.trim() || "";
   const source = text.match(/^source:\s*(https?:\/\/\S+)$/im)?.[1] || "";
+  const noMatchLead = teams.length
+    ? `${timeLabel}没有查到${subjectLabel}的比赛。`
+    : `${timeLabel}没有${leagueLabel}比赛。`;
   return [
-    `${timeLabel}没有${leagueLabel}比赛。ESPN scoreboard 按北京时间口径返回 0 场。`,
+    `${noMatchLead}ESPN scoreboard 按北京时间口径返回 0 场。`,
     scope ? `口径：${scope}` : "",
     source ? `来源：${source}` : "",
   ].filter(Boolean).join("\n\n");

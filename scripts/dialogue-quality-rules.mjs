@@ -107,7 +107,7 @@ function isScenarioCategory(category) {
 function hasStaleCrossDomainLeak(prompt, text) {
   const p = String(prompt || "");
   const raw = String(text || "");
-  if (!/(?:世界杯|NBA|金价|股价|天气|汇率|纳斯达克|指数|A\s*股|英伟达|苹果|比特币|BTC|TSLA|特斯拉|日元)/iu.test(p) && /(?:世界杯|NBA\s*总决赛|金价|现货黄金|纳斯达克|英伟达股价)/iu.test(raw)) {
+  if (!/(?:世界杯|NBA|英格兰|克罗地亚|西班牙|沙特|比利时|伊朗|德国|荷兰|瑞典|美国队?|日本|突尼斯|金价|股价|天气|汇率|纳斯达克|指数|A\s*股|英伟达|苹果|比特币|BTC|TSLA|特斯拉|日元)/iu.test(p) && /(?:世界杯|NBA\s*总决赛|金价|现货黄金|纳斯达克|英伟达股价)/iu.test(raw)) {
     return true;
   }
   if (!/(?:ComfyUI|custom_nodes|python\s+main\.py)/iu.test(p) && /(?:ComfyUI|custom_nodes\/foo\.py|python\s+main\.py)/iu.test(raw)) {

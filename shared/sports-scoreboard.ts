@@ -607,12 +607,14 @@ function buildSportsScoreboardResult(input: {
   const selected = (wantsScores ? scoreRows : rows).slice(-24);
   const dateRange = `${range.start}-${range.end}`;
   const scopeNote = relativeSportsScopeNote(query, range);
+  const teams = mentionedWorldCupTeams(query);
   const header = [
     "体育查询结果 (ESPN scoreboard)",
     "provider: espn_scoreboard",
     sourceStatus ? `directSourceStatus: ${sourceStatus}` : "",
     wantsPrediction ? "userIntent: score_prediction" : "",
     `league: ${league.label}`,
+    teams.length ? `teams: ${teams.join(", ")}` : "",
     `source: ${source}`,
     `dateRange: ${dateRange}`,
     "时间口径: 北京时间",
