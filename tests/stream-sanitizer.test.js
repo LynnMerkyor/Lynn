@@ -222,6 +222,26 @@ describe("stream sanitizer · cross-chunk carry buffer", () => {
     expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
   });
 
+  it("withholds and strips a Chinese outline closer split across chunks", () => {
+    const ss = {};
+    const body = stripStreamingPseudoToolBlocks(ss, "正文结束。\n</大纲");
+    const closer = stripStreamingPseudoToolBlocks(ss, ">");
+
+    expect(body).toEqual({ text: "正文结束。\n", suppressed: false });
+    expect(closer).toEqual({ text: "", suppressed: true });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
+  it("withholds a Chinese structural keyword split inside the label", () => {
+    const ss = {};
+    const first = stripStreamingPseudoToolBlocks(ss, "正文结束。\n</大");
+    const second = stripStreamingPseudoToolBlocks(ss, "纲>");
+
+    expect(first).toEqual({ text: "正文结束。\n", suppressed: false });
+    expect(second).toEqual({ text: "", suppressed: true });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
   it("strips a Chinese framework label without changing the answer body", () => {
     const ss = {};
     const result = stripStreamingPseudoToolBlocks(ss, "<STAR 框架：处理线上事故>\n先说明事故影响范围。");

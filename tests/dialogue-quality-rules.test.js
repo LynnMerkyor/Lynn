@@ -85,5 +85,11 @@ describe("dialogue quality rules", () => {
       text: "<大纲>\n## 第一幕\n主角出租了一段记忆。",
       hasToolEvidence: false,
     })).toBe("model-structural-label-visible");
+    expect(additionalDialogueQualityReason({
+      category: "writing",
+      prompt: "设计一个三幕式小说大纲",
+      text: "## 第三幕\n主角找回记忆。\n</大纲>",
+      hasToolEvidence: false,
+    })).toBe("model-structural-label-visible");
   });
 });

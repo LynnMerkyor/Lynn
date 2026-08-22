@@ -39,6 +39,9 @@ const VISIBLE_STRUCTURAL_TAG_NAMES = [
 const VISIBLE_STRUCTURAL_TAG_RE = /<\/?(?:plan|steps|answer|final|response|solution|outline|template|position|cancellation|reviews|worldbuilding|phase|daily_structure|item|milestone|rules|rule)\b[^>]*>/giu;
 const VISIBLE_STRUCTURAL_LABEL_RE = /(^|\n)\s*<[^<>\n]*(?:方案|计划|流程|步骤|回答|思路|分析|总结|大纲|设定|章节规划|框架|plan|steps|answer|final|response|solution|outline|template)[^<>\n]*>\s*/giu;
 const VISIBLE_SNAKE_STRUCTURAL_TAG_RE = /<\/?[a-z][a-z0-9_-]*_(?:checklist|plan|steps|template|outline|summary|answer|flow|process|list)[a-z0-9_-]*>/giu;
+const VISIBLE_CHINESE_STRUCTURAL_TERMS = [
+  "方案", "计划", "流程", "步骤", "回答", "思路", "分析", "总结", "大纲", "设定", "章节规划", "框架",
+] as const;
 
 function readCarry(ss: unknown): string {
   if (ss && typeof ss === "object" && SANITIZER_CARRY_KEY in ss) {
@@ -186,11 +189,24 @@ function findUnresolvedVisibleStructuralTagStart(text: string): number {
   const tail = text.slice(start);
   if (tail.includes(">")) return -1;
   const lower = tail.toLowerCase();
-  return [...VISIBLE_STRUCTURAL_TAG_NAMES, ...INTERNAL_REASONING_TAG_NAMES]
+  const knownEnglishTag = [...VISIBLE_STRUCTURAL_TAG_NAMES, ...INTERNAL_REASONING_TAG_NAMES]
     .some((name) => `<${name}`.startsWith(lower) || `</${name}`.startsWith(lower))
-    || /^<\/?[a-z][a-z0-9_-]*$/iu.test(tail) && tail.includes("_")
-    ? start
-    : -1;
+    || /^<\/?[a-z][a-z0-9_-]*$/iu.test(tail) && tail.includes("_");
+  if (knownEnglishTag) return start;
+
+  // Models also emit Chinese planning wrappers such as <大纲>...</大纲>.
+  // Hold a split opener/closer only when the unfinished label already contains
+  // one of the explicit structural terms, or its final characters are a prefix
+  // of one. Ordinary HTML, JSX and comparison text continue to stream normally.
+  const label = tail.replace(/^<\/?\s*/u, "");
+  const potentialChineseLabel = VISIBLE_CHINESE_STRUCTURAL_TERMS.some((term) => {
+    if (label.includes(term)) return true;
+    for (let length = 1; length < term.length; length += 1) {
+      if (label.endsWith(term.slice(0, length))) return true;
+    }
+    return false;
+  });
+  return potentialChineseLabel ? start : -1;
 }
 
 function stripVisibleStructuralTags(text: string): string {

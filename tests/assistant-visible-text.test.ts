@@ -25,6 +25,7 @@ describe("assistant visible text", () => {
 
   it("removes a model-only Chinese outline label from persisted prose", () => {
     expect(normalizeFinalAnswerText("<大纲>\n## 第一幕\n主角出租了一段记忆。")).toBe("## 第一幕\n主角出租了一段记忆。");
+    expect(normalizeFinalAnswerText("## 第三幕\n主角找回记忆。\n</大纲>")).toBe("## 第三幕\n主角找回记忆。\n");
     expect(normalizeFinalAnswerText("<STAR 框架：处理线上事故>\n先说明事故影响范围。")).toBe("先说明事故影响范围。");
     expect(normalizeFinalAnswerText("```text\n<大纲>\n```" )).toBe("```text\n<大纲>\n```");
   });
