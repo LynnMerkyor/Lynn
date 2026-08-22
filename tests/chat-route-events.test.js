@@ -42,6 +42,14 @@ function waitForAsyncHandlers() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+async function waitForClientEvent(client, predicate, label) {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (client.sent.some(predicate)) return;
+    await Promise.resolve();
+  }
+  throw new Error(`timed out waiting for client event: ${label}`);
+}
+
 describe("chat route event forwarding", () => {
   let subscribed;
   let hub;
@@ -1145,7 +1153,11 @@ describe("chat route event forwarding", () => {
       connections[0].handlers.onMessage({
         data: JSON.stringify({ type: "prompt", text: "删除当前目录下 delete-me.txt，保留 keep.txt" }),
       }, connections[0].client);
-      await vi.advanceTimersByTimeAsync(0);
+      await waitForClientEvent(
+        clients[0],
+        (event) => event.type === "status" && event.isStreaming === true,
+        "streaming status before tool authorization",
+      );
 
       subscribed({
         type: "tool_authorization",
@@ -1156,6 +1168,10 @@ describe("chat route event forwarding", () => {
         category: "delete_files",
         identifier: "rm",
       }, "/sessions/current.jsonl");
+      expect(clients[0].sent).toContainEqual(expect.objectContaining({
+        type: "tool_authorization",
+        confirmId: "confirm-delete",
+      }));
 
       await vi.advanceTimersByTimeAsync(45_001);
 
@@ -1191,7 +1207,11 @@ describe("chat route event forwarding", () => {
       connections[0].handlers.onMessage({
         data: JSON.stringify({ type: "prompt", text: "删除当前目录下 delete-me.txt，保留 keep.txt" }),
       }, connections[0].client);
-      await vi.advanceTimersByTimeAsync(0);
+      await waitForClientEvent(
+        clients[0],
+        (event) => event.type === "status" && event.isStreaming === true,
+        "streaming status before persisted tool authorization",
+      );
 
       subscribed({
         type: "tool_authorization",
