@@ -10,7 +10,7 @@
 <p align="center"><a href="README.md">中文版 (默认)</a> | <strong>English</strong></p>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://github.com/LynnMerkyor/Lynn/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://github.com/MerkyorLynn/Lynn/releases)
 [![HuggingFace Models](https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d)](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
 [![ModelScope Models](https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff)](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
 
@@ -18,7 +18,7 @@
 
 ## Ecosystem Links
 
-- **Source and app**: [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn) · [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases) · [download mirror](https://download.merkyorlynn.com/download.html)
+- **Source and app**: [Primary GitHub repository · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn) · [GitHub mirror · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases) · [download mirror](https://download.merkyorlynn.com/download.html)
 - **Models and GGUF mirrors**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
 - **Recommended edge model**: [ModelScope 27B Coding Q4 MTP GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF) · [HuggingFace 27B Coding Q4 MTP GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
 
@@ -134,13 +134,13 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 - **No feature regression in exchange for a new harness**. Attachments keep the verified Lynn multimodal bridge, `--json` keeps per-tool audit events, `ask`/`never` keep strict approval semantics, and ultra multi-worker tasks keep the original loop. Explicit `--harness codex` is limited to the verified ordinary `yolo/on-failure` path and rejects incompatible combinations; `--harness legacy` pins the original architecture.
 - **GUI and CLI share a terminal run lifecycle** for completed, failed, cancelled, partial, resumable, and tool-ledger state, reducing empty replies, double-finalization, and state left behind after cancellation.
 - **BYOK and Brain retain their routing ownership**. BYOK keeps the user-selected provider/model; StepFun, DeepSeek V4 Flash, MiMo, GLM, and other Brain models remain Brain-routed independently of harness selection.
-- **Windows local GGUF remains bundled** through the v0.86.1 built-in `llama.cpp` runtime and packaged-installer verification gate.
+- **Windows local GGUF works out of the box**. The v0.86.2 Windows installer bundles a pinned `llama.cpp` runtime, required DLLs, its license, and SHA-256 manifest. The release gate extracts the final NSIS payload, loads a real GGUF, and completes two generations.
 
 ```bash
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.2.tgz"
 ```
 
-[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.2)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.2)
 
 </details>
 
@@ -161,7 +161,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz"
 ```
 
-[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.1)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.1)
 
 </details>
 
@@ -182,7 +182,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz"
 ```
 
-[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.0)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.0)
 
 </details>
 
@@ -204,7 +204,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.10.tgz"
 ```
 
-[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.10)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.10)
 
 </details>
 
@@ -222,7 +222,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.8.tgz"
 ```
 
-[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.8)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.8)
 
 </details>
 
@@ -240,7 +240,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.7.tgz"
 ```
 
-[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.7)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.7)
 
 </details>
 
@@ -261,7 +261,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.6.tgz"
 ```
 
-[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.6)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.6)
 
 </details>
 
@@ -280,7 +280,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.5.tgz"
 ```
 
-[Full Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.5)
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.5)
 
 </details>
 
@@ -1083,11 +1083,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases). The V0.86.1 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases). The V0.86.2 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
-**Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases).
+**Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-> **Windows SmartScreen notice:** The v0.86.0 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt for a new release.
+> **Windows SmartScreen notice:** The v0.86.2 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt while the new release builds reputation.
 
 Linux builds are planned.
 
@@ -1150,8 +1150,8 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.86.1 notarized DMG) |
-| macOS (Intel) | Supported (V0.86.1 notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.86.2 notarized DMG) |
+| macOS (Intel) | Supported (V0.86.2 notarized DMG) |
 | Windows | Beta |
 | Linux | Planned |
 | Mobile (PWA) | Planned |
@@ -1183,8 +1183,8 @@ This project is based on the open source work of [liliMozi](https://github.com/l
 
 ## Links
 
-- [Report an Issue](https://github.com/LynnMerkyor/Lynn/issues)
-- [Security](https://github.com/LynnMerkyor/Lynn/security)
-- [Project Repository](https://github.com/LynnMerkyor/Lynn)
+- [Report an Issue](https://github.com/MerkyorLynn/Lynn/issues)
+- [Security](https://github.com/MerkyorLynn/Lynn/security)
+- [Project Repository](https://github.com/MerkyorLynn/Lynn)
 - [Security Policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)

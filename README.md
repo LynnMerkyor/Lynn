@@ -11,10 +11,10 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/LynnMerkyor/Lynn/releases"><img src="https://img.shields.io/badge/App-0.86.2-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/LynnMerkyor/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.86.2-7bcad3" alt="CLI Version"></a>
-  <a href="https://github.com/LynnMerkyor/Lynn/stargazers"><img src="https://img.shields.io/github/stars/LynnMerkyor/Lynn?style=social" alt="Stars"></a>
-  <a href="https://github.com/LynnMerkyor/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.86.2-brightgreen" alt="App Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.86.2-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF"><img src="https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d" alt="HuggingFace Models"></a>
   <a href="https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF"><img src="https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff" alt="ModelScope Models"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
@@ -25,7 +25,7 @@
 
 ## 生态入口
 
-- **源码与应用**: [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn) · [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases) · [国内下载镜像](https://download.merkyorlynn.com/download.html)
+- **源码与应用**: [GitHub 主仓 · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn) · [GitHub 镜像仓 · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases) · [国内下载镜像](https://download.merkyorlynn.com/download.html)
 - **模型与 GGUF 镜像**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
 - **端侧推荐模型**: [ModelScope 27B Coding Q4 MTP GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF) · [HuggingFace 27B Coding Q4 MTP GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
 
@@ -171,13 +171,13 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 - **不牺牲现有能力换新架构**：附件/多模态继续走已验证的 Lynn bridge；`--json` 保留逐工具审计流；`ask`/`never` 保留严格审批语义；ultra 多 worker 继续走原 loop。显式 `--harness codex` 仅允许已验证的普通 `yolo/on-failure` 路径，不兼容组合会明确报错；`--harness legacy` 可固定原架构。
 - **GUI/CLI 共享可终结的运行状态**：CLI 记录 harness 选择；GUI 与 CLI 的 completed、failed、cancelled、partial、resumable 和工具终态使用同一契约，降低空答、重复收尾和取消后残留状态。
 - **BYOK 与 Brain 各自保持原路由职责**：BYOK 仍使用用户配置的 provider/model；StepFun、DeepSeek V4 Flash、MiMo 与 GLM 等 Brain 模型继续由 Brain 路由，不因 harness 选择改变模型归属。
-- **Windows 本地 GGUF 能力继续随包提供**：Windows 安装包沿用 v0.86.1 已修复的内置 `llama.cpp` runtime 与安装包验证门禁。
+- **Windows 本地 GGUF 开箱即用**：v0.86.2 Windows 安装包内置固定版本的 `llama.cpp` runtime、依赖 DLL、许可证与 SHA-256 清单；发布门禁会从最终 NSIS 安装包反解并真实加载 GGUF，连续完成两次生成。
 
 ```bash
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.2.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.2)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.2)
 
 </details>
 
@@ -198,7 +198,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.1.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.1)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.1)
 
 </details>
 
@@ -220,7 +220,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.0.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.0)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.0)
 
 </details>
 
@@ -242,7 +242,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.10.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.10)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.10)
 
 </details>
 
@@ -260,7 +260,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.8.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.8)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.8)
 
 </details>
 
@@ -278,7 +278,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.7.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.7)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.7)
 
 </details>
 
@@ -300,7 +300,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.6.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.6)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.6)
 
 </details>
 
@@ -319,7 +319,7 @@ npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.85.5.tgz"
 ```
 
-[完整 Release Notes →](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.85.5)
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.85.5)
 
 </details>
 
@@ -1374,11 +1374,11 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.dmg`，版本记录见 [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases)。V0.86.1 的 Apple Silicon / Intel DMG 会完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。
+**macOS（Apple Silicon / Intel）**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.dmg`，版本记录见 [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)。V0.86.2 的 Apple Silicon / Intel DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。
 
-**Windows**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.exe`，直接运行；版本记录见 [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases)。
+**Windows**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.exe`，直接运行；版本记录见 [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)。
 
-> **Windows SmartScreen 提示：** V0.86.1 安装包会完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
+> **Windows SmartScreen 提示：** V0.86.2 安装包已完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
 Linux 版本计划中。
 
@@ -1446,8 +1446,8 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（V0.86.1 notarized DMG） |
-| macOS (Intel) | 已支持（V0.86.1 notarized DMG） |
+| macOS (Apple Silicon) | 已支持（V0.86.2 notarized DMG） |
+| macOS (Intel) | 已支持（V0.86.2 notarized DMG） |
 | Windows x64 | Beta |
 | Linux | 计划中 |
 | 移动端 (PWA) | 计划中 |
@@ -1541,8 +1541,8 @@ npm run dist:local            # 仅本地测试包（macOS DMG，跳过公证；
 
 ## 链接
 
-- 📥 [下载最新版](https://download.merkyorlynn.com/download.html) · [GitHub Releases](https://github.com/LynnMerkyor/Lynn/releases)
-- 🐞 [提交 Issue](https://github.com/LynnMerkyor/Lynn/issues)
+- 📥 [下载最新版](https://download.merkyorlynn.com/download.html) · [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)
+- 🐞 [提交 Issue](https://github.com/MerkyorLynn/Lynn/issues)
 - 🔒 [安全政策](SECURITY.md)
 - 🤝 [贡献指南](CONTRIBUTING.md)
-- 📖 [项目仓库](https://github.com/LynnMerkyor/Lynn)
+- 📖 [项目仓库](https://github.com/MerkyorLynn/Lynn)
