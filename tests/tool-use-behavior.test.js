@@ -127,6 +127,19 @@ describe("tool-use behavior resolver", () => {
     }
   });
 
+  it("keeps worldbuilding tables tool-free unless the user asks for a file", () => {
+    const prompt = "帮我整理一个赛博朋克小说的世界观设定表，包含阶层、货币、冲突";
+    const decision = resolveInitialToolUseBehavior(prompt, {
+      modelInfo: { isBrain: true },
+    });
+
+    expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);
+    expect(decision.disableTools).toBe(true);
+    expect(decision.toolName).toBeUndefined();
+    expect(shouldDisableToolsForTurn(prompt)).toBe(true);
+    expect(shouldDisableToolsForTurn(`${prompt}，保存为 Markdown 文件`)).toBe(false);
+  });
+
   it("keeps current law and policy lookup prompts tool-eligible", () => {
     for (const prompt of [
       "查一下深圳 2026 年社保缴费政策有没有最新变化，给来源和不确定点",
