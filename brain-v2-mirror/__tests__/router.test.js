@@ -1663,6 +1663,62 @@ describe('Router', () => {
     }
   });
 
+  it('answers CMA tomorrow forecasts with the requested date and real provider label', async () => {
+    process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH = '1';
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-22T12:50:00.000Z'));
+    mockState.order = ['p-step'];
+    const chunks = [];
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const value = String(url);
+      if (value.includes('weather.cma.cn/api/autocomplete')) {
+        return { ok: true, status: 200, json: async () => ({ code: 0, data: ['59493|深圳|Shenzuo|中国'] }) };
+      }
+      if (value.includes('weather.cma.cn/api/weather/view')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            code: 0,
+            data: {
+              location: { id: '59493', name: '深圳' },
+              now: { temperature: 28, feelst: 33.4, humidity: 93, precipitation: 0.1 },
+              alarm: [{ title: '深圳市气象台发布暴雨橙色预警' }],
+              lastUpdate: '2026/08/22 20:40',
+              daily: [
+                { date: '2026/08/22', high: 32, low: 26, dayText: '雷阵雨', nightText: '中雨' },
+                { date: '2026/08/23', high: 32, low: 25, dayText: '雷阵雨', nightText: '中雨' },
+              ],
+            },
+          }),
+        };
+      }
+      return { ok: false, status: 503, json: async () => ({}) };
+    }));
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: 'should not be called' };
+    };
+
+    try {
+      const result = await run({
+        messages: [{ role: 'user', content: '明天深圳天气如何' }],
+        onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockState.adapterCalls).toEqual([]);
+      const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+      expect(visible).toContain('深圳明天天气：白天雷阵雨 / 夜间中雨，25~32°C');
+      expect(visible).toContain('来源: weather 工具（中国气象局 CMA）');
+      expect(visible).toContain('当前预警: 深圳市气象台发布暴雨橙色预警');
+      expect(visible).not.toContain('目标城市当前天气');
+      expect(visible).not.toContain('weather 工具（wttr.in）');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not prefetch or expose tools when the latest turn explicitly forbids them', async () => {
     process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH = '1';
     mockState.order = ['p-step'];

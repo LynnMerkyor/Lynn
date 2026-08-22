@@ -802,39 +802,82 @@ function buildDeterministicWeatherAnswer(prompt: unknown, result: unknown): stri
   if (/空气质量|空气污染|AQI|PM\s*2\.?5|PM10|雾霾|霾|预警|暴雨预警/i.test(question)) return null;
   const raw = String(result || '');
   if (!/【.+?(?:实时天气|未来天气预报)】|🌡|📅/u.test(raw)) return null;
-  const city = raw.match(/【(.+?)实时天气】/u)?.[1]?.trim() || '目标城市';
+  const city = raw.match(/【(.+?)天气（[^】]+）】/u)?.[1]?.trim()
+    || raw.match(/【(.+?)实时天气】/u)?.[1]?.trim()
+    || '目标城市';
+  const provider = raw.match(/^provider:\s*([^\n]+)/imu)?.[1]?.trim() || 'unknown';
+  const sourceUrl = raw.match(/^source:\s*(https?:\/\/[^\s]+)/imu)?.[1]?.trim();
+  const providerLabel = provider === 'cma'
+    ? '中国气象局 CMA'
+    : provider === 'open-meteo'
+      ? 'Open-Meteo'
+      : provider === 'wttr.in'
+        ? 'wttr.in'
+        : provider;
   const today = beijingYmdForRouter();
-  const targetDate = /明天|明日|tomorrow/i.test(question) ? addDaysYmdForRouter(today, 1) : today;
-  const forecastLines = [...raw.matchAll(/📅\s*(\d{4}-\d{2}-\d{2})[:：]\s*([^,\n]+),\s*([^\n]+)/gu)]
-    .map((match) => ({ date: match[1], weather: match[2].trim(), temp: match[3].trim() }));
+  const dayOffset = /后天|day after tomorrow/i.test(question) ? 2 : /明天|明日|tomorrow/i.test(question) ? 1 : 0;
+  const targetDate = addDaysYmdForRouter(today, dayOffset);
+  const asksTonight = /今晚|今夜|tonight/i.test(question);
+  const periodLabel = asksTonight ? '今晚' : dayOffset === 2 ? '后天' : dayOffset === 1 ? '明天' : '今天';
+  const forecastLines = raw.split(/\r?\n/u)
+    .filter((line) => /^📅\s*/u.test(line))
+    .map((line) => {
+      const cma = line.match(/^📅\s*(\d{4}[/-]\d{2}[/-]\d{2})[:：]\s*白天(.+?)\s*\/\s*夜间(.+?),\s*([^,\n]+)/u);
+      if (cma) {
+        return {
+          date: cma[1].replaceAll('/', '-'),
+          weather: `白天${cma[2].trim()} / 夜间${cma[3].trim()}`,
+          dayWeather: cma[2].trim(),
+          nightWeather: cma[3].trim(),
+          temp: cma[4].trim(),
+        };
+      }
+      const generic = line.match(/^📅\s*(\d{4}[/-]\d{2}[/-]\d{2})[:：]\s*([^,\n]+),\s*([^\n]+)/u);
+      if (!generic) return null;
+      return {
+        date: generic[1].replaceAll('/', '-'),
+        weather: generic[2].trim(),
+        dayWeather: generic[2].trim(),
+        nightWeather: generic[2].trim(),
+        temp: generic[3].trim(),
+      };
+    })
+    .filter((line): line is { date: string; weather: string; dayWeather: string; nightWeather: string; temp: string } => line !== null);
   const target = forecastLines.find((line) => line.date === targetDate) || forecastLines[0];
   const currentWeather = raw.match(/☁\s*天气[:：]\s*([^\n]+)/u)?.[1]?.trim();
   const currentTemp = raw.match(/🌡\s*温度[:：]\s*([^\n]+)/u)?.[1]?.trim();
-  const currentRain = raw.match(/☔\s*降水[:：]\s*([^\n]+)/u)?.[1]?.trim();
+  const currentRain = raw.match(/☔\s*(?:当前)?降水[:：]\s*([^\n]+)/u)?.[1]?.trim();
+  const currentAlert = raw.match(/⚠\s*当前预警[:：]\s*([^\n]+)/u)?.[1]?.trim();
   const asksRain = /下雨|降雨|雨吗|带伞|rain/i.test(question);
   if (target) {
-    const rainy = /雨|雷|阵雨|snow|rain|shower|storm/i.test(target.weather);
+    const targetWeather = asksTonight ? target.nightWeather : target.weather;
+    const rainy = /雨|雷|雪|snow|rain|shower|storm/i.test(targetWeather);
     const first = asksRain
-      ? `${city}${/明天|明日|tomorrow/i.test(question) ? '明天' : '今天'}${rainy ? '有降雨可能' : '未看到明显降雨'}。`
-      : `${city}${/明天|明日|tomorrow/i.test(question) ? '明天' : '今天'}天气：${target.weather}，${target.temp}。`;
+      ? `${city}${periodLabel}${rainy ? '有降水可能' : '未看到明显降水'}。`
+      : `${city}${periodLabel}天气：${targetWeather}，${target.temp}。`;
     return [
       first,
       '',
       `- 日期: ${target.date}`,
-      `- 天气: ${target.weather}`,
+      `- 天气: ${targetWeather}`,
       `- 气温: ${target.temp}`,
       currentWeather ? `- 当前天气: ${currentWeather}` : null,
       currentTemp ? `- 当前温度: ${currentTemp}` : null,
       currentRain ? `- 当前降水: ${currentRain}` : null,
+      currentAlert && currentAlert !== '无' ? `- 当前预警: ${currentAlert}` : null,
       '',
-      '来源: weather 工具（wttr.in）返回的实时天气与未来天气预报。',
+      `来源: weather 工具（${providerLabel}）返回的实时天气与未来天气预报。`,
+      sourceUrl || null,
     ].filter(Boolean).join('\n');
   }
+  if (dayOffset > 0 || asksTonight) return null;
   if (currentWeather || currentTemp || currentRain) {
     return [
       `${city}当前天气：${[currentWeather, currentTemp].filter(Boolean).join('，') || '天气工具已返回实时信息'}。`,
       currentRain ? `当前降水: ${currentRain}` : null,
-      '来源: weather 工具（wttr.in）返回的实时天气。',
+      currentAlert && currentAlert !== '无' ? `当前预警: ${currentAlert}` : null,
+      `来源: weather 工具（${providerLabel}）返回的实时天气。`,
+      sourceUrl || null,
     ].filter(Boolean).join('\n');
   }
   return null;
