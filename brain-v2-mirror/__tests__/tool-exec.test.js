@@ -207,6 +207,37 @@ describe('tool-exec dispatcher', () => {
     expect(jpy).not.toContain('100日元 ≈ 0.042');
   });
 
+  it('adds ECB official daily reference rates without calling them realtime quotes', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (String(url).includes('hq.sinajs.cn')) {
+        return {
+          ok: true,
+          text: async () => 'var hq_str_fx_susdcny="03:00:01,6.7751000000,6.7773000000,6.7783000000,88.0000000000,6.7751000000,6.7793000000,6.7705000000,6.7773000000,美元兑人民币,-0.0148,-0.0010,0.0088,source,0.0000,0.0000,,2026-08-22";',
+        };
+      }
+      if (String(url).includes('data-api.ecb.europa.eu')) {
+        return {
+          ok: true,
+          text: async () => [
+            'KEY,FREQ,CURRENCY,CURRENCY_DENOM,EXR_TYPE,EXR_SUFFIX,TIME_PERIOD,OBS_VALUE',
+            'EXR.D.CNY.EUR.SP00.A,D,CNY,EUR,SP00,A,2026-08-21,7.8624',
+            'EXR.D.USD.EUR.SP00.A,D,USD,EUR,SP00,A,2026-08-21,1.1699',
+          ].join('\n'),
+        };
+      }
+      throw new Error('unexpected url');
+    }));
+
+    const result = await executeServerTool('exchange_rate', { query: 'USD/CNY 汇率' });
+
+    expect(result).toContain('【市场汇率快照】');
+    expect(result).toContain('provider: sina_fx');
+    expect(result).toContain('【ECB 官方参考汇率（日度，非实时成交价）】');
+    expect(result).toContain('provider: ecb_official');
+    expect(result).toContain('USD/CNY: 1 USD = 6.720574 CNY');
+    expect(result).toContain('不能替代银行结售汇或实时成交价');
+  });
+
   it('returns Open-Meteo AQI for air quality prompts without web search fallback', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
@@ -307,6 +338,82 @@ describe('tool-exec dispatcher', () => {
     expect(r).toContain('league: FIFA World Cup');
     expect(r).toContain('Mexico 2-0 South Africa');
     expect(global.fetch.mock.calls[0][0]).toContain('site.api.espn.com');
+  });
+
+  it('uses the official MLB schedule API before the broad ESPN fallback', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-22T04:00:00Z'));
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      expect(String(url)).toContain('statsapi.mlb.com/api/v1/schedule');
+      return {
+        ok: true,
+        json: async () => ({
+          dates: [{ games: [{
+            gamePk: 123,
+            gameDate: '2026-08-21T17:35:00Z',
+            status: { abstractGameState: 'Preview', detailedState: 'Scheduled' },
+            teams: {
+              away: { team: { name: 'Toronto Blue Jays' } },
+              home: { team: { name: 'Baltimore Orioles' } },
+            },
+          }] }],
+        }),
+      };
+    }));
+
+    try {
+      const result = await executeServerTool('sports_score', { query: '今天 MLB 有哪些比赛？' });
+
+      expect(result).toContain('provider: mlb_official');
+      expect(result).toContain('北京时间查询日期: 2026-08-22');
+      expect(result).toContain('Toronto Blue Jays vs Baltimore Orioles');
+      expect(result).not.toContain('espn_scoreboard');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses the official NHL score API for NHL questions', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-07T04:00:00Z'));
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      expect(String(url)).toContain('api-web.nhle.com/v1/score/');
+      return {
+        ok: true,
+        json: async () => ({ games: [{
+          id: 456,
+          startTimeUTC: '2026-10-08T12:00:00Z',
+          gameState: 'FUT',
+          awayTeam: { abbrev: 'BOS' },
+          homeTeam: { abbrev: 'NYR' },
+        }] }),
+      };
+    }));
+
+    try {
+      const result = await executeServerTool('sports_score', { query: '明天 NHL 赛程' });
+
+      expect(result).toContain('provider: nhl_official');
+      expect(result).toContain('北京时间查询日期: 2026-10-08');
+      expect(result).toContain('BOS vs NYR');
+      expect(result).not.toContain('espn_scoreboard');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns the State Council 2026 holiday schedule from the existing calendar tool', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+
+    const result = await executeServerTool('calendar', { query: '2026 国庆节怎么放假调休？' });
+
+    expect(result).toContain('provider: gov_cn_official');
+    expect(result).toContain('10月1日至7日，共7天');
+    expect(result).toContain('9月20日（周日）、10月10日（周六）上班');
+    expect(result).toContain('gov.cn/zhengce/content/202511/content_7047090.htm');
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('filters ESPN scoreboard rows by Beijing tonight window and hides scheduled 0-0 scores', async () => {

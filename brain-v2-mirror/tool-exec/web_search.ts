@@ -13,6 +13,7 @@ import {
 } from "../evidence-quality.js";
 import { makeLruCache } from "./_helpers.js";
 import { sportsScore } from "./utility.js";
+import { lookupOfficialSources } from "./official-source-mesh.js";
 const cache = makeLruCache(200, 5 * 60 * 1e3);
 const structuredCache = makeLruCache(200, 5 * 60 * 1e3);
 const BUDGET_MS = 14e3;
@@ -701,6 +702,17 @@ async function webSearchStructured(query, { log } = {}) {
       structuredCache.set(q.toLowerCase(), sportsDirect);
       return sportsDirect;
     }
+  }
+  const officialSources = await lookupOfficialSources(q, { log });
+  if (officialSources) {
+    const result = {
+      ok: true,
+      query: q,
+      evidencePolicy: classifySearchEvidencePolicy(q),
+      ...officialSources,
+    };
+    structuredCache.set(q.toLowerCase(), result);
+    return result;
   }
   if (isOfficialModelReleaseQuery(q)) {
     const officialModel = await structuredOfficialModelReleaseFallback(q, [], { log });

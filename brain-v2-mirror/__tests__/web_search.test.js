@@ -196,6 +196,24 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('falls back to generic search when a matching official source is unavailable', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'down', json: async () => ({}) })
+      .mockResolvedValueOnce(glmResp({
+        link: 'https://status.example/huggingface-fallback',
+        title: 'Fallback result',
+        content: 'The generic source remains available.',
+      }));
+
+    const r = await webSearchStructured('https://huggingface.co/google/gemma-4-E4B-it 当前信息');
+
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('glm');
+    expect(r.summary).toContain('generic source remains available');
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch.mock.calls[0][0]).toContain('huggingface.co/api/models/google/gemma-4-E4B-it');
+  });
+
   it('uses structured MiMo as primary for source-grade comparative fee research queries', async () => {
     global.fetch = vi.fn().mockResolvedValueOnce(mimoResp('MiMo comparative citation answer', 'https://source.example/research'));
 
