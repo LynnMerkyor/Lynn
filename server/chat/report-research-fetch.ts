@@ -3,7 +3,7 @@ import { createLiveNewsTool, createSportsScoreTool, createWeatherTool } from "..
 import { fetchWebContent } from "../../lib/tools/web-fetch.js";
 import { runSearchQuery } from "../../lib/tools/web-search.js";
 import { buildStructuredSection, extractToolText, parseIndexSnapshot, parseStockSnapshot, parseWeatherSnapshot } from "./report-research-answer.js";
-import { detectPrimaryIndexTarget, extractCompositeWeatherLocation, extractPrimaryUsTicker, extractStockTargetForResearch, extractWeatherLocationForResearch } from "./report-research-intent.js";
+import { detectPrimaryIndexTarget, extractCompositeWeatherLocation, extractFlightWeatherRoute, extractPrimaryUsTicker, extractStockTargetForResearch, extractWeatherLocationForResearch } from "./report-research-intent.js";
 import { currentLynnVersionTag } from "./release-info.js";
 import type { IndexResearchTarget, ReportResearchKind, StockResearchTarget } from "./report-research-intent.js";
 
@@ -858,8 +858,39 @@ async function buildRealtimeToolContext({ title, toolKind, params, timeoutMs = R
   if (!text) return "";
   return [title || "【实时工具资料】", "", text].join("\n").slice(0, MAX_CONTEXT_CHARS);
 }
-function buildWeatherResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
+async function buildWeatherResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const promptText = String(userPrompt || "");
+  const route = extractFlightWeatherRoute(promptText);
+  if (route) {
+    const dayPrefix = /后天/.test(promptText) ? "后天" : /明天/.test(promptText) ? "明天" : /今天|今日/.test(promptText) ? "今天" : "";
+    const locations = [route.origin, route.destination];
+    const settled = await Promise.allSettled(locations.map((location) => executeRealtimeInfoTool(
+      "weather",
+      { query: `${dayPrefix}${location}天气`, location },
+      { ...opts, timeoutMs: resolveTimeout(opts, "realtimeTool", REALTIME_TOOL_TIMEOUT_MS), label: `flight_weather_${location}` },
+    )));
+    const snapshots = settled.map((item, index) => item.status === "fulfilled"
+      ? parseWeatherSnapshotForResearch(item.value, promptText, locations[index])
+      : null);
+    const sections = [
+      "【航班两地天气工具资料】",
+      buildStructuredSectionForResearch("航班天气路线", [
+        ["出发地", route.origin],
+        ["目的地", route.destination],
+      ]),
+    ];
+    const labels = ["出发地天气快照", "目的地天气快照"];
+    snapshots.forEach((snapshot, index) => {
+      sections.push(buildStructuredSectionForResearch(labels[index], [
+        ["地点", locations[index]],
+        ["日期", snapshot?.date || ""],
+        ["天气", snapshot?.desc || ""],
+        ["温度", snapshot?.tempRange || ""],
+        ["状态", snapshot?.date && snapshot?.desc ? "已核验" : "本轮未取得完整预报"],
+      ]));
+    });
+    return sections.join("\n\n").slice(0, MAX_CONTEXT_CHARS);
+  }
   const location = extractWeatherLocationForResearch(userPrompt, "");
   return buildRealtimeToolContext({ title: "【天气工具资料】", toolKind: "weather", params: { query: promptText, location } }, opts);
 }

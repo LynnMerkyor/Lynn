@@ -154,6 +154,51 @@ function parseWeatherSnapshot(result: ToolExecutionResult | null | undefined, us
 function weatherLooksRainy(desc: unknown): boolean {
   return /rain|drizzle|shower|storm|雷|雨|阵雨|降水/i.test(String(desc || ""));
 }
+function localizedWeatherDescription(value: unknown): string {
+  return String(value || "")
+    .replace(/Light rain shower/i, "小阵雨")
+    .replace(/Moderate or heavy rain shower/i, "阵雨")
+    .replace(/Rain shower/i, "阵雨")
+    .replace(/Patchy rain nearby/i, "附近有零星小雨")
+    .replace(/Partly Cloudy/i, "局部多云")
+    .replace(/Sunny/i, "晴")
+    .replace(/Cloudy/i, "多云")
+    .replace(/Overcast/i, "阴")
+    .replace(/Light rain/i, "小雨")
+    .replace(/Moderate rain/i, "中雨")
+    .replace(/Heavy rain/i, "大雨");
+}
+function buildDirectFlightWeatherAnswer(context: unknown): string {
+  const route = parseStructuredFields(extractStructuredContextSection(context, "航班天气路线"));
+  if (!route["出发地"] || !route["目的地"]) return "";
+  const origin = parseStructuredFields(extractStructuredContextSection(context, "出发地天气快照"));
+  const destination = parseStructuredFields(extractStructuredContextSection(context, "目的地天气快照"));
+  const snapshotLine = (label: string, snapshot: Record<string, string>): string => {
+    if (!snapshot["日期"] || !snapshot["天气"]) return `- ${label}：本轮未取得完整预报，请出发前再核验。`;
+    return `- ${label} ${snapshot["日期"]}：${localizedWeatherDescription(snapshot["天气"])}，${snapshot["温度"] || "温度数据暂缺"}`;
+  };
+  const bothWeather = `${origin["天气"] || ""} ${destination["天气"] || ""}`;
+  const rainy = weatherLooksRainy(bothWeather);
+  const originRange = parseTempRange(origin["温度"]);
+  const destinationRange = parseTempRange(destination["温度"]);
+  const lows = [originRange.min, destinationRange.min].filter((value): value is number => value !== null && Number.isFinite(value));
+  const highs = [originRange.max, destinationRange.max].filter((value): value is number => value !== null && Number.isFinite(value));
+  const min = lows.length ? Math.min(...lows) : null;
+  const max = highs.length ? Math.max(...highs) : null;
+  const clothing = min !== null && min < 18
+    ? "穿衣建议：短袖或薄长袖打底，随身带一件轻薄外套；两地有温差时方便增减。"
+    : max !== null && max >= 30
+      ? "穿衣建议：以透气短袖为主，随身带一件轻薄外套应对机舱空调。"
+      : "穿衣建议：薄长袖或短袖加轻薄外套，方便适应两地和机舱温差。";
+  return [
+    `${route["出发地"]} → ${route["目的地"]} 两地天气：`,
+    snapshotLine("出发地", origin),
+    snapshotLine("目的地", destination),
+    rainy ? "天气风险：两地预报中有降雨信号，路面、进场交通和航班放行可能受影响；出发前再看雷达和航司动态。" : "天气风险：两地预报暂未显示明显降雨，但仍应在出发前复核雷达和航司动态。",
+    clothing,
+    `到机场建议：若为国内航班且航司没有更早要求，建议至少提前 2 小时到达；${rainy ? "再额外预留 30 分钟地面交通机动。" : "早高峰或托运行李较多时再加 20-30 分钟。"}`,
+  ].join("\n");
+}
 function parseTempRange(value: unknown): TempRange {
   const match = String(value || "").match(/(-?\d+)\s*~\s*(-?\d+)/);
   if (!match) return { min: null, max: null };
@@ -463,18 +508,7 @@ function buildDirectWeatherAnswer(context: unknown, userPrompt: string = ""): st
     ].join("\n");
   }
   const rainy = weatherLooksRainy(picked.desc);
-  const desc = String(picked.desc || "")
-    .replace(/Light rain shower/i, "小阵雨")
-    .replace(/Moderate or heavy rain shower/i, "阵雨")
-    .replace(/Rain shower/i, "阵雨")
-    .replace(/Patchy rain nearby/i, "附近有零星小雨")
-    .replace(/Partly Cloudy/i, "局部多云")
-    .replace(/Sunny/i, "晴")
-    .replace(/Cloudy/i, "多云")
-    .replace(/Overcast/i, "阴")
-    .replace(/Light rain/i, "小雨")
-    .replace(/Moderate rain/i, "中雨")
-    .replace(/Heavy rain/i, "大雨");
+  const desc = localizedWeatherDescription(picked.desc);
   const rainText = /下雨|降雨|降水/.test(userPrompt)
     ? `降雨判断：${rainy ? "有降雨可能" : "未显示明显降雨"}。`
     : "";
@@ -1200,7 +1234,7 @@ export function buildDirectResearchAnswer(kind: ResearchAnswerKind, context: unk
     }
   }
   if (kind === "weather") {
-    answer = buildDirectWeatherAnswer(context, prompt);
+    answer = buildDirectFlightWeatherAnswer(context) || buildDirectWeatherAnswer(context, prompt);
     return appendEvidenceBlock(answer, { kind, context, userPrompt: prompt });
   }
   if (kind === "news" && /新闻|消息|今日|今天|最新|最近|发布|进展/.test(prompt)) {

@@ -125,6 +125,15 @@ function hasStaleCrossDomainLeak(prompt, text) {
   return false;
 }
 
+function flightWeatherMissingRouteCity(prompt, text) {
+  if (!/(?:天气|气温|温度|预报|下雨|降雨|穿衣|机场)/u.test(String(prompt || ""))) return false;
+  const cities = "北京|上海|广州|深圳|杭州|南京|苏州|成都|重庆|武汉|西安|长沙|郑州|青岛|厦门|福州|宁波|佛山|东莞|珠海|香港|澳门";
+  const route = String(prompt || "").match(new RegExp(`(${cities})(?:市)?(?:飞往|飞|到|前往)(${cities})(?:市)?`, "u"));
+  if (!route) return false;
+  const answer = String(text || "");
+  return !answer.includes(route[1]) || !answer.includes(route[2]);
+}
+
 export function additionalDialogueQualityReason({ category, prompt, text, hasToolEvidence }) {
   const rawText = String(text || "");
   const proseOnly = rawText.replace(/```[\s\S]*?```/g, "");
@@ -143,6 +152,9 @@ export function additionalDialogueQualityReason({ category, prompt, text, hasToo
   }
   if (hasStaleCrossDomainLeak(prompt, rawText)) {
     return "answer-leaked-unrelated-domain-context";
+  }
+  if (flightWeatherMissingRouteCity(prompt, rawText)) {
+    return "flight-weather-answer-missing-route-city";
   }
   if (requiresFreshEvidenceForDialogue({ category, prompt }) && !hasToolEvidence && !hasHonestNoEvidenceAnswer(rawText)) {
     return "fresh-evidence-question-without-tool-event";

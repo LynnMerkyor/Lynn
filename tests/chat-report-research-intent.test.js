@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  extractFlightWeatherRoute,
   extractStockTargetForResearch,
   inferKind,
   inferReportResearchKind,
@@ -27,6 +28,14 @@ describe("report research intent module", () => {
     expect(inferReportResearchKind("上海明天下雨吗？")).toBe("weather");
     expect(inferReportResearchKind("今天金价如何")).toBe("market");
     expect(inferReportResearchKind("帮我研究一下这个品牌在日本市场的竞品和价格区间")).toBe("generic");
+  });
+
+  it("extracts both ends of a flight weather route", () => {
+    expect(extractFlightWeatherRoute("明天上海飞北京，帮我查天气风险并给穿衣和到机场建议")).toEqual({
+      origin: "上海",
+      destination: "北京",
+    });
+    expect(extractFlightWeatherRoute("深圳明天下雨吗？")).toBeNull();
   });
 
   it("routes daily public-policy and travel requirements into evidence-backed public data", () => {

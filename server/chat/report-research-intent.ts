@@ -29,6 +29,11 @@ export interface AirportCityHint {
   city: string;
 }
 
+export interface FlightWeatherRoute {
+  origin: string;
+  destination: string;
+}
+
 export interface ReportResearchIntent {
   kind: ReportResearchKind;
   target?: StockResearchTarget;
@@ -85,6 +90,10 @@ const AIRPORT_CITY_HINTS: AirportCityHint[] = [
   { re: /首都机场|大兴/, city: "北京" },
   { re: /白云机场/, city: "广州" },
   { re: /宝安机场/, city: "深圳" },
+];
+const FLIGHT_WEATHER_CITIES = [
+  "北京", "上海", "广州", "深圳", "杭州", "南京", "苏州", "成都", "重庆", "武汉", "西安",
+  "长沙", "郑州", "青岛", "厦门", "福州", "宁波", "佛山", "东莞", "珠海", "香港", "澳门",
 ];
 export function extractStockTargetForResearch(text: unknown): StockResearchTarget {
   const source = String(text || "");
@@ -169,6 +178,17 @@ export function extractCompositeWeatherLocation(text: unknown): string {
   }
   const clause = normalized.match(/[^。；，,\n]{0,80}(?:天气|气温|温度|预报)/)?.[0] || normalized;
   return extractWeatherLocation(clause, "");
+}
+export function extractFlightWeatherRoute(text: unknown): FlightWeatherRoute | null {
+  const normalized = String(text || "").replace(/\s+/g, "");
+  for (const origin of FLIGHT_WEATHER_CITIES) {
+    for (const destination of FLIGHT_WEATHER_CITIES) {
+      if (origin === destination) continue;
+      const route = new RegExp(`${origin}(?:市)?(?:飞往|飞|到|前往)${destination}(?:市)?`);
+      if (route.test(normalized)) return { origin, destination };
+    }
+  }
+  return null;
 }
 export function extractWeatherLocationForResearch(query: unknown, fallback: string = ""): string {
   return extractWeatherLocation(query, fallback);

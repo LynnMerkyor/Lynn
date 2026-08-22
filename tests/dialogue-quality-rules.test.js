@@ -98,4 +98,20 @@ describe("dialogue quality rules", () => {
       hasToolEvidence: false,
     })).toBe("model-structural-label-visible");
   });
+
+  it("requires both route cities in flight weather answers", () => {
+    const task = {
+      category: "travel_current",
+      prompt: "明天上海飞北京，帮我查天气风险并给穿衣和到机场建议",
+      hasToolEvidence: true,
+    };
+    expect(additionalDialogueQualityReason({
+      ...task,
+      text: "北京明天有小雨，建议带伞并提前两小时到机场。",
+    })).toBe("flight-weather-answer-missing-route-city");
+    expect(additionalDialogueQualityReason({
+      ...task,
+      text: "上海明天多云，北京明天有小雨。天气风险是北京降雨可能影响落地和地面交通，建议带伞并穿短袖加轻薄外套。出发前再检查两地雷达、机场路况和航司动态；国内航班至少提前两小时到机场，早高峰或托运行李较多时再加三十分钟机动。",
+    })).toBe("");
+  });
 });
