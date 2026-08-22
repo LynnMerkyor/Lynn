@@ -1715,7 +1715,7 @@ describe('Router', () => {
           search_result: [{
             title: '杭州天气实况',
             link: 'https://weather.example/hangzhou',
-            content: '杭州今天傍晚多云转阵雨，晚间可能有零星降雨，建议带伞。',
+            content: '杭州今天傍晚多云转阵雨，22°C，晚间降雨概率 60%，建议带伞。',
             publish_date: '2026-06-25',
           }],
         }),
