@@ -1651,6 +1651,51 @@
     justify-content: center;
     color: var(--text-muted);
     font-size: 0.8rem;
+    padding: var(--space-xl);
+    text-align: center;
+}
+
+.bridgeEmptyCard {
+    width: min(360px, 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+    padding: 24px;
+    border: 1px solid var(--overlay-medium);
+    border-radius: var(--radius-lg);
+    background: var(--overlay-light);
+}
+
+.bridgeEmptyCard strong {
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+.bridgeEmptyCard > span {
+    max-width: 300px;
+    line-height: 1.6;
+}
+
+.bridgeEmptyActions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.bridgeEmptyActions button {
+    border: 1px solid var(--overlay-medium);
+    border-radius: var(--radius-sm);
+    background: var(--panel-bg);
+    color: var(--text);
+    padding: 6px 12px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.bridgeEmptyActions button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 .bridgeChatMessages {
@@ -1665,6 +1710,13 @@
     color: var(--text-muted);
     font-size: 0.78rem;
     padding: var(--space-xl) 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.bridgeChatNoMsg strong {
+    color: var(--text);
 }
 
 .bridgeBubbleRow {

@@ -289,6 +289,19 @@ async function main() {
   await writeJson(path.join(lynnHome, "user", "preferences.json"), {
     setupComplete: true,
     locale: "zh-CN",
+    bridge: {
+      feishu: {
+        enabled: false,
+        appId: "cli_ui_smoke",
+        appSecret: "ui-smoke-secret",
+      },
+    },
+  });
+  await writeJson(path.join(lynnHome, "agents", "lynn", "sessions", "bridge", "bridge-sessions.json"), {
+    fs_dm_ui_smoke: {
+      userId: "ui_smoke",
+      name: "飞书测试联系人",
+    },
   });
   await writeYaml(path.join(lynnHome, "added-models.yaml"), {
     providers: {
@@ -394,6 +407,41 @@ async function main() {
       throw new Error(`main layout assertions failed:\n- ${failures.join("\n- ")}\ntext=${baseLayout.text}`);
     }
     await cdp.screenshot(path.join(outputDir, "main-layout.png"));
+
+    const openedBridge = await cdp.evaluate(`(() => {
+      const button = document.querySelector('#bridgeBar');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    assertOk(openedBridge, "bridge panel button was not clickable");
+    const bridgeSnapshot = await waitFor(cdp, `(() => {
+      const panel = document.querySelector('#bridgePanel');
+      const text = panel?.textContent || '';
+      if (!panel || !text.includes('飞书测试联系人')) return null;
+      const contact = Array.from(panel.querySelectorAll('div')).find((el) => (el.textContent || '').trim() === '飞书测试联系人');
+      if (!contact) return null;
+      return { text, contactFound: true };
+    })()`, 15000, "cleared Feishu contact remains visible");
+    assertOk(bridgeSnapshot?.contactFound, `cleared Feishu contact was hidden: ${JSON.stringify(bridgeSnapshot)}`);
+    const openedBridgeContact = await cdp.evaluate(`(() => {
+      const panel = document.querySelector('#bridgePanel');
+      const contact = Array.from(panel?.querySelectorAll('div') || []).find((el) => (el.textContent || '').trim() === '飞书测试联系人');
+      if (!contact) return false;
+      contact.click();
+      return true;
+    })()`);
+    assertOk(openedBridgeContact, "cleared Feishu contact was not clickable");
+    const clearedBridgeSnapshot = await waitFor(cdp, `(() => {
+      const panel = document.querySelector('#bridgePanel');
+      const text = panel?.textContent || '';
+      return text.includes('上下文已清除') && text.includes('下一条消息会开启新对话')
+        ? { text }
+        : null;
+    })()`, 15000, "cleared Feishu context guidance");
+    assertOk(clearedBridgeSnapshot, "cleared Feishu context guidance was missing");
+    await cdp.screenshot(path.join(outputDir, "bridge-cleared-context.png"));
+    await cdp.evaluate(`document.querySelector('#bridgePanel button[class*="floatingPanelClose"]')?.click()`);
 
     const openedMore = await cdp.evaluate(`(() => {
       const button = document.querySelector('button[aria-label="更多输入选项"]');

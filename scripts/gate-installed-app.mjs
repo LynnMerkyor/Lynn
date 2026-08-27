@@ -16,6 +16,8 @@ const APP_PATH = path.resolve(appArgIndex >= 0 ? process.argv[appArgIndex + 1] :
 let serverInfoPath = path.join(os.homedir(), ".lynn", "server-info.json");
 const REVIEW_TIMEOUT_MS = Number(process.env.LYNN_INSTALLED_GATE_REVIEW_TIMEOUT_MS || "240000");
 const ONLY_LIVE_VISION = process.argv.includes("--only-live-vision");
+const ONLY_REVIEW_CONCURRENCY = process.argv.includes("--only-review-concurrency");
+const CONNECT_EXISTING = process.argv.includes("--connect-existing");
 const REQUIRE_LIVE_VISION = process.env.LYNN_INSTALLED_GATE_REQUIRE_VISION === "1" || ONLY_LIVE_VISION;
 const VISION_MODEL_ID = String(process.env.LYNN_INSTALLED_GATE_VISION_MODEL || "mimo-v2.5").trim();
 const VISION_PROVIDER = String(process.env.LYNN_INSTALLED_GATE_VISION_PROVIDER || "").trim().toLowerCase();
@@ -219,24 +221,25 @@ function buildMimoFixtureModels() {
 }
 
 async function prepareGateHome() {
-  if (!VISION_API_KEY) return null;
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-installed-gate-"));
   const lynnHome = path.join(tmp, ".lynn");
   await writeJson(path.join(lynnHome, "user", "preferences.json"), {
     setupComplete: true,
     locale: "zh-CN",
   });
-  await writeYaml(path.join(lynnHome, "added-models.yaml"), {
-    _migrated: true,
-    providers: {
-      [VISION_FIXTURE_PROVIDER]: {
-        api_key: VISION_API_KEY,
-        base_url: VISION_BASE_URL,
-        api: "openai-completions",
-        models: buildMimoFixtureModels(),
+  if (VISION_API_KEY) {
+    await writeYaml(path.join(lynnHome, "added-models.yaml"), {
+      _migrated: true,
+      providers: {
+        [VISION_FIXTURE_PROVIDER]: {
+          api_key: VISION_API_KEY,
+          base_url: VISION_BASE_URL,
+          api: "openai-completions",
+          models: buildMimoFixtureModels(),
+        },
       },
-    },
-  });
+    });
+  }
   return { tmp, lynnHome };
 }
 
@@ -595,7 +598,8 @@ async function waitForReviewResults(ws, expectedIds, timeoutMs) {
         failures.push(`${msg.reviewId}: empty review_result`);
       }
       if (msg.errorCode && !/recovered/i.test(String(msg.errorCode))) {
-        failures.push(`${msg.reviewId}: errorCode=${msg.errorCode}`);
+        const detail = String(msg.fallbackNote || msg.error || msg.structured?.summary || "").replace(/\s+/g, " ").slice(0, 320);
+        failures.push(`${msg.reviewId}: errorCode=${msg.errorCode}${detail ? ` detail=${detail}` : ""}`);
       }
       results.set(msg.reviewId, msg);
       pending.delete(msg.reviewId);
@@ -611,7 +615,7 @@ async function waitForReviewResults(ws, expectedIds, timeoutMs) {
   });
 }
 
-async function runConcurrentReviewGate(baseUrl, wsUrl, token) {
+async function runConcurrentReviewGate(baseUrl, wsUrl, token, sessionPath = null) {
   const ws = await openWs(wsUrl, token);
   try {
     const ids = ["installed-review-1", "installed-review-2", "installed-review-3"].map((prefix) => `${prefix}-${Date.now()}`);
@@ -626,6 +630,7 @@ async function runConcurrentReviewGate(baseUrl, wsUrl, token) {
         "原回答: 尼克斯 4:1 击败马刺夺冠；请检查结论是否自洽。",
       ].join("\n"),
       sourceResponse: "尼克斯 4:1 击败马刺夺冠。",
+      ...(sessionPath ? { sessionPath } : {}),
     }));
     await Promise.all(payloads.map((body) => httpJson(baseUrl, token, "/api/review", {
       method: "POST",
@@ -649,8 +654,8 @@ async function main() {
   }
 
   console.log(`[installed-gate] app=${APP_PATH}`);
-  await quitExistingLynn();
-  if (!ONLY_LIVE_VISION) {
+  if (!CONNECT_EXISTING) await quitExistingLynn();
+  if (!CONNECT_EXISTING && !ONLY_LIVE_VISION && !ONLY_REVIEW_CONCURRENCY) {
     await run(process.execPath, ["scripts/packaged-server-smoke.mjs", "--app", APP_PATH]);
     await run(process.execPath, ["scripts/packaged-cli-runtime-smoke.mjs", "--app", APP_PATH]);
     await quitExistingLynn();
@@ -660,9 +665,14 @@ async function main() {
     await quitExistingLynn();
   }
 
-  const liveFixture = await prepareGateHome();
+  const liveFixture = CONNECT_EXISTING ? null : await prepareGateHome();
+  const isolatedSessionDir = CONNECT_EXISTING
+    ? await fs.mkdtemp(path.join(os.tmpdir(), "lynn-installed-review-session-"))
+    : null;
+  const isolatedSessionPath = isolatedSessionDir ? path.join(isolatedSessionDir, "session.jsonl") : null;
   let directLaunch = null;
   try {
+    if (isolatedSessionPath) await fs.writeFile(isolatedSessionPath, "", "utf8");
     if (liveFixture) {
       serverInfoPath = path.join(liveFixture.lynnHome, "server-info.json");
       await fs.rm(serverInfoPath, { force: true }).catch(() => {});
@@ -673,7 +683,7 @@ async function main() {
         LYNN_LOCAL_MODEL_AUTO_START: "0",
       });
       console.log(`[installed-gate] fixture home=${liveFixture.lynnHome}`);
-    } else {
+    } else if (!CONNECT_EXISTING) {
       await fs.rm(serverInfoPath, { force: true }).catch(() => {});
       await run("open", ["-a", APP_PATH]);
     }
@@ -686,22 +696,31 @@ async function main() {
       throw new Error(`[installed-gate] health was not ok: ${JSON.stringify(health)}`);
     }
     await waitForHttpJson(baseUrl, info.token, "/api/review/config", { timeoutMs: 45000 });
-    await runLiveVisionGate(baseUrl, wsUrl, info.token);
+    if (!ONLY_REVIEW_CONCURRENCY) {
+      await runLiveVisionGate(baseUrl, wsUrl, info.token);
+    }
     if (ONLY_LIVE_VISION) {
       console.log("[installed-gate] PASS: installed live vision gate completed.");
       return;
     }
-    await runConcurrentReviewGate(baseUrl, wsUrl, info.token);
-    console.log("[installed-gate] PASS: installed GUI/server/CLI/settings/main-ui/live-vision/review concurrency gate completed.");
+    await runConcurrentReviewGate(baseUrl, wsUrl, info.token, isolatedSessionPath);
+    console.log(ONLY_REVIEW_CONCURRENCY
+      ? "[installed-gate] PASS: installed review concurrency gate completed."
+      : "[installed-gate] PASS: installed GUI/server/CLI/settings/main-ui/live-vision/review concurrency gate completed.");
   } finally {
     if (directLaunch?.child) {
       await terminate(directLaunch.child);
     }
-    await stopInstalledAppProcesses("final cleanup", { initialWaitMs: 1000, throwOnFailure: false });
+    if (!CONNECT_EXISTING) {
+      await stopInstalledAppProcesses("final cleanup", { initialWaitMs: 1000, throwOnFailure: false });
+    }
     if (liveFixture?.tmp && process.env.LYNN_INSTALLED_GATE_KEEP_TMP === "1") {
       console.log(`[installed-gate] keeping fixture home=${liveFixture.lynnHome}`);
     } else if (liveFixture?.tmp) {
       await fs.rm(liveFixture.tmp, { recursive: true, force: true }).catch(() => {});
+    }
+    if (isolatedSessionDir) {
+      await fs.rm(isolatedSessionDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 }

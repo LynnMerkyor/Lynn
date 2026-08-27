@@ -719,6 +719,12 @@ function isAutoReviewGlmProvider(provider: unknown): boolean {
   return AUTO_REVIEW_GLM_PROVIDERS.has(normalizeProviderId(provider));
 }
 
+function isAutoReviewGlmConfig(config: DirectReviewModelConfig): boolean {
+  if (isAutoReviewGlmProvider(config.provider)) return true;
+  return normalizeProviderId(config.provider) === "brain"
+    && config.requestHeaders?.["X-Lynn-Review-Arbitration"] === "glm-coding";
+}
+
 function autoReviewProviderTier(provider: unknown): number {
   const normalized = normalizeProviderId(provider);
   if (AUTO_REVIEW_GLM_PROVIDERS.has(normalized)) return 0;
@@ -810,7 +816,7 @@ async function reserveAutoReviewModelSlot(
   autoReview?: boolean,
   signal?: AbortSignal,
 ): Promise<() => void> {
-  if (!autoReview || !isAutoReviewGlmProvider(config.provider)) return () => {};
+  if (!autoReview || !isAutoReviewGlmConfig(config)) return () => {};
 
   const buildRelease = () => {
     let released = false;

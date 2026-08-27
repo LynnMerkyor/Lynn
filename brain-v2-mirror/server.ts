@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import './env-loader.js';
 import './perf-init.js';
 import { run as routerRun, detectCapability } from './router.js';
-import { getProviderStatusSnapshot } from './provider-registry.js';
+import { getProviderStatusSnapshot, providerOrderForReviewArbitration } from './provider-registry.js';
 import { makeSSEEmitter } from './stream-bridge.js';
 import { registerDevice, verifySignedRequest, AuthError } from './auth.js';
 import { resolveClientIp } from './client-ip.js';
@@ -139,8 +139,8 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse, 
   // v0.77.7: extra_body 透传 (OpenAI 标准, 客户端可传 thinking:{type:disabled} 关思考)
   const extraBody = (body.extra_body && typeof body.extra_body === "object") ? body.extra_body as JsonObject : null;
   const requestedReviewProvider = String(req.headers['x-lynn-review-arbitration'] || '').trim();
-  const reviewArbitration = device && (requestedReviewProvider === 'mimo-token-plan-pro' || requestedReviewProvider === 'glm-coding')
-    ? providerId(requestedReviewProvider)
+  const reviewArbitration = device
+    ? providerOrderForReviewArbitration(requestedReviewProvider)
     : null;
   // Lynn ThinkingLevelButton (off/auto/high/xhigh) → Pi SDK reasoning_effort
   const reasoningEffort = (body.reasoning_effort || (extraBody && extraBody.reasoning_effort) || null) as string | null;
@@ -156,7 +156,7 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse, 
   try {
     const result = await routerRun({
       messages, tools, capabilityRequired, extraBody, reasoningEffort,
-      ...(reviewArbitration ? { providerOrder: [reviewArbitration], strictProviderOrder: true } : {}),
+      ...(reviewArbitration ? reviewArbitration : {}),
       signal: ctrl.signal,
       onChunk: async (chunk, meta) => {
         if (clientDisconnected) return;

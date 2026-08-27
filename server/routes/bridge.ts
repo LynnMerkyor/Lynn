@@ -318,7 +318,8 @@ export function createBridgeRoute(engine: BridgeEngine, bridgeManager: BridgeMan
       platform: string;
       chatType: string | null;
       chatId: string | null;
-      file: string;
+      file: string | null;
+      hasHistory: boolean;
       lastActive: number | null;
       displayName: string | null;
       avatarUrl: string | null;
@@ -328,8 +329,7 @@ export function createBridgeRoute(engine: BridgeEngine, bridgeManager: BridgeMan
     for (const [sessionKey, raw] of Object.entries(index)) {
       // 兼容旧格式（字符串）和新格式（对象）
       const entry: BridgeIndexEntry = typeof raw === "string" ? { file: raw } : raw;
-      const file = entry.file;
-      if (!file) continue;
+      const file = typeof entry.file === "string" && entry.file ? entry.file : null;
 
       // 解析 sessionKey → 平台 + 类型
       const { platform: plat, chatType, chatId } = parseSessionKey(sessionKey);
@@ -339,12 +339,14 @@ export function createBridgeRoute(engine: BridgeEngine, bridgeManager: BridgeMan
 
       // 获取最后修改时间
       let lastActive = null;
-      const fp = path.join(bridgeDir, file);
-      try {
-        const stat = fs.statSync(fp);
-        lastActive = stat.mtimeMs;
-      } catch {
-        // Missing or unreadable bridge files are treated as inactive metadata.
+      if (file) {
+        const fp = path.join(bridgeDir, file);
+        try {
+          const stat = fs.statSync(fp);
+          lastActive = stat.mtimeMs;
+        } catch {
+          // Missing or unreadable bridge files are treated as inactive metadata.
+        }
       }
 
       // isOwner 运行时计算：entry.userId 匹配 prefs.bridge.owner[platform]
@@ -352,7 +354,7 @@ export function createBridgeRoute(engine: BridgeEngine, bridgeManager: BridgeMan
       const isOwner = !!(typeof entry.userId === "string" && ownerUserId && entry.userId === ownerUserId);
 
       sessions.push({
-        sessionKey, platform: plat, chatType, chatId, file, lastActive,
+        sessionKey, platform: plat, chatType, chatId, file, hasHistory: !!file, lastActive,
         displayName: typeof entry.name === "string" ? entry.name : null,
         avatarUrl: typeof entry.avatarUrl === "string" ? entry.avatarUrl : null,
         isOwner,
@@ -369,8 +371,9 @@ export function createBridgeRoute(engine: BridgeEngine, bridgeManager: BridgeMan
     const sessionKey = c.req.param("sessionKey");
     const index = engine.getBridgeIndex();
     const raw = index[sessionKey];
-    const file = typeof raw === "string" ? raw : raw?.file;
-    if (!file) return c.json({ error: "session not found", messages: [] });
+    if (!raw) return c.json({ error: "session not found", messages: [] }, 404);
+    const file = typeof raw === "string" ? raw : raw.file;
+    if (!file) return c.json({ messages: [], contextCleared: true });
 
     const bridgeDir = path.join(engine.agent.sessionDir, "bridge");
     const fp = path.resolve(bridgeDir, file);
@@ -440,7 +443,7 @@ export function createBridgeRoute(engine: BridgeEngine, bridgeManager: BridgeMan
     index[sessionKey] = entry;
     engine.saveBridgeIndex(index);
 
-    return c.json({ ok: true });
+    return c.json({ ok: true, contextCleared: true });
   });
 
   /** 发送媒体到 bridge 平台（桌面端推送文件） */

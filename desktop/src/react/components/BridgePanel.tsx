@@ -12,6 +12,7 @@ interface BridgeSession {
   displayName?: string;
   avatarUrl?: string;
   lastActive?: number;
+  hasHistory?: boolean;
 }
 
 interface BridgeMessage {
@@ -20,10 +21,16 @@ interface BridgeMessage {
   ts?: string | null;
 }
 
+interface PlatformStatus {
+  status: string;
+  configured?: boolean;
+  error?: string | null;
+}
+
 interface StatusData {
-  telegram?: { status: string; configured?: boolean };
-  feishu?: { status: string; configured?: boolean };
-  [key: string]: { status: string; configured?: boolean } | undefined;
+  telegram?: PlatformStatus;
+  feishu?: PlatformStatus;
+  [key: string]: PlatformStatus | undefined;
 }
 
 export function BridgePanel() {
@@ -38,6 +45,9 @@ export function BridgePanel() {
   const [chatOpen, setChatOpen] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
   const [statusData, setStatusData] = useState<StatusData>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [contextCleared, setContextCleared] = useState(false);
 
   const messagesRef = useRef<HTMLDivElement>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,6 +68,8 @@ export function BridgePanel() {
 
   // 加载平台数据
   const loadPlatformData = useCallback(async (plat: string) => {
+    setIsLoading(true);
+    setLoadError('');
     try {
       const [statusRes, sessionsRes] = await Promise.all([
         hanaFetch('/api/bridge/status'),
@@ -65,12 +77,17 @@ export function BridgePanel() {
       ]);
       const sData = await statusRes.json();
       const sessData = await sessionsRes.json();
+      if (!statusRes.ok) throw new Error(sData?.error || `status ${statusRes.status}`);
+      if (!sessionsRes.ok) throw new Error(sessData?.error || `status ${sessionsRes.status}`);
       setStatusData(sData);
       updateSidebarDot(sData);
       setShowOverlay(!sData[plat]?.configured);
       setSessions(sessData.sessions || []);
     } catch (err) {
       console.error('[bridge] load platform data failed:', err);
+      setLoadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -138,10 +155,13 @@ export function BridgePanel() {
   const openSession = useCallback(async (sessionKey: string, displayName: string) => {
     setCurrentKey(sessionKey);
     setCurrentName(displayName);
+    setContextCleared(false);
     try {
       const res = await hanaFetch(`/api/bridge/sessions/${encodeURIComponent(sessionKey)}/messages`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `status ${res.status}`);
       setMessages(data.messages || []);
+      setContextCleared(data.contextCleared === true);
       setChatOpen(true);
       setTimeout(() => {
         if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
@@ -155,12 +175,15 @@ export function BridgePanel() {
   const resetSession = useCallback(async () => {
     if (!currentKey) return;
     try {
-      await hanaFetch(`/api/bridge/sessions/${encodeURIComponent(currentKey)}/reset`, { method: 'POST' });
-      openSession(currentKey, currentName);
+      const res = await hanaFetch(`/api/bridge/sessions/${encodeURIComponent(currentKey)}/reset`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || data?.ok !== true) throw new Error(data?.error || `status ${res.status}`);
+      await loadPlatformData(platform);
+      await openSession(currentKey, currentName);
     } catch (err) {
       console.error('[bridge] reset session failed:', err);
     }
-  }, [currentKey, currentName, openSession]);
+  }, [currentKey, currentName, loadPlatformData, openSession, platform]);
 
   const close = useCallback(() => setActivePanel(null), [setActivePanel]);
 
@@ -172,6 +195,8 @@ export function BridgePanel() {
   const waStatus = statusData.whatsapp?.status;
   const qqStatus = statusData.qq?.status;
   const wxStatus = statusData.wechat?.status;
+  const activeStatus = statusData[platform];
+  const retryPlatform = () => loadPlatformData(platform);
 
   return (
     <div className={`${fp.floatingPanel} ${fp.bridgePanelWide}`} id="bridgePanel">
@@ -245,7 +270,11 @@ export function BridgePanel() {
           )}
           <div className={fp.bridgeSidebar} id="bridgeSidebar">
             <div className={fp.bridgeContactList} id="bridgeContactList">
-              {sessions.length === 0 ? (
+              {isLoading && sessions.length === 0 ? (
+                <div className={fp.bridgeContactEmpty}>{t('bridge.loading')}</div>
+              ) : loadError && sessions.length === 0 ? (
+                <div className={fp.bridgeContactEmpty}>{t('bridge.loadFailed')}</div>
+              ) : sessions.length === 0 ? (
                 <div className={fp.bridgeContactEmpty}>{t('bridge.noSessions')}</div>
               ) : (
                 sessions.map(s => {
@@ -285,7 +314,10 @@ export function BridgePanel() {
                 </div>
                 <div className={fp.bridgeChatMessages} ref={messagesRef} id="bridgeChatMessages">
                   {messages.length === 0 ? (
-                    <div className={fp.bridgeChatNoMsg}>{t('bridge.noMessages')}</div>
+                    <div className={fp.bridgeChatNoMsg}>
+                      <strong>{contextCleared ? t('bridge.contextCleared') : t('bridge.noMessages')}</strong>
+                      {contextCleared && <span>{t('bridge.contextClearedHint')}</span>}
+                    </div>
                   ) : (
                     messages.map((m, i) => <ChatBubble key={`bridge-msg-${i}`} message={m} />)
                   )}
@@ -293,7 +325,33 @@ export function BridgePanel() {
               </>
             ) : (
               <div className={fp.bridgeChatEmpty} id="bridgeChatEmpty">
-                <span>{t('bridge.selectChat')}</span>
+                <div className={fp.bridgeEmptyCard}>
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 15a4 4 0 0 1-4 4H8l-5 3v-7a4 4 0 0 1-1-2.6V7a4 4 0 0 1 4-4h11a4 4 0 0 1 4 4z" />
+                  </svg>
+                  <strong>
+                    {loadError
+                      ? t('bridge.loadFailed')
+                      : activeStatus?.status === 'error'
+                        ? t('bridge.connectionFailed')
+                        : sessions.length === 0
+                          ? t('bridge.noSessions')
+                          : t('bridge.selectChat')}
+                  </strong>
+                  <span>
+                    {loadError
+                      ? loadError
+                      : activeStatus?.status === 'error'
+                        ? (activeStatus.error || t('bridge.connectionFailedHint'))
+                        : sessions.length === 0
+                          ? t('bridge.noSessionsHint')
+                          : t('bridge.selectChatHint')}
+                  </span>
+                  <div className={fp.bridgeEmptyActions}>
+                    <button type="button" onClick={retryPlatform}>{t('bridge.retry')}</button>
+                    <button type="button" onClick={() => window.platform.openSettings('bridge')}>{t('bridge.goToSettings')}</button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

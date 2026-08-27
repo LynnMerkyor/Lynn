@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getProvider, getProviderStatusSnapshot, PROVIDERS, providerOrderForCapability, universalOrder } from '../provider-registry.js';
+import { getProvider, getProviderStatusSnapshot, PROVIDERS, providerOrderForCapability, providerOrderForReviewArbitration, universalOrder } from '../provider-registry.js';
 
 function withSavedEnv(keys, fn) {
   const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
@@ -25,6 +25,18 @@ describe('provider registry', () => {
       'glm-5-turbo',
     ]);
     expect(universalOrder.map(String)).not.toContain('mimo-ultraspeed');
+  });
+
+  it('uses a bounded GLM -> DS -> MiMo recovery chain for automatic review', () => {
+    expect(providerOrderForReviewArbitration('glm-coding')).toEqual({
+      providerOrder: ['glm-coding', 'deepseek-chat', 'mimo-token-plan-pro'],
+      strictProviderOrder: false,
+    });
+    expect(providerOrderForReviewArbitration('mimo-token-plan-pro')).toEqual({
+      providerOrder: ['mimo-token-plan-pro'],
+      strictProviderOrder: true,
+    });
+    expect(providerOrderForReviewArbitration('unknown')).toBeNull();
   });
 
   it('registers GLM-5.3-Flash on Coding Plan as the multimodal takeover and review lane', () => {

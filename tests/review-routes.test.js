@@ -344,6 +344,44 @@ describe('review route', () => {
     resolveGlmRuns[2]('Third GLM review.\n```json\n{"summary":"Third GLM.","verdict":"pass","findings":[]}\n```');
   });
 
+  it('shares the GLM concurrency slot across Brain-routed automatic reviewers', async () => {
+    let releaseFirst;
+    const firstRun = new Promise((resolve) => { releaseFirst = resolve; });
+    callText
+      .mockImplementationOnce(() => firstRun)
+      .mockResolvedValueOnce('Butter review.\n```json\n{"summary":"Butter.","verdict":"pass","findings":[]}\n```');
+
+    const hanakoRes = await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context: 'Hanako Brain-routed review.', autoReview: true, reviewerKind: 'hanako' }),
+    });
+    const butterRes = await app.request('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context: 'Butter Brain-routed review.', autoReview: true, reviewerKind: 'butter' }),
+    });
+
+    expect(hanakoRes.status).toBe(200);
+    expect(butterRes.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(callText).toHaveBeenCalledTimes(1);
+    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({
+      provider: 'brain',
+      requestHeaders: { 'X-Lynn-Review-Arbitration': 'glm-coding' },
+    }));
+
+    releaseFirst('Hanako review.\n```json\n{"summary":"Hanako.","verdict":"pass","findings":[]}\n```');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(callText).toHaveBeenCalledTimes(2);
+    expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({
+      provider: 'brain',
+      requestHeaders: { 'X-Lynn-Review-Arbitration': 'glm-coding' },
+    }));
+  });
+
   it('keeps automatic Hanako fallback on Brain-routed GLM then DS V4 instead of unrelated BYOK models', async () => {
     engine.currentModel = { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' };
     engine.availableModels = [

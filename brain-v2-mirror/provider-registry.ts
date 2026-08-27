@@ -202,6 +202,30 @@ export const universalOrder: readonly ProviderId[] = mimoUltraspeedRouteEnabled(
   ? [providerId('mimo-ultraspeed'), ...productionTextOrder]
   : productionTextOrder;
 
+const glmReviewOrder = [
+  providerId('glm-coding'),
+  providerId('deepseek-chat'),
+  providerId('mimo-token-plan-pro'),
+] as const satisfies readonly ProviderId[];
+
+/**
+ * Review headers select a bounded lane rather than the ordinary StepFun-first route.
+ * GLM review may recover through DS and MiMo; a MiMo second opinion stays MiMo-only
+ * so the caller can distinguish arbitration from generic failover.
+ */
+export function providerOrderForReviewArbitration(requested: string): {
+  providerOrder: readonly ProviderId[];
+  strictProviderOrder: boolean;
+} | null {
+  if (requested === 'glm-coding') {
+    return { providerOrder: glmReviewOrder, strictProviderOrder: false };
+  }
+  if (requested === 'mimo-token-plan-pro') {
+    return { providerOrder: [providerId('mimo-token-plan-pro')], strictProviderOrder: true };
+  }
+  return null;
+}
+
 const multimodalOrder = [
   providerId('step-3.7-flash'),        // 多模态仍由 StepFun/vision_model 承接
   providerId('glm-coding'),            // GLM-5.3-Flash 图片理解/主复核
