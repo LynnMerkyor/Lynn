@@ -12,6 +12,7 @@ import { safeJson } from "../hono-helpers.js";
 import { getWechatQrcode, pollWechatQrcodeStatus } from "../../lib/bridge/wechat-login.js";
 import { debugLog } from "../../lib/debug-log.js";
 import { parseSessionKey, collectKnownUsers, KNOWN_PLATFORMS } from "../../lib/bridge/session-key.js";
+import { testFeishuConnection } from "../../lib/bridge/feishu-adapter.js";
 import { t } from "../i18n.js";
 
 type BridgePlatform = string;
@@ -514,19 +515,11 @@ export function createBridgeRoute(engine: BridgeEngine, bridgeManager: BridgeMan
         const me = await bot.getMe();
         return c.json({ ok: true, info: { username: me.username, name: me.first_name } });
       } else if (platform === "feishu") {
-        const resp = await fetch("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            app_id: typedCredentials.appId,
-            app_secret: typedCredentials.appSecret,
-          }),
-        });
-        const data = await resp.json() as { code?: number; msg?: string };
-        if (data.code === 0) {
-          return c.json({ ok: true, info: { msg: t("error.tokenSuccess") } });
-        }
-        return c.json({ ok: false, error: data.msg || t("error.verifyFailed") });
+        const appId = String(typedCredentials.appId || "").trim();
+        const appSecret = String(typedCredentials.appSecret || "").trim();
+        if (!appId || !appSecret) return c.json({ ok: false, error: t("error.verifyFailed") });
+        const identity = await testFeishuConnection(appId, appSecret);
+        return c.json({ ok: true, info: { msg: t("error.tokenSuccess"), name: identity.name, openId: identity.openId } });
       } else if (platform === "qq") {
         // v2 鉴权：appID + appSecret → access_token → /users/@me
         const tokenRes = await fetch("https://bots.qq.com/app/getAppAccessToken", {

@@ -359,10 +359,9 @@ export class BridgeManager {
       };
       const adapter = await Promise.resolve(spec.create(credentials, onMessage, hooks));
 
-      // Platforms with async connections (e.g. feishu WSClient) start as "connecting";
-      // their onStatus callback will promote to "connected" or "error".
-      const isAsync = platform === "feishu";
-      const initialStatus = isAsync ? "connecting" : "connected";
+      // Adapter creation now completes its required handshake before returning.
+      // Runtime reconnects continue to update status through onStatus.
+      const initialStatus = "connected";
 
       this._platforms.set(platform, { adapter, status: initialStatus });
       console.log(`[bridge] ${platform} 已启动`);
