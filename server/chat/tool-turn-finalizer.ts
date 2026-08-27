@@ -549,7 +549,11 @@ export function createToolTurnFinalizer({
     }
     maybeAppendCodeVerificationPostscript(sessionPath, ss);
     for (const toolEnd of runFinished.toolEnds) emitStreamEvent(sessionPath, ss, toolEnd);
-    emitStreamEvent(sessionPath, ss, { type: "turn_end", ...guiRunTerminalFields(runFinished.snapshot, reason) });
+    emitStreamEvent(sessionPath, ss, {
+      type: "turn_end",
+      streamSource: ss.streamSource,
+      ...guiRunTerminalFields(runFinished.snapshot, reason),
+    });
     lifecycleHooks.run("turn_close", { sessionPath, ss, reason, forced: true });
     broadcast({ type: "status", isStreaming: false, sessionPath });
     finishSessionStream(ss);

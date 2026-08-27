@@ -728,6 +728,11 @@ describe('Router', () => {
     expect(r).toMatchObject({ ok: true, iterations: 2 });
     expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
     expect(reasoningSeen).toEqual(['p-step:high', 'p-spark:high']);
+    expect(mockState.unhealthy).toContainEqual(expect.objectContaining({
+      id: 'p-step',
+      reason: expect.stringContaining('reasoning-only stop'),
+      cooldownMs: 30_000,
+    }));
     expect(chunks.some((c) => c.type === 'content' && /最终答案/.test(c.delta))).toBe(true);
   });
 
@@ -756,6 +761,52 @@ describe('Router', () => {
     expect(visible).not.toContain('现靠');
     expect(visible).toContain('只相信可验证的证据');
     expect(mockState.unhealthy).not.toContainEqual(expect.objectContaining({ id: 'p-step', reason: 'incomplete_visible' }));
+  });
+
+  it('hands off an answer that plainly misses an explicit approximate character target', async () => {
+    const toolCounts = [];
+    mockState.adapterFn = async function* ({ provider, tools, messages }) {
+      mockState.adapterCalls.push(provider.id);
+      toolCounts.push(tools.length);
+      if (provider.id === 'p-step') {
+        yield { type: 'content', delta: '暴雨把霓虹灯揉成河面上的血斑。陈默盯着屏幕，邮件来自他死后的第三天。' };
+        yield { type: 'finish', reason: 'stop' };
+        return;
+      }
+      expect(messages.at(-1)?.content).toContain('明显没有满足');
+      yield { type: 'content', delta: '雨声压住了整座城市。'.repeat(24) };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+    const result = await run({
+      messages: [{ role: 'user', content: '写一段 300 字左右的科幻小说开篇' }],
+      tools: [{ type: 'function', function: { name: 'read_file' } }],
+      onChunk: async (chunk) => chunks.push(chunk),
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'p-spark', iterations: 2 });
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
+    expect(toolCounts[0]).toBeGreaterThan(0);
+    expect(toolCounts[1]).toBe(0);
+    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
+    expect(visible).not.toContain('血斑');
+    expect(visible.length).toBeGreaterThanOrEqual(180);
+  });
+
+  it('does not expand a short answer when the explicit character count is a maximum', async () => {
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      yield { type: 'content', delta: '这是控制在三百字以内的简短回答。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const result = await run({
+      messages: [{ role: 'user', content: '请控制在 300 字以内回答' }],
+      tools: [{ type: 'function', function: { name: 'read_file' } }],
+      onChunk: async () => {},
+    });
+
+    expect(result).toMatchObject({ ok: true, providerId: 'p-step', iterations: 1 });
+    expect(mockState.adapterCalls).toEqual(['p-step']);
   });
 
   it('falls through on a plain empty stop without reasoning', async () => {

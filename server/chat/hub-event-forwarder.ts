@@ -677,7 +677,11 @@ export function createHubEventForwarder({
       }
       maybeAppendCodeVerificationPostscript(sessionPath, ss);
       for (const toolEnd of runFinished.toolEnds) emitStreamEvent(sessionPath, ss, toolEnd);
-      emitStreamEvent(sessionPath, ss, { type: "turn_end", ...guiRunTerminalFields(runFinished.snapshot, userAborted ? "user_abort" : "turn_end") });
+      emitStreamEvent(sessionPath, ss, {
+        type: "turn_end",
+        streamSource: ss.streamSource,
+        ...guiRunTerminalFields(runFinished.snapshot, userAborted ? "user_abort" : "turn_end"),
+      });
       broadcast({ type: "status", isStreaming: false, sessionPath });
       void emitModelHintFromSessionTail(sessionPath, ss, emitStreamEvent);
       finishSessionStream(ss);

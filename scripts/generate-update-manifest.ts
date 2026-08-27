@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const REPO_BASE = "https://github.com/LynnMerkyor/Lynn";
+const REPO_BASE = "https://github.com/MerkyorLynn/Lynn";
 // [HOTPATCH 2026-04-27 night] 资产 URL 必须走腾讯镜像不能走 GitHub
 // CN 用户从 GitHub releases 下载会卡死,memory feedback_macos_dmg_naming.md 早写了这条铁律。
 // releaseUrl points at the canonical GitHub Releases page; .dmg/.exe downloads must stay on the download mirror.

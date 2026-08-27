@@ -101,6 +101,14 @@ function isDeepSeekV4ThinkingModel(provider: unknown, model: unknown, baseUrl?: 
     );
 }
 
+function isGlm53AlwaysThinkingModel(provider: unknown, model: unknown, baseUrl?: unknown): boolean {
+  const providerId = String(provider || "").trim().toLowerCase();
+  const modelId = String(model || "").trim().toLowerCase();
+  const endpoint = String(baseUrl || "").trim().toLowerCase();
+  return modelId === "glm-5.3-flash"
+    && (providerId.includes("zhipu") || providerId.includes("glm") || endpoint.includes("bigmodel.cn"));
+}
+
 function deepSeekThinkingPayload(reasoning: boolean): Record<string, unknown> {
   return {
     thinking: reasoning
@@ -589,10 +597,12 @@ export async function callText({
     const allMessages: NormalizedMessage[] = [];
     if (mergedSystem) allMessages.push({ role: "system", content: mergedSystem });
     allMessages.push(...normalizedMessages);
+    const glm53AlwaysThinking = isGlm53AlwaysThinkingModel(provider, model, baseUrl);
     body = {
       model, temperature, max_tokens: maxTokens,
       messages: allMessages,
-      ...(quirks.includes("enable_thinking") && { enable_thinking: false }),
+      ...(quirks.includes("enable_thinking") && !glm53AlwaysThinking && { enable_thinking: false }),
+      ...(glm53AlwaysThinking ? { reasoning_effort: "low" } : {}),
       ...(isDeepSeekV4ThinkingModel(provider, model, baseUrl) ? deepSeekThinkingPayload(reasoning) : {}),
     };
   }

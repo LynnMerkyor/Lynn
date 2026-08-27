@@ -132,7 +132,7 @@ export function decideAutoReviewTurn({
     toolLines.length ? toolLines.join("\n") : "(无工具轨迹)",
     "",
     "[复查要求]",
-    "请用 Hanako · DS V4 做短复查。优先使用 DeepSeek V4 Flash，GLM/Brain 仅作备用；重点检查事实、数字、时效性、工具证据是否支持结论，以及是否需要补充或修订。不要重写整篇答案。",
+    "请用 Hanako · GLM-5.3-Flash 做短复查。通过 Brain 云端优先使用 GLM Coding Plan 的 GLM-5.3-Flash，DS V4 Flash Vision Exp 仅作多模态备用；重点检查事实、数字、时效性、工具证据是否支持结论，以及是否需要补充或修订。不要重写整篇答案。",
   ];
 
   return {

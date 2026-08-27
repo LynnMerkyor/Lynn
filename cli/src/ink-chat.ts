@@ -46,6 +46,15 @@ type Turn = {
   error?: boolean;
 };
 
+export function commitInkChatAssistant(messages: ChatMessage[], assistant: string): boolean {
+  if (!assistant.trim()) {
+    if (messages.at(-1)?.role === "user") messages.pop();
+    return false;
+  }
+  messages.push({ role: "assistant", content: assistant });
+  return true;
+}
+
 export type TraceLine = {
   id: number;
   kind: "reasoning" | "tool";
@@ -720,6 +729,7 @@ async function submitChatTurn(inputData: {
   }
 
   let assistant = "";
+  let sawReasoning = false;
   let renderedAssistant = "";
   let renderTimer: ReturnType<typeof setTimeout> | null = null;
   const flushAssistant = () => {
@@ -744,8 +754,11 @@ async function submitChatTurn(inputData: {
       if (event.type === "provider") inputData.setProvider(event.activeProvider);
       if (event.type === "usage") inputData.setUsage(summarizeUsage(event.usage, { durationMs: Date.now() - startedAt }));
       if (event.type === "brain.error") throw new Error(formatBrainErrorForHuman(event.error, event.code));
-      if (event.type === "reasoning.delta" && shouldRenderReasoning(inputData.reasoning.display, false)) {
-        inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, trace: appendReasoningTrace(turn.trace, event.text) } : turn));
+      if (event.type === "reasoning.delta") {
+        sawReasoning = sawReasoning || Boolean(event.text);
+        if (shouldRenderReasoning(inputData.reasoning.display, false)) {
+          inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, trace: appendReasoningTrace(turn.trace, event.text) } : turn));
+        }
       }
       if (event.type === "tool_progress") {
         inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, pending: true, trace: updateToolTrace(turn.trace, event) } : turn));
@@ -758,8 +771,12 @@ async function submitChatTurn(inputData: {
       if (!renderTimer) renderTimer = setTimeout(flushAssistant, 40);
     }
     flushAssistant();
-    inputData.messages.push({ role: "assistant", content: assistant });
-    inputData.setTurns((current) => current.map((turn) => turn.id === assistantId ? { ...turn, text: assistant, pending: false } : turn));
+    const committed = commitInkChatAssistant(inputData.messages, assistant);
+    inputData.setTurns((current) => current.map((turn) => turn.id === assistantId
+      ? committed
+        ? { ...turn, text: assistant, pending: false }
+        : { ...turn, text: t(sawReasoning ? "prompt.emptyAfterReasoning" : "prompt.empty"), pending: false, error: true }
+      : turn));
   } catch (error) {
     flushAssistant();
     inputData.messages.pop();

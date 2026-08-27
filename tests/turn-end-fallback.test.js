@@ -26,10 +26,13 @@ describe("turn_end fallback matrix", () => {
   });
 
   it("closes a completely empty turn", () => {
-    expect(resolveTurnEndFallback(
+    const result = resolveTurnEndFallback(
       { hasOutput: false, hasThinking: false, hasError: false },
       { hasToolEvidence: false },
-    )).toMatchObject({ reason: "empty_turn_without_visible_answer" });
+    );
+    expect(result).toMatchObject({ reason: "empty_turn_without_visible_answer" });
+    expect(result.text).not.toContain("Hanako");
+    expect(result.text).toContain("编辑重发");
   });
 
   it("uses completed tool evidence when the writer returns no final text", () => {

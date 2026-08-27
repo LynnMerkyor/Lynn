@@ -45,6 +45,7 @@ describe("turn deliverable tool policy", () => {
       375,
     )).toBe(false);
     expect(shouldRecoverIncompleteVisibleAnswer("2+2 等于几？只给答案", "4", 900)).toBe(false);
+    expect(shouldRecoverIncompleteVisibleAnswer("把 hello world 翻译成中文", "你好，世界", 980)).toBe(false);
     expect(shouldRecoverIncompleteVisibleAnswer(
       "劳动合同试用期被突然辞退，我应该先收集什么材料？不要当正式法律意见",
       "",

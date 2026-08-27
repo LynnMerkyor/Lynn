@@ -331,8 +331,8 @@ const AUTO_REVIEW_CHAIN_TIMEOUT_MS = Math.max(
   AUTO_REVIEW_EXEC_TIMEOUT_MS * 3,
 );
 const AUTO_REVIEW_MAX_OUTPUT_TOKENS = Math.max(1200, Math.min(2400, Number(process.env.LYNN_AUTO_REVIEW_MAX_TOKENS || 2000)));
-const AUTO_REVIEW_MODEL_LABEL = "Hanako · DS V4";
-const AUTO_REVIEW_FALLBACK_LABEL = "Hanako · DS V4/GLM/Brain";
+const AUTO_REVIEW_MODEL_LABEL = "Hanako · GLM-5.3-Flash";
+const AUTO_REVIEW_FALLBACK_LABEL = "Hanako · GLM-5.3/DS Vision/Brain";
 const MIMO_SECOND_OPINION_LABEL = "MiMo 2.5 Pro 仲裁";
 const MIMO_SECOND_OPINION_MODEL = "mimo-v2.5-pro";
 const MIMO_SECOND_OPINION_TIMEOUT_MS = Math.max(3_000, Math.min(20_000, Number(process.env.LYNN_REVIEW_SECOND_OPINION_TIMEOUT_MS || 15_000)));
@@ -678,6 +678,13 @@ function reviewModelDisplayLabel(
   providerId: string | null | undefined,
   fallbackLabel: string | null = null,
 ): string | null {
+  const id = normalizeModelId(modelId);
+  const provider = normalizeProviderId(providerId);
+  if (id === "glm-5.3-flash") return AUTO_REVIEW_MODEL_LABEL;
+  if (id === "deepseek-v4-flash-vision-exp") return "Hanako · DS V4 Vision Exp";
+  if (id === "deepseek-v4-flash" || id.startsWith("deepseek-v4-flash-")) return "Hanako · DS V4";
+  if (id === "mimo-v2.5-pro") return "Hanako · MiMo 2.5 Pro";
+  if (provider === "brain") return AUTO_REVIEW_MODEL_LABEL;
   const alias = getUserFacingModelAlias({
     modelId,
     provider: providerId,
@@ -714,9 +721,9 @@ function isAutoReviewGlmProvider(provider: unknown): boolean {
 
 function autoReviewProviderTier(provider: unknown): number {
   const normalized = normalizeProviderId(provider);
-  if (AUTO_REVIEW_DEEPSEEK_PROVIDERS.has(normalized)) return 0;
-  if (AUTO_REVIEW_GLM_PROVIDERS.has(normalized)) return 1;
-  if (AUTO_REVIEW_BRAIN_PROVIDERS.has(normalized)) return 2;
+  if (AUTO_REVIEW_GLM_PROVIDERS.has(normalized)) return 0;
+  if (AUTO_REVIEW_BRAIN_PROVIDERS.has(normalized)) return 0;
+  if (AUTO_REVIEW_DEEPSEEK_PROVIDERS.has(normalized)) return 1;
   return 9;
 }
 
@@ -724,20 +731,20 @@ function autoReviewModelPreference(model: ModelLike | null | undefined): number 
   const provider = normalizeProviderId(model?.provider);
   const id = normalizeModelId(model?.id);
   if (AUTO_REVIEW_DEEPSEEK_PROVIDERS.has(provider)) {
-    if (id === "deepseek-v4-flash") return 0;
-    if (id.startsWith("deepseek-v4-flash-")) return 1;
+    if (id === "deepseek-v4-flash-vision-exp") return 0;
+    if (id === "deepseek-v4-flash") return 1;
+    if (id.startsWith("deepseek-v4-flash-")) return 2;
     return 9;
   }
   if (AUTO_REVIEW_GLM_PROVIDERS.has(provider)) {
-    if (id === "glm-5-turbo" || id === "glm-5.0-turbo") return 0;
-    if (id.includes("glm-5") && id.includes("turbo")) return 1;
-    if (id.includes("glm-5")) return 2;
+    if (id === "glm-5.3-flash") return 1;
+    if (id.includes("glm-5.3") && id.includes("flash")) return 2;
+    if (id === "glm-5-turbo" || id === "glm-5.0-turbo") return 4;
+    if (id.includes("glm-5")) return 5;
     return 4;
   }
   if (AUTO_REVIEW_BRAIN_PROVIDERS.has(provider)) {
-    if (id === "lynn-brain-router") return 0;
-    if (id.includes("brain")) return 1;
-    return 4;
+    return 0;
   }
   return 9;
 }
@@ -776,7 +783,20 @@ function buildAutoReviewFallbackCandidates(
     pushCandidate(model);
   }
 
-  return sortAutoReviewModels(candidates);
+  const sorted = sortAutoReviewModels(candidates);
+  let keptBrainRoute = false;
+  return sorted.filter((model) => {
+    const provider = normalizeProviderId(model?.provider);
+    if (AUTO_REVIEW_BRAIN_PROVIDERS.has(provider)) {
+      if (keptBrainRoute) return false;
+      keptBrainRoute = true;
+      return true;
+    }
+    // A Brain candidate is already locked to glm-coding by request header. Do
+    // not retry the same GLM family through a second credential path before DS.
+    if (keptBrainRoute && AUTO_REVIEW_GLM_PROVIDERS.has(provider)) return false;
+    return true;
+  });
 }
 
 function makeAbortError(): Error {
@@ -916,6 +936,9 @@ async function resolveDirectReviewModelConfig(
     apiKey,
     baseUrl,
     label: reviewModelDisplayLabel(reviewer, modelId, provider, AUTO_REVIEW_MODEL_LABEL),
+    ...(normalizeProviderId(provider) === "brain"
+      ? { requestHeaders: { "X-Lynn-Review-Arbitration": "glm-coding" } }
+      : {}),
   };
 }
 
@@ -1065,7 +1088,7 @@ async function runMimoSecondOpinion(
       metadata: {
         status: "circuit_open",
         modelLabel: MIMO_SECOND_OPINION_LABEL,
-        reason: "MiMo 仲裁熔断中，保留 DS V4 结论。",
+        reason: "MiMo 仲裁熔断中，保留 GLM-5.3-Flash 结论。",
       },
       structured: null,
     };
@@ -1083,7 +1106,7 @@ async function runMimoSecondOpinion(
       metadata: {
         status: "unavailable",
         modelLabel: MIMO_SECOND_OPINION_LABEL,
-        reason: "MiMo Token Plan Pro 配置读取失败，保留 DS V4 结论。",
+        reason: "MiMo Token Plan Pro 配置读取失败，保留 GLM-5.3-Flash 结论。",
       },
       structured: null,
     };
@@ -1093,7 +1116,7 @@ async function runMimoSecondOpinion(
       metadata: {
         status: "unavailable",
         modelLabel: MIMO_SECOND_OPINION_LABEL,
-        reason: "MiMo Token Plan Pro 当前不可用，保留 DS V4 结论。",
+        reason: "MiMo Token Plan Pro 当前不可用，保留 GLM-5.3-Flash 结论。",
       },
       structured: null,
     };
@@ -1102,7 +1125,7 @@ async function runMimoSecondOpinion(
   const arbitrationPrompt = [
     prompt.slice(0, 16_000),
     "",
-    "[DS V4 一审结果]",
+    "[GLM-5.3-Flash 一审结果]",
     primaryContent.slice(0, 5_000),
     "",
     "[MiMo 异构仲裁要求]",
@@ -1147,8 +1170,8 @@ async function runMimoSecondOpinion(
         modelLabel: MIMO_SECOND_OPINION_LABEL,
         latencyMs: Date.now() - startedAt,
         reason: isTimeoutLikeError(error)
-          ? "MiMo 仲裁未在时限内完成，保留 DS V4 结论。"
-          : "MiMo 仲裁暂时不可用，保留 DS V4 结论。",
+          ? "MiMo 仲裁未在时限内完成，保留 GLM-5.3-Flash 结论。"
+          : "MiMo 仲裁暂时不可用，保留 GLM-5.3-Flash 结论。",
       },
       structured: null,
     };
@@ -1203,8 +1226,8 @@ async function runDirectReviewerSessionWithFallback(
         const switched = originalConfig && (config.model !== originalConfig.model || config.provider !== originalConfig.provider);
         const fallbackNote = switched
           ? (isZh()
-              ? `Hanako 自动复查已按 DS V4 优先策略切换到 ${nextLabel} 完成。`
-              : `Hanako automatic review switched to ${nextLabel} according to the DS V4-first policy.`)
+              ? `Hanako 自动复查已按 GLM-5.3-Flash 优先策略切换到 ${nextLabel} 完成。`
+              : `Hanako automatic review switched to ${nextLabel} according to the GLM-5.3-Flash-first policy.`)
           : null;
         return {
           content,
@@ -1828,7 +1851,7 @@ export async function startReviewRun(
         const pendingSecondOpinion: ReviewSecondOpinion = {
           status: "pending",
           modelLabel: MIMO_SECOND_OPINION_LABEL,
-          reason: "MiMo 正在核对 DS V4 的复查结论。",
+          reason: "MiMo 正在核对 GLM-5.3-Flash 的复查结论。",
         };
         const preliminaryStructured: StructuredReviewLike = {
           ...structured!,
@@ -1849,7 +1872,7 @@ export async function startReviewRun(
           reviewerModelProvider: reviewRun.usedModelProvider || reviewerModelProvider,
           secondOpinion: pendingSecondOpinion,
         });
-        // The DS V4 result is already useful. Show it immediately and update this
+        // The GLM-5.3-Flash result is already useful. Show it immediately and update this
         // same card when the bounded MiMo arbitration comes back.
         broadcast({
           type: "review_result",

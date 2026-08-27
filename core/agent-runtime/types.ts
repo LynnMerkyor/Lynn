@@ -141,5 +141,7 @@ export interface SettingsManagerLike {
 
 export interface PromptOptions {
   streamingBehavior?: "steer" | "followUp" | string;
+  /** Internal one-turn override. It must never be persisted as the session model. */
+  modelOverride?: Model;
   [key: string]: unknown;
 }

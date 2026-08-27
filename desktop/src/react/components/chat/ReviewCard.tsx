@@ -103,8 +103,8 @@ function reviewStageHint(stage: Props['stage'], zh: boolean): string {
   }
   if (stage === 'arbitrating') {
     return zh
-      ? 'DS V4 初审结论已生成，正在由 MiMo 做一次限时异构仲裁。'
-      : 'The DS V4 verdict is ready. MiMo is running one time-bounded heterogeneous arbitration.';
+      ? 'GLM-5.3-Flash 初审结论已生成，正在由 MiMo 做一次限时异构仲裁。'
+      : 'The GLM-5.3-Flash verdict is ready. MiMo is running one time-bounded heterogeneous arbitration.';
   }
   return zh
     ? 'Hanako 正在逐段检查这次回答与改动。你现在可以继续聊天，结果会自动回填到这里。'
@@ -119,7 +119,7 @@ function reviewStageSupportText(stage: Props['stage'], zh: boolean): string {
     return zh ? '已经接近完成，马上会给出可继续或建议暂停的结论。' : 'Almost done. A continue/hold recommendation is coming next.';
   }
   if (stage === 'arbitrating') {
-    return zh ? '原回答和 DS V4 初审都不受阻塞。' : 'Neither the original answer nor the DS V4 result is blocked.';
+    return zh ? '原回答和 GLM-5.3-Flash 初审都不受阻塞。' : 'Neither the original answer nor the GLM-5.3-Flash result is blocked.';
   }
   return zh ? '你不用停在这里等，复查完成后会自动显示。' : 'No need to wait here. The review will appear automatically when it finishes.';
 }
@@ -517,7 +517,7 @@ export const ReviewCard = memo(function ReviewCard({
                 <div className={styles.reviewNextStep}>
                   <strong>{secondOpinion.modelLabel}：</strong>
                   {secondOpinion.summary || secondOpinion.reason || (secondOpinionPending
-                    ? (zh ? '正在进行异构仲裁，DS V4 初审结论已先显示。' : 'Arbitration is running; the DS V4 result is already shown.')
+                    ? (zh ? '正在进行异构仲裁，GLM-5.3-Flash 初审结论已先显示。' : 'Arbitration is running; the GLM-5.3-Flash result is already shown.')
                     : (zh ? '已完成异构仲裁。' : 'Heterogeneous review completed.'))}
                 </div>
               )}

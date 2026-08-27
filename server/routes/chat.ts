@@ -167,7 +167,7 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
       emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
     }
     if (!hasStreamEvent(ss, "turn_end")) {
-      emitStreamEvent(sessionPath, ss, { type: "turn_end" });
+      emitStreamEvent(sessionPath, ss, { type: "turn_end", streamSource: ss.streamSource });
     }
     lifecycleHooks.run("turn_close", { sessionPath, ss, reason: "busy_new_prompt", forced: true });
     broadcast({ type: "status", isStreaming: false, sessionPath });

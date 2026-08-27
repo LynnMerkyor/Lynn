@@ -24,9 +24,9 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
   deepseek: {
     provider: "openai-compatible",
     baseUrl: "https://api.deepseek.com/v1",
-    model: "deepseek-v4-flash",
-    displayName: "DS V4 Flash",
-    description: "DS V4 Flash escape route via DeepSeek OpenAI-compatible chat backend",
+    model: "deepseek-v4-flash-vision-exp",
+    displayName: "DS V4 Flash Vision Exp",
+    description: "Multimodal DS V4 Flash escape route via DeepSeek OpenAI-compatible chat backend",
   },
   openai: {
     provider: "openai-compatible",
@@ -41,7 +41,8 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   stepfun: "StepFun 3.7 Flash",
   "step-3.7-flash": "StepFun 3.7 Flash",
   spark: "Spark Qwen 3.6 35B A3B Distill",
-  deepseek: "DS V4 Flash",
+  deepseek: "DS V4 Flash Vision Exp",
+  "deepseek-v4-flash-vision-exp": "DS V4 Flash Vision Exp",
   "deepseek-v4-flash": "DS V4 Flash",
   "deepseek-chat": "DeepSeek Chat",
   "apex-spark": "Spark Qwen 3.6 35B A3B Distill",

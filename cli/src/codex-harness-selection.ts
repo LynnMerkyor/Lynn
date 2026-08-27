@@ -150,7 +150,12 @@ export async function probeCodexAppServer(options: CodexAppServerClientOptions =
 
 export async function probeBrainHarnessSupport(brainUrl: string): Promise<{ supported: boolean; reason: string }> {
   const status = await fetchBrainProviderStatus(brainUrl, 5_000);
-  if (!status) return { supported: false, reason: "Brain provider status or authentication is unavailable" };
+  if (!status) {
+    return {
+      supported: true,
+      reason: "Brain status is unavailable; defer to the authenticated Responses route preflight",
+    };
+  }
   if (status.capabilities?.responses !== true || status.capabilities?.appServerHarness !== true) {
     return { supported: false, reason: "Brain does not declare Codex app-server Responses compatibility" };
   }
@@ -217,7 +222,18 @@ export async function resolveCodeHarnessSelection(input: CodeHarnessSelectionInp
       cwd: path.resolve(input.cwd),
       ...input.clientOptions,
     });
-    return { requested: input.requested, selected: "codex", reason: `explicit Codex app-server mode (${protocol})`, protocol };
+    await (input.routeProbe || probeCodeHarnessRoute)({
+      brainUrl: input.brainUrl,
+      provider: input.provider,
+      reasoning: input.reasoning || { effort: "auto", display: "auto" },
+      lynnHome: input.lynnHome,
+    });
+    return {
+      requested: input.requested,
+      selected: "codex",
+      reason: `explicit Codex app-server mode; authentication, provider, model, and ${protocol} protocol preflight passed`,
+      protocol,
+    };
   }
   if (input.ultra) {
     return { requested: input.requested, selected: "legacy", reason: "ultra mode uses the legacy multi-worker loop" };

@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.86.2-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.86.2-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.86.3-brightgreen" alt="App Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.86.3-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF"><img src="https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d" alt="HuggingFace Models"></a>
@@ -112,12 +112,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.3.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI; 输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.86.2
+Lynn --version  # should print 0.86.3
 Lynn agents     # copyable headless worker commands for other agents
 ```
 
@@ -163,7 +163,27 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 ## 🆕 近期更新
 
 <details open>
-<summary><strong>Lynn v0.86.2</strong> · 2026-08-22 · Codex app-server harness 与 Agent 生命周期更新 <em>(最新)</em></summary>
+<summary><strong>Lynn v0.86.3</strong> · 2026-08-27 · Agent Loop 稳定性与确定性回退 <em>(最新)</em></summary>
+
+**v0.86.3 Agent Loop 与跨端可靠性更新**:
+- **Codex harness 自动选择更可靠**：可选 Brain 状态接口不可用时，不再误判为不支持，而是继续使用带认证的 Responses 真实预检；显式 `--harness codex` 同样必须通过当前 provider/model/auth 预检。人类可读的 headless 任务会在启动时显示实际 harness 与选择原因。
+- **本地模型失败只做单轮 Brain 接班**：27B 本地模型无输出时可由 Brain 完成本轮，但不会永久修改会话选中的模型；排队中的下一轮也会恢复用户原本选择。
+- **空答与隐藏推理空转有跨轮熔断**：候选模型只返回 reasoning 或空正文时会立即交给下一候选，并进入短暂 cooldown，避免下一轮再次命中同一坏节点。
+- **Brain 多模态接班链升级**：StepFun 之后优先由 GLM Coding Plan 的 `GLM-5.3-Flash` 接班，随后使用同价但支持视觉输入的 `deepseek-v4-flash-vision-exp`；MiMo 2.5 Pro 保持第二次仲裁职责，旧的纯文本 DS V4 Flash 不再作为默认兜底。
+- **CLI TUI 历史保持成对完整**：Ink 流正常结束但没有可见答案时，不再写入空 assistant 或保留 unmatched user；界面明确提示重发/切换模型，后续上下文不被污染。
+- **GUI 结束事件可追踪来源**：普通、兜底、本地直连和强制收口均透传 `streamSource`，便于诊断答案来自用户主链、本地模型还是 Brain fallback。
+- **Feishu 接口升级**：飞书桥迁移到当前 SDK Channel API，保留消息发送、回复、文件与卡片能力。
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.3.tgz"
+```
+
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.3)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.86.2</strong> · 2026-08-22 · Codex app-server harness 与 Agent 生命周期更新</summary>
 
 **v0.86.2 Agent harness 与可靠性更新**:
 - **`Codex app-server harness` 接入 Lynn Code**：线程、回合、流式事件、计划、工具生命周期、审批请求、压缩与中断统一映射到 Lynn 的 Agent 运行状态；原 Agent loop 完整保留。
@@ -1374,11 +1394,11 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.dmg`，版本记录见 [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)。V0.86.2 的 Apple Silicon / Intel DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。
+**macOS（Apple Silicon / Intel）**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.dmg`，版本记录见 [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)。V0.86.3 的 Apple Silicon / Intel DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。
 
 **Windows**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.exe`，直接运行；版本记录见 [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)。
 
-> **Windows SmartScreen 提示：** V0.86.2 安装包已完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
+> **Windows SmartScreen 提示：** V0.86.3 安装包已完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
 
 Linux 版本计划中。
 
@@ -1446,8 +1466,8 @@ tests/          Vitest 测试
 
 | 平台 | 状态 |
 |------|------|
-| macOS (Apple Silicon) | 已支持（V0.86.2 notarized DMG） |
-| macOS (Intel) | 已支持（V0.86.2 notarized DMG） |
+| macOS (Apple Silicon) | 已支持（V0.86.3 notarized DMG） |
+| macOS (Intel) | 已支持（V0.86.3 notarized DMG） |
 | Windows x64 | Beta |
 | Linux | 计划中 |
 | 移动端 (PWA) | 计划中 |

@@ -95,12 +95,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.3.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.86.2
+Lynn --version  # should print 0.86.3
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -126,7 +126,26 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details open>
-<summary><strong>Lynn v0.86.2</strong> · 2026-08-22 · Codex app-server harness and Agent lifecycle <em>(latest)</em></summary>
+<summary><strong>Lynn v0.86.3</strong> · 2026-08-27 · Agent-loop stability and deterministic fallback <em>(latest)</em></summary>
+
+**v0.86.3 agent-loop and cross-client reliability update**:
+- **More reliable Codex harness auto-selection**: when the optional Brain status endpoint is unavailable, Lynn proceeds to the authenticated Responses route preflight instead of declaring the harness unsupported. Explicit `--harness codex` now validates the current provider, model, and authentication too. Human-readable headless runs show the selected harness and reason before execution.
+- **Local-model recovery is scoped to one turn**: when the local 27B model returns no output, Brain can finish that turn without permanently changing the session's selected model. Queued follow-ups return to the user's original model.
+- **Cross-turn cooldown for empty/reasoning-only candidates**: a candidate that stops without visible content is handed off immediately and put into a short cooldown, preventing the next turn from selecting the same unhealthy lane again.
+- **Paired CLI TUI history**: when an Ink stream ends without a visible answer, Lynn no longer stores an empty assistant or leaves an unmatched user entry in model history. The UI shows a clear retry/model-switch message instead.
+- **Traceable GUI completion sources**: normal, fallback, local-direct, and forced-close `turn_end` events now carry `streamSource` for reliable diagnostics.
+- **Current Feishu integration**: the Feishu bridge now uses the current SDK Channel API while preserving messages, replies, files, and cards.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.3.tgz"
+```
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.3)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.86.2</strong> · 2026-08-22 · Codex app-server harness and Agent lifecycle</summary>
 
 **v0.86.2 Agent harness and reliability update**:
 - **Codex app-server harness for Lynn Code** maps threads, turns, streaming events, plans, tool lifecycle, approval requests, compaction, and interruption into Lynn's Agent run state while preserving the original loop.
@@ -1083,11 +1102,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases). The V0.86.2 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases). The V0.86.3 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
 **Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-> **Windows SmartScreen notice:** The v0.86.2 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt while the new release builds reputation.
+> **Windows SmartScreen notice:** The v0.86.3 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt while the new release builds reputation.
 
 Linux builds are planned.
 
@@ -1150,8 +1169,8 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.86.2 notarized DMG) |
-| macOS (Intel) | Supported (V0.86.2 notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.86.3 notarized DMG) |
+| macOS (Intel) | Supported (V0.86.3 notarized DMG) |
 | Windows | Beta |
 | Linux | Planned |
 | Mobile (PWA) | Planned |

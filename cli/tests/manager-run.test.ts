@@ -64,7 +64,7 @@ describe("manager run dual-brain loop", () => {
           taskId: "task-mock",
           managerModel: "local-a3b-distill",
           workerModel: "step-3.7-flash",
-          escapeModel: "deepseek-v4-flash",
+          escapeModel: "deepseek-v4-flash-vision-exp",
           status: "passed",
           falseVerifyRisk: "none",
         },

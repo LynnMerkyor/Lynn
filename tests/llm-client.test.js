@@ -81,6 +81,34 @@ describe("callText", () => {
     expect(body.thinking).toBeUndefined();
   });
 
+  it("uses low reasoning for GLM-5.3-Flash because the model rejects thinking-off", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        choices: [{ message: { content: "OK" }, finish_reason: "stop" }],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await callText({
+      api: "openai-completions",
+      apiKey: "test-key",
+      baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+      model: "glm-5.3-flash",
+      provider: "zhipu-coding",
+      messages: [{ role: "user", content: "review" }],
+      reasoning: false,
+      quirks: ["enable_thinking"],
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0];
+    const body = JSON.parse(requestInit.body);
+    expect(body.reasoning_effort).toBe("low");
+    expect(body.enable_thinking).toBeUndefined();
+    expect(body.thinking).toBeUndefined();
+  });
+
   it("extracts final text from structured OpenAI content arrays", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

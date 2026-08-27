@@ -41,7 +41,7 @@
       "downloadUrl": "https://download.merkyorlynn.com/download",
       "screenshot": "https://raw.githubusercontent.com/LynnMerkyor/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
       "image": "https://raw.githubusercontent.com/LynnMerkyor/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
-      "softwareVersion": "0.86.2",
+      "softwareVersion": "0.86.3",
       "datePublished": "2026-08-22",
       "fileSize": "180MB",
       "inLanguage": "zh-CN",
@@ -106,11 +106,11 @@
       <main>
         <section class="hero">
           <div class="hero-copy">
-            <span class="eyebrow">Lynn 0.86.2</span>
+            <span class="eyebrow">Lynn 0.86.3</span>
             <h1>自动选择更强的 Agent Loop。</h1>
             <p class="lead">
               Lynn 是一个有心跳、有记忆、会主动行动、还能多 Agent 协作的桌面 AI
-              助手。V0.86.2 为 Lynn Code/CLI 编码任务加入默认 <code>auto</code> 的 Codex app-server harness：启动前完成协议和当前认证/provider/model 的真实预检，兼容才启用，否则直接使用原架构；GUI 同步强化取消与工具终态。Windows 安装包同时内置 llama.cpp，本地 GGUF 不再要求手工准备运行时；发布仍统一经过 GUI100、CLI100、全部 UI 与真实安装包门禁。
+              助手。V0.86.3 加固 Lynn Code/CLI 默认 <code>auto</code> 的 Codex app-server harness：即使可选状态接口不可用，也会继续完成协议和当前认证/provider/model 的真实预检；兼容才启用，否则直接使用原架构。本地模型失败只做单轮 Brain 接班，空答候选会短暂熔断，GUI/CLI 历史和结束来源更可追踪；发布仍统一经过 GUI100、CLI100、全部 UI 与真实安装包门禁。
             </p>
             <div class="hero-actions">
               <a class="button button-primary" href="./download.html">下载 Lynn</a>
@@ -295,6 +295,6 @@
       </footer>
     </div>
 
-    <script src="./app.js?v=0.86.2"></script>
+    <script src="./app.js?v=0.86.3"></script>
   </body>
 </html>

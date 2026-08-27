@@ -434,6 +434,15 @@
     }
   },
   "deepseek": {
+    "deepseek-v4-flash-vision-exp": {
+      "name": "DeepSeek V4 Flash Vision Exp",
+      "context": 1000000,
+      "maxOutput": 64000,
+      "vision": true,
+      "reasoning": true,
+      "thinkingFormat": "deepseek",
+      "note": "Multimodal V4 Flash experimental route used by Lynn as the post-GLM fallback."
+    },
     "deepseek-v4-flash": {
       "name": "DeepSeek V4 Flash",
       "context": 1000000,
@@ -451,22 +460,22 @@
       "note": "Stronger sibling of v4-flash; same thinking-toggle API. API supports larger output windows; Lynn caps the interactive default for stable multi-turn chat."
     },
     "deepseek-chat": {
-      "name": "DeepSeek Chat (deprecated 2026/07/24 → deepseek-v4-flash)",
+      "name": "DeepSeek Chat (deprecated 2026/07/24 → deepseek-v4-flash-vision-exp)",
       "context": 1000000,
       "maxOutput": 64000,
       "deprecated": true,
       "deprecatedAt": "2026-07-24",
-      "alias": "deepseek-v4-flash"
+      "alias": "deepseek-v4-flash-vision-exp"
     },
     "deepseek-reasoner": {
-      "name": "DeepSeek Reasoner (deprecated 2026/07/24 → deepseek-v4-flash thinking)",
+      "name": "DeepSeek Reasoner (deprecated 2026/07/24 → deepseek-v4-flash-vision-exp thinking)",
       "context": 1000000,
       "maxOutput": 64000,
       "reasoning": true,
       "thinkingFormat": "deepseek",
       "deprecated": true,
       "deprecatedAt": "2026-07-24",
-      "alias": "deepseek-v4-flash"
+      "alias": "deepseek-v4-flash-vision-exp"
     },
     "deepseek-v3.2": {
       "name": "DeepSeek V3.2",
@@ -1752,6 +1761,13 @@
       "name": "GLM-5.1",
       "context": 128000,
       "maxOutput": 16384,
+      "reasoning": true
+    },
+    "glm-5.3-flash": {
+      "name": "GLM-5.3-Flash",
+      "context": 128000,
+      "maxOutput": 16384,
+      "vision": true,
       "reasoning": true
     },
     "glm-5-turbo": {

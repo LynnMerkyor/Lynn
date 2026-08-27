@@ -133,8 +133,8 @@ const PROVIDER_DEFS = {
     id: providerId('deepseek-chat'),
     endpoint: env('DEEPSEEK_BASE', 'https://api.deepseek.com/v1'),
     apiKey: env('DEEPSEEK_KEY', ''),
-    model: envModel('DEEPSEEK_MODEL', 'deepseek-v4-flash'),
-    capability: { vision: false, audio: false, video: false, tools: true, thinking: true, native_search: false },
+    model: envModel('DEEPSEEK_MODEL', 'deepseek-v4-flash-vision-exp'),
+    capability: { vision: true, audio: false, video: false, tools: true, thinking: true, native_search: false },
     wire: 'openai',
     cooldown_ms: 60_000,
     default_thinking: true,
@@ -162,16 +162,18 @@ const PROVIDER_DEFS = {
     default_thinking: true,
     timeout_ms: positiveEnvNumber('ZHIPU_CODING_TIMEOUT_MS', 12_000),
   },
-  // [glm-coding v1] Year-paid coding plan endpoint, used as VERIFIER_PROVIDER (NOT in universalOrder)
+  // GLM Coding Plan. GLM-5.3-Flash is the first cloud takeover after StepFun and
+  // the primary multimodal review model. DS V4 Flash remains the immediate text fallback.
   'glm-coding': {
     id: providerId('glm-coding'),
     endpoint: env('ZHIPU_CODING_BASE', 'https://open.bigmodel.cn/api/coding/paas/v4'),
     apiKey: env('ZHIPU_KEY', ''),
-    model: envModel('ZHIPU_CODING_TURBO_MODEL', 'GLM-5-Turbo'),
-    capability: { vision: false, audio: false, video: false, tools: true, thinking: true, native_search: false },
+    model: envModel('ZHIPU_CODING_FLASH_MODEL', 'GLM-5.3-Flash'),
+    capability: { vision: true, audio: false, video: false, tools: true, thinking: true, native_search: false },
     wire: 'openai',
     cooldown_ms: 60_000,
     default_thinking: true,
+    timeout_ms: positiveEnvNumber('ZHIPU_CODING_FLASH_TIMEOUT_MS', 35_000),
   },
 } satisfies ProviderRegistry;
 
@@ -186,7 +188,8 @@ function mimoUltraspeedRouteEnabled(): boolean {
 
 const productionTextOrder = [
   providerId('step-3.7-flash'),        // 生产文本/工具主链路: StepFun 3.7 Flash
-  providerId('deepseek-chat'),         // DS V4 Flash 紧跟 Step 接班/复核
+  providerId('glm-coding'),            // GLM Coding Plan 5.3 Flash:多模态接班/主复核
+  providerId('deepseek-chat'),         // DS V4 Flash:GLM 后的文本兜底备胎
   providerId('mimo-token-plan-pro'),   // 生产 MiMo 只用 Token Plan Pro,不用 UltraSpeed 测试线
   providerId('apex-spark-i-balanced'), // 本地 A3B 单槽 manager/fallback;忙时 router 跳过,保护 GUI 交互
   providerId('deepseek-pro'),          // 云兜底 V4-pro
@@ -201,9 +204,10 @@ export const universalOrder: readonly ProviderId[] = mimoUltraspeedRouteEnabled(
 
 const multimodalOrder = [
   providerId('step-3.7-flash'),        // 多模态仍由 StepFun/vision_model 承接
-  providerId('mimo-multimodal'),       // MiMo 原生图片/音频/视频兜底;audio 首个可用 provider
+  providerId('glm-coding'),            // GLM-5.3-Flash 图片理解/主复核
+  providerId('deepseek-chat'),         // DS V4 Flash Vision Exp 多模态兜底备胎
+  providerId('mimo-multimodal'),       // MiMo 原生图片/音频/视频兜底及异构仲裁;audio 首个可用 provider
   providerId('apex-spark-i-balanced'),
-  providerId('deepseek-chat'),
   providerId('deepseek-pro'),
   providerId('glm-5-turbo'),
 ] as const satisfies readonly ProviderId[];

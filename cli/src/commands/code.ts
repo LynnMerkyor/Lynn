@@ -608,6 +608,9 @@ async function runCodeTask(
       fallbackProvider: cliProvider?.profile,
     }));
   }
+  if (!json && !options.onEvent) {
+    errorOutput.write(`${dim(`harness: ${harnessSelection.selected} · ${harnessSelection.reason}`, supportsColor(errorOutput))}\n`);
+  }
   if (resumeDiag && !json && !options.compact && !options.onEvent) {
     if (resumeInfo?.firstPrompt) {
       errorOutput.write(`${t("code.resume.task", { task: truncateForResume(resumeInfo.firstPrompt) })}\n`);

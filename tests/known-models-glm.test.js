@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { lookupKnown } from "../shared/known-models.js";
 
 describe("known GLM models", () => {
+  it("marks GLM-5.3-Flash as a multimodal reasoning model", () => {
+    const model = lookupKnown("zhipu-coding", "glm-5.3-flash");
+    expect(model).toBeTruthy();
+    expect(model.reasoning).toBe(true);
+    expect(model.vision).toBe(true);
+  });
+
   it("marks glm-5.1 as a reasoning model", () => {
     const model = lookupKnown("glm", "glm-5.1");
     expect(model).toBeTruthy();
@@ -16,6 +23,14 @@ describe("known GLM models", () => {
 });
 
 describe("known DeepSeek thinking variants", () => {
+  it("tracks DS V4 Flash Vision Exp as a multimodal reasoning model", () => {
+    const model = lookupKnown("deepseek", "deepseek-v4-flash-vision-exp");
+    expect(model).toBeTruthy();
+    expect(model.reasoning).toBe(true);
+    expect(model.vision).toBe(true);
+    expect(model.thinkingFormat).toBe("deepseek");
+  });
+
   it("matches DeepSeek V4 Pro suffix variants as deepseek reasoning models", () => {
     const model = lookupKnown("deepseek", "deepseek-v4-pro-202606");
     expect(model).toBeTruthy();

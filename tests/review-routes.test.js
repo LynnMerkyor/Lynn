@@ -41,6 +41,7 @@ function makeEngine() {
     currentModel: { id: 'step-3.5-flash-2603', name: 'Step 3.5 Flash 2603', provider: 'brain' },
     availableModels: [
       { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' },
+      { id: 'glm-5.3-flash', name: 'GLM-5.3-Flash', provider: 'zhipu-coding' },
       { id: 'glm-5-turbo', name: 'GLM 5 Turbo', provider: 'zhipu-coding' },
       { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', provider: 'mimo' },
       { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'openai' },
@@ -222,11 +223,12 @@ describe('review route', () => {
     expect(runAgentSession).not.toHaveBeenCalled();
     expect(callText).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: 'deepseek-v4-flash',
-        provider: 'deepseek',
+        model: 'step-3.5-flash-2603',
+        provider: 'brain',
         maxTokens: 2000,
         reasoning: false,
         quirks: ['enable_thinking'],
+        requestHeaders: { 'X-Lynn-Review-Arbitration': 'glm-coding' },
       }),
     );
     expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({
@@ -268,14 +270,21 @@ describe('review route', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(callText).toHaveBeenCalledTimes(2);
-    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ model: 'deepseek-v4-flash', provider: 'deepseek' }));
-    expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({ model: 'deepseek-v4-flash', provider: 'deepseek' }));
+    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({
+      model: 'step-3.5-flash-2603',
+      provider: 'brain',
+      requestHeaders: { 'X-Lynn-Review-Arbitration': 'glm-coding' },
+    }));
+    expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({
+      model: 'step-3.5-flash-2603',
+      provider: 'brain',
+      requestHeaders: { 'X-Lynn-Review-Arbitration': 'glm-coding' },
+    }));
   });
 
-  it('queues automatic GLM reviews when DS V4 and MiMo are unavailable', async () => {
+  it('queues direct GLM-5.3 reviews when Brain and MiMo are unavailable', async () => {
     engine.availableModels = [
-      { id: 'glm-5-turbo', name: 'GLM 5 Turbo', provider: 'zhipu-coding' },
-      { id: 'lynn-brain-router', name: 'Default Brain', provider: 'brain' },
+      { id: 'glm-5.3-flash', name: 'GLM-5.3-Flash', provider: 'zhipu-coding' },
     ];
     const resolveGlmRuns = [];
     callText.mockImplementation((options) => {
@@ -313,7 +322,7 @@ describe('review route', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(callText).toHaveBeenCalledTimes(1);
-    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ provider: 'zhipu-coding', model: 'glm-5-turbo' }));
+    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ provider: 'zhipu-coding', model: 'glm-5.3-flash' }));
     expect(callText.mock.calls.some(([options]) => options.provider === 'brain' && options.model === 'lynn-brain-router')).toBe(false);
 
     resolveGlmRuns[0]('GLM review.\n```json\n{"summary":"GLM.","verdict":"pass","findings":[]}\n```');
@@ -321,7 +330,7 @@ describe('review route', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(callText).toHaveBeenCalledTimes(2);
-    expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({ provider: 'zhipu-coding', model: 'glm-5-turbo' }));
+    expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({ provider: 'zhipu-coding', model: 'glm-5.3-flash' }));
     expect(callText.mock.calls.some(([options]) => options.provider === 'brain' && options.model === 'lynn-brain-router')).toBe(false);
 
     resolveGlmRuns[1]('Second GLM review.\n```json\n{"summary":"Second GLM.","verdict":"pass","findings":[]}\n```');
@@ -329,13 +338,13 @@ describe('review route', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(callText).toHaveBeenCalledTimes(3);
-    expect(callText.mock.calls[2][0]).toEqual(expect.objectContaining({ provider: 'zhipu-coding', model: 'glm-5-turbo' }));
+    expect(callText.mock.calls[2][0]).toEqual(expect.objectContaining({ provider: 'zhipu-coding', model: 'glm-5.3-flash' }));
     expect(callText.mock.calls.some(([options]) => options.provider === 'brain' && options.model === 'lynn-brain-router')).toBe(false);
 
     resolveGlmRuns[2]('Third GLM review.\n```json\n{"summary":"Third GLM.","verdict":"pass","findings":[]}\n```');
   });
 
-  it('keeps automatic Hanako fallback on DS V4/GLM/Brain instead of unrelated BYOK models', async () => {
+  it('keeps automatic Hanako fallback on Brain-routed GLM then DS V4 instead of unrelated BYOK models', async () => {
     engine.currentModel = { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' };
     engine.availableModels = [
       ...engine.availableModels,
@@ -344,7 +353,7 @@ describe('review route', () => {
     ];
     callText
       .mockResolvedValueOnce('   ')
-      .mockResolvedValueOnce('Recovered on Brain.\n```json\n{"summary":"Recovered on Brain.","verdict":"pass","findings":[]}\n```');
+      .mockResolvedValueOnce('Recovered on DS.\n```json\n{"summary":"Recovered on DS.","verdict":"pass","findings":[]}\n```');
 
     const res = await app.request('/api/review', {
       method: 'POST',
@@ -357,13 +366,16 @@ describe('review route', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(callText).toHaveBeenCalledTimes(2);
-    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-flash' }));
-    expect(['zhipu', 'zhipu-coding', 'brain']).toContain(callText.mock.calls[1][0].provider);
+    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({
+      provider: 'brain',
+      requestHeaders: { 'X-Lynn-Review-Arbitration': 'glm-coding' },
+    }));
+    expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-flash' }));
     expect(callText.mock.calls.some(([options]) => options.provider === 'mimo')).toBe(false);
     expect(callText.mock.calls.some(([options]) => options.provider === 'deepseek' && options.model === 'deepseek-chat')).toBe(false);
   });
 
-  it('escalates a high-stakes DS V4 concern to one MiMo second opinion', async () => {
+  it('escalates a high-stakes GLM-5.3 concern to one MiMo second opinion', async () => {
     engine.currentModel = { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' };
     let resolveMimo;
     const mimoResult = new Promise((resolve) => {
@@ -404,7 +416,10 @@ describe('review route', () => {
     );
     expect(resultMsg).toBeTruthy();
     expect(callText).toHaveBeenCalledTimes(2);
-    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({ provider: 'deepseek', model: 'deepseek-v4-flash' }));
+    expect(callText.mock.calls[0][0]).toEqual(expect.objectContaining({
+      provider: 'brain',
+      requestHeaders: { 'X-Lynn-Review-Arbitration': 'glm-coding' },
+    }));
     expect(callText.mock.calls[1][0]).toEqual(expect.objectContaining({ provider: 'mimo', model: 'mimo-v2.5-pro', maxTokens: 1200 }));
     expect(resultMsg.structured).toEqual(expect.objectContaining({
       verdict: 'blocker',
@@ -415,7 +430,7 @@ describe('review route', () => {
     expect(resultMsg.reviewerModelLabel).toContain('MiMo 2.5 Pro');
   });
 
-  it('keeps the DS V4 result when MiMo arbitration times out and never starts a third model', async () => {
+  it('keeps the GLM-5.3 result when MiMo arbitration times out and never starts a third model', async () => {
     engine.currentModel = { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' };
     callText
       .mockResolvedValueOnce('DS concern.\n```json\n{"summary":"Current fact needs verification.","verdict":"concerns","findings":[{"severity":"medium","title":"Source needed"}]}\n```')
@@ -438,11 +453,11 @@ describe('review route', () => {
       (msg) => msg.type === 'review_result' && msg.secondOpinion?.status === 'timeout',
     );
     expect(resultMsg.structured.verdict).toBe('concerns');
-    expect(resultMsg.structured.secondOpinion.reason).toContain('保留 DS V4');
+    expect(resultMsg.structured.secondOpinion.reason).toContain('保留 GLM-5.3-Flash');
     expect(callText).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps the DS V4 result when MiMo credential resolution throws', async () => {
+  it('keeps the GLM-5.3 result when MiMo credential resolution throws', async () => {
     engine.currentModel = { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'deepseek' };
     const resolveCredentials = engine.resolveProviderCredentials;
     engine.resolveProviderCredentials = (provider) => {
@@ -654,7 +669,7 @@ describe('review route', () => {
 
     expect(runAgentSession).toHaveBeenCalledTimes(2);
     expect(resultMsg.errorCode).toBe('review_timeout_recovered');
-    expect(resultMsg.fallbackNote).toContain('Hanako · DS V4');
+    expect(resultMsg.fallbackNote).toContain('Hanako · GLM-5.3-Flash');
     expect(resultMsg.fallbackNote).toMatch(/自动切换到|finished on/);
   });
 
@@ -713,7 +728,7 @@ describe('review route', () => {
         severity: 'low',
       })],
     }));
-    expect(resultMsg.reviewerModelLabel).toBe('Hanako · DS V4');
+    expect(resultMsg.reviewerModelLabel).toBe('Hanako · GLM-5.3-Flash');
     expect(resultMsg.fallbackNote).toMatch(/复查|review/i);
   });
 

@@ -117,12 +117,25 @@ describe("Codex harness auto selection", () => {
 
   it("preserves explicit modes and validates the explicit Codex/ultra conflict", async () => {
     await expect(resolveCodeHarnessSelection({ requested: "legacy", cwd: ".", brainUrl: "http://brain", ultra: false })).resolves.toMatchObject({ selected: "legacy" });
-    await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: false, probe: async () => "v2-camel" })).resolves.toMatchObject({ selected: "codex", protocol: "v2-camel" });
+    const routeProbe = vi.fn(async () => undefined);
+    await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: false, probe: async () => "v2-camel", routeProbe })).resolves.toMatchObject({ selected: "codex", protocol: "v2-camel" });
     await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: true })).rejects.toThrow(/cannot be combined/);
     await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: false, hasMedia: true })).rejects.toThrow(/multimodal attachment bridge/);
     await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: false, machineReadable: true })).rejects.toThrow(/JSON audit stream/);
-    await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: false, approval: "ask", probe: async () => "hybrid-kebab-thread" })).resolves.toMatchObject({ selected: "codex", protocol: "hybrid-kebab-thread" });
+    await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: false, approval: "ask", probe: async () => "hybrid-kebab-thread", routeProbe })).resolves.toMatchObject({ selected: "codex", protocol: "hybrid-kebab-thread" });
     await expect(resolveCodeHarnessSelection({ requested: "codex", cwd: ".", brainUrl: "http://brain", ultra: false, approval: "never" })).rejects.toThrow(/approval semantics/);
+    expect(routeProbe).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects explicit Codex mode when the authenticated route preflight fails", async () => {
+    await expect(resolveCodeHarnessSelection({
+      requested: "codex",
+      cwd: ".",
+      brainUrl: "http://brain",
+      ultra: false,
+      probe: async () => "v2-camel",
+      routeProbe: async () => { throw new Error("model is unavailable"); },
+    })).rejects.toThrow(/model is unavailable/);
   });
 
   it("falls back when the authenticated provider/model route probe fails", async () => {
@@ -173,6 +186,14 @@ describe("Codex harness auto selection", () => {
     await expect(probeBrainHarnessSupport("http://127.0.0.1:3950")).resolves.toEqual({
       supported: true,
       reason: "Brain Responses route is ready",
+    });
+  });
+
+  it("defers to the authenticated route probe when the optional Brain status endpoint is unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("status blocked"); }));
+    await expect(probeBrainHarnessSupport("http://127.0.0.1:3950")).resolves.toEqual({
+      supported: true,
+      reason: expect.stringContaining("authenticated Responses route preflight"),
     });
   });
 

@@ -14,9 +14,10 @@ function withSavedEnv(keys, fn) {
 }
 
 describe('provider registry', () => {
-  it('keeps production text routing on StepFun, then DS V4 Flash, then MiMo Token Plan', () => {
-    expect(universalOrder.map(String).slice(0, 6)).toEqual([
+  it('keeps production text routing on StepFun, then GLM-5.3-Flash, then DS V4 Flash', () => {
+    expect(universalOrder.map(String).slice(0, 7)).toEqual([
       'step-3.7-flash',
+      'glm-coding',
       'deepseek-chat',
       'mimo-token-plan-pro',
       'apex-spark-i-balanced',
@@ -24,6 +25,15 @@ describe('provider registry', () => {
       'glm-5-turbo',
     ]);
     expect(universalOrder.map(String)).not.toContain('mimo-ultraspeed');
+  });
+
+  it('registers GLM-5.3-Flash on Coding Plan as the multimodal takeover and review lane', () => {
+    const glm = getProvider('glm-coding');
+    expect(glm).toBeTruthy();
+    expect(glm.endpoint).toBe('https://open.bigmodel.cn/api/coding/paas/v4');
+    expect(String(glm.model)).toBe(process.env.ZHIPU_CODING_FLASH_MODEL || 'GLM-5.3-Flash');
+    expect(glm.timeout_ms).toBe(35_000);
+    expect(glm.capability).toMatchObject({ vision: true, audio: false, video: false, tools: true, thinking: true });
   });
 
   it('registers MiMo ordinary API UltraSpeed separately from Token Plan', () => {
@@ -99,7 +109,9 @@ describe('provider registry', () => {
     });
   });
 
-  it('bounds the production text fallback chain while giving DS V4 enough time to finish long-form answers', () => {
+  it('bounds the production text fallback chain while giving DS V4 Vision Exp enough time to finish long-form answers', () => {
+    expect(String(getProvider('deepseek-chat').model)).toBe(process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash-vision-exp');
+    expect(getProvider('deepseek-chat').capability.vision).toBe(true);
     expect(getProvider('deepseek-chat').timeout_ms).toBe(45_000);
     expect(getProvider('mimo-token-plan-pro').timeout_ms).toBe(15_000);
     expect(getProvider('apex-spark-i-balanced').timeout_ms).toBe(8_000);
@@ -113,21 +125,25 @@ describe('provider registry', () => {
     expect(getProvider('deepseek-chat').thinking_control).toBeUndefined();
   });
 
-  it('routes vision to StepFun first and MiMo multimodal as native fallback', () => {
+  it('routes vision through StepFun, GLM-5.3-Flash, DS Vision Exp, then MiMo', () => {
     const visionOrder = providerOrderForCapability({ vision: true })
       .map((id) => PROVIDERS[id])
       .filter((provider) => provider?.capability?.vision)
       .map((provider) => String(provider.id));
 
     expect(visionOrder[0]).toBe('step-3.7-flash');
-    expect(visionOrder[1]).toBe('mimo-multimodal');
+    expect(visionOrder[1]).toBe('glm-coding');
+    expect(visionOrder[2]).toBe('deepseek-chat');
+    expect(visionOrder[3]).toBe('mimo-multimodal');
     expect(visionOrder).toContain('step-3.7-flash');
+    expect(visionOrder).toContain('glm-coding');
     expect(visionOrder).toContain('mimo-multimodal');
     expect(universalOrder.map(String)[0]).toBe('step-3.7-flash');
-    expect(universalOrder.map(String)[1]).toBe('deepseek-chat');
-    expect(universalOrder.map(String)[2]).toBe('mimo-token-plan-pro');
+    expect(universalOrder.map(String)[1]).toBe('glm-coding');
+    expect(universalOrder.map(String)[2]).toBe('deepseek-chat');
+    expect(universalOrder.map(String)[3]).toBe('mimo-token-plan-pro');
     expect(visionOrder).not.toContain('apex-spark-i-balanced');
-    expect(visionOrder).not.toContain('deepseek-chat');
+    expect(visionOrder).toContain('deepseek-chat');
   });
 
   it('routes native audio to MiMo multimodal after filtering non-audio providers', () => {
@@ -169,7 +185,7 @@ describe('provider registry', () => {
     const step = snapshot.providers.find((provider) => provider.id === 'step-3.7-flash');
     const spark = snapshot.providers.find((provider) => provider.id === 'apex-spark-i-balanced');
 
-    expect(snapshot.route.slice(0, 4)).toEqual(['step-3.7-flash', 'deepseek-chat', 'mimo-token-plan-pro', 'apex-spark-i-balanced']);
+    expect(snapshot.route.slice(0, 4)).toEqual(['step-3.7-flash', 'glm-coding', 'deepseek-chat', 'mimo-token-plan-pro']);
     expect(tokenPlan).toMatchObject({ id: 'mimo-token-plan-pro', routeRole: 'tail', inRoute: true });
     expect(fast).toMatchObject({ id: 'mimo-ultraspeed', inRoute: false });
     expect(ds).toMatchObject({ id: 'deepseek-chat', routeRole: 'escape', inRoute: true });
@@ -192,8 +208,8 @@ describe('provider registry', () => {
       expect(isolated.providerOrderForCapability().map(String).slice(0, 4)).toEqual([
         'mimo-ultraspeed',
         'step-3.7-flash',
+        'glm-coding',
         'deepseek-chat',
-        'mimo-token-plan-pro',
       ]);
     });
   });
@@ -232,8 +248,8 @@ describe('provider registry', () => {
       expect(textRoute.slice(0, 4)).toEqual([
         'p-fake',
         'step-3.7-flash',
+        'glm-coding',
         'deepseek-chat',
-        'mimo-token-plan-pro',
       ]);
       expect(visionRoute[0]).toBe('step-3.7-flash');
       expect(visionRoute).not.toContain('p-fake');

@@ -109,6 +109,7 @@ type PromptOptions = AnyRecord & {
   images?: PromptImage[];
   turnInstruction?: string;
   disableTools?: boolean;
+  modelOverride?: ResolvedModel;
 };
 
 function translatedOrFallback(key: string, fallback: string, vars?: Record<string, unknown>): string {
@@ -518,7 +519,10 @@ export class SessionCoordinator {
     // [VISION-ARG-FIX v0.76.6] 当前 session.prompt() 使用 options 形态，
     // 图片需转为 { images: [{ type: "image", source: { type: "base64", mediaType, data } }] }。
     // 非 vision 模型：静默剥离图片，只发文字（与 bridge-session-manager 保持一致）
-    const _promptOpts = toSessionPromptOptions(stripUnsupportedPromptImagesForModel(opts, agent, this._d.resolveModelOverrides));
+    const imagePromptOpts = toSessionPromptOptions(stripUnsupportedPromptImagesForModel(opts, agent, this._d.resolveModelOverrides));
+    const _promptOpts = opts?.modelOverride
+      ? { ...(imagePromptOpts || {}), modelOverride: opts.modelOverride }
+      : imagePromptOpts;
     sanitizeActiveSessionContextForPrompt(this._session, sp);
     const runPromptAttempt = async (attemptText: string) => {
       const activeSession = this._session;
@@ -602,7 +606,10 @@ export class SessionCoordinator {
     if (sessionPath === this.currentSessionPath) this._sessionStarted = true;
     // [VISION-ARG-FIX v0.76.6] session.prompt() 需要 options.images，且图片块走 source.base64。
     // 非 vision 模型：静默剥离图片（与 bridge-session-manager 保持一致）
-    const _promptOpts = toSessionPromptOptions(stripUnsupportedPromptImagesForModel(opts, agent, this._d.resolveModelOverrides));
+    const imagePromptOpts = toSessionPromptOptions(stripUnsupportedPromptImagesForModel(opts, agent, this._d.resolveModelOverrides));
+    const _promptOpts = opts?.modelOverride
+      ? { ...(imagePromptOpts || {}), modelOverride: opts.modelOverride }
+      : imagePromptOpts;
     sanitizeActiveSessionContextForPrompt(entry.session, sessionPath);
     const runPromptAttempt = async (attemptText: string) => {
       return runPromptWithIntegrity(entry.session, attemptText, _promptOpts, { passOptionsArgument: true });

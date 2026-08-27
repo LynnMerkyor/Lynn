@@ -18,6 +18,7 @@ const EN_DELIVERABLE_ACTION_RE = /\b(?:create|generate|make|export|save|download
 const EN_DELIVERABLE_FORMAT_RE = /\b(?:report|web\s?page|html|document|file|attachment|pptx?|slides?|docx?|pdf|poster|image|png|jpe?g|markdown|visualization)\b/i;
 const SHORT_ANSWER_REQUEST_RE = /(?:一句话|只给|只回复|简短|简要|用一个词|用数字|只要答案|yes\s*\/\s*no|a\s*\/\s*b\s*\/\s*c\s*\/\s*d)/iu;
 const TERMINAL_VISIBLE_CHAR_RE = /[。！？!?；;：:）)\]}＞>"'”’]$/u;
+const SIMPLE_TRANSLATION_REQUEST_RE = /^(?:请)?(?:把|将)?\s*[A-Za-z][A-Za-z\d\s.'’_-]{0,48}\s*(?:翻译成|译成)\s*(?:中文|汉语|英文|英语)\s*[。.!！]?$/iu;
 
 function normalizedToolName(name: unknown): string {
   return String(name || "").trim().toLowerCase().replace(/-/g, "_");
@@ -48,7 +49,11 @@ export function shouldRecoverIncompleteVisibleAnswer(
   // tokens. Keep the guard structural instead of depending on a brittle
   // round-number boundary: a substantive prompt plus hidden reasoning and a
   // short non-terminal fragment should receive one continuation attempt.
-  if (reasoningChars < 240 || SHORT_ANSWER_REQUEST_RE.test(question)) return false;
+  if (
+    reasoningChars < 240
+    || SHORT_ANSWER_REQUEST_RE.test(question)
+    || SIMPLE_TRANSLATION_REQUEST_RE.test(question)
+  ) return false;
   // A provider may put a complete <reflect>...</reflect> scaffold in content.
   // After final-answer normalization that is an empty visible answer and needs
   // the same single tool-free continuation as a truncated fragment.

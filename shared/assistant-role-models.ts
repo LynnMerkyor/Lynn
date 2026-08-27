@@ -42,9 +42,9 @@ function _ref(providerEncoded: string, idEncoded: string): Readonly<ModelRef> {
 
 export const USER_FACING_MODEL_LABELS: Readonly<Record<string, string>> = Object.freeze({
   lynn: "默认工作模型",
-  hanako: "Hanako · DS V4",
-  butter: "Hanako · DS V4",
-  review: "Hanako · DS V4",
+  hanako: "Hanako · GLM-5.3-Flash",
+  butter: "Hanako · GLM-5.3-Flash",
+  review: "Hanako · GLM-5.3-Flash",
   utility: "默认工具模型",
   utility_large: "默认执行模型",
   brain: getBrainDisplayName(),
@@ -57,6 +57,9 @@ export const ASSISTANT_ROLE_MODEL_FALLBACKS: Readonly<Record<string, readonly Mo
     _ref("dXBpaHo=", "aHNhbGYtNC1tbGc="),
   ]),
   hanako: Object.freeze([
+    Object.freeze({ provider: "zhipu-coding", id: "glm-5.3-flash" }),
+    Object.freeze({ provider: "zhipu", id: "glm-5.3-flash" }),
+    Object.freeze({ provider: "deepseek", id: "deepseek-v4-flash-vision-exp" }),
     Object.freeze({ provider: "deepseek", id: "deepseek-v4-flash" }),
     Object.freeze({ provider: "mimo", id: "mimo-v2.5-pro" }),
     Object.freeze({ provider: "xiaomi", id: "mimo-v2.5-pro" }),

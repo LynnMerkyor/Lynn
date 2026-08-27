@@ -59,7 +59,7 @@ export function resolveTurnEndFallback(
   if (!state.hasOutput && !hasToolEvidence) {
     return {
       reason: "empty_turn_without_visible_answer",
-      text: "模型这次没有返回可见内容。本轮已安全结束，避免空回复污染后续上下文；Hanako 会尝试给出兜底复查。你也可以点「编辑重发」重试，或切换模型后再发。",
+      text: "模型这次没有返回可见内容。本轮已安全结束，避免空回复污染后续上下文。请点「编辑重发」重试，或切换模型后再发。",
     };
   }
   if (!state.hasOutput && hasToolEvidence && toolFallbackText.trim()) {

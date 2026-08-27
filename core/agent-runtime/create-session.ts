@@ -105,6 +105,8 @@ export interface LynnCreateAgentSessionOptions {
   [key: string]: unknown;
 }
 
+const NO_REMAINING_CONTENT_RE = /^(?:(?:没有|无)(?:可继续输出的|可补充的|更多的)?(?:剩余)?(?:正文|内容)|(?:正文|内容)(?:已经)?(?:完整|结束))(?:[。.!！])?$/u;
+
 export class LynnAgentSession {
   readonly cwd: string;
   readonly sessionManager: SessionManager;
@@ -129,6 +131,7 @@ export class LynnAgentSession {
   private listeners = new Set<AgentSessionEventListener>();
   private abortController: AbortController | null = null;
   private pendingPrompts: Array<{ prompt: string; options?: PromptOptions }> = [];
+  private activeTurnModel: Model | null = null;
   private disposed = false;
   private stepExecuteDepth = 0;
   private activeTurnAllowsDeliverables = true;
@@ -206,7 +209,13 @@ export class LynnAgentSession {
     this.sessionManager.appendMessage(userMessage);
     this.agent.replaceMessages(this.sessionManager.buildSessionContext().messages || []);
     this.activeTurnAllowsDeliverables = hasExplicitDeliverableIntent(prompt);
-    await this.runTurn();
+    this.activeTurnModel = options?.modelOverride || null;
+    try {
+      await this.runTurn();
+    } finally {
+      this.activeTurnModel = null;
+      this.drainPendingPrompts();
+    }
   }
 
   async steer(prompt: string, options?: PromptOptions): Promise<void> {
@@ -293,7 +302,10 @@ export class LynnAgentSession {
       : override && typeof override === "object"
         ? Object.values(override)
         : this.tools;
-    const tools = [...base, ...this._customTools];
+    const activeModel = this.activeTurnModel || this.model;
+    const tools = isBrainProvider(activeModel?.provider)
+      ? filterOutBrainManagedCustomTools([...base, ...this._customTools])
+      : [...base, ...this._customTools];
     const stepExecute = this.createStepExecuteTool();
     if (stepExecute && !tools.some((tool) => toolNameKey(tool.name) === toolNameKey(STEP_EXECUTE_TOOL_NAME))) {
       tools.push(stepExecute);
@@ -306,12 +318,13 @@ export class LynnAgentSession {
   }
 
   private findStepExecutorModel(): Model | null {
-    if (isStepExecutorModel(this.model)) return null;
+    const activeModel = this.activeTurnModel || this.model;
+    if (isStepExecutorModel(activeModel)) return null;
     const models = this.modelRegistry?.getAll?.() || [];
     return models.find((candidate) => {
       if (!candidate || isBrainProvider(candidate.provider)) return false;
       if (!isStepExecutorModel(candidate)) return false;
-      if (modelIdentity(candidate) === modelIdentity(this.model)) return false;
+      if (modelIdentity(candidate) === modelIdentity(activeModel)) return false;
       return Boolean(candidate.baseUrl || candidate.baseURL);
     }) || null;
   }
@@ -346,7 +359,7 @@ export class LynnAgentSession {
   }
 
   private shouldAutoDelegateToStep(messages: ChatMessage[], round: number): boolean {
-    if (isStepExecutorModel(this.model)) return false;
+    if (isStepExecutorModel(this.activeTurnModel || this.model)) return false;
     if (!this.findStepExecutorModel()) return false;
     const anyEvidenceToolCount = countAnyStepDelegationEvidenceToolMessages(messages);
     const evidenceToolCount = countUsableStepDelegationEvidenceToolMessages(messages);
@@ -617,6 +630,7 @@ export class LynnAgentSession {
     this.abortController = turnController;
     let fallbackMessages: ChatMessage[] = [];
     try {
+      const turnModel = this.activeTurnModel || this.model;
       const stepExecutorPolicy = this.findStepExecutorModel() ? buildStepExecutorPolicyPrompt() : "";
       const system = [
         await maybeString(this.resourceLoader.getSystemPrompt?.()),
@@ -633,7 +647,7 @@ export class LynnAgentSession {
       fallbackMessages = messages;
       const maxToolRounds = 3;
       for (let round = 0; round < maxToolRounds; round += 1) {
-        const result = await this.callModel(messages);
+        const result = await this.callModel(messages, { model: turnModel });
         if (turnController.signal.aborted) return;
         result.toolCalls = result.toolCalls.filter(isExecutableToolCall);
         if (!result.toolCalls.length) {
@@ -648,18 +662,19 @@ export class LynnAgentSession {
                 : "上一个回答只返回了内部推理，没有可见结论。不要重复推理，不要调用工具，直接输出完整的最终答案。"),
             ];
             const continuation = await this.callModel(continuationMessages, {
+              model: turnModel,
               tools: [],
               streamText: result.streamedText,
             });
             if (turnController.signal.aborted) return;
             const extra = normalizeFinalAnswerText(contentToText(continuation.assistant.content));
-            if (extra.trim()) {
+            if (extra.trim() && !(content.trim() && NO_REMAINING_CONTENT_RE.test(extra.trim()))) {
               content = `${content}${extra}`;
               recoveredIncompleteAnswer = true;
             }
           }
           if (!content.trim()) {
-            const handled = await this.finishWithFallback(messages, "empty_response", this.model, turnController.signal);
+            const handled = await this.finishWithFallback(messages, "empty_response", turnModel, turnController.signal);
             if (handled) return;
             this.finishAssistantAnswer(
               "模型这次没有返回可见内容。本轮已安全结束，避免空回复污染后续上下文；请点击「编辑重发」重试，或换个更明确的问题。",
@@ -669,7 +684,7 @@ export class LynnAgentSession {
             return;
           }
           if (isUnsafeFinalAnswerText(content, { hasToolEvidence: hasAnyToolEvidence(messages) })) {
-            const handled = await this.finishWithFallback(messages, "empty_response", this.model, turnController.signal);
+            const handled = await this.finishWithFallback(messages, "empty_response", turnModel, turnController.signal);
             if (handled) return;
             const evidenceSafetyAnswer = buildEvidenceSafetyAnswer(messages);
             if (evidenceSafetyAnswer) {
@@ -715,11 +730,11 @@ export class LynnAgentSession {
         this.agent.replaceMessages(this.sessionManager.buildSessionContext().messages || []);
         fallbackMessages = messages;
         if (this.shouldAutoDelegateToStep(messages, round)) {
-          const handled = await this.finishWithFallback(messages, "tool_round_limit", this.model, turnController.signal);
+          const handled = await this.finishWithFallback(messages, "tool_round_limit", turnModel, turnController.signal);
           if (handled) return;
         }
       }
-      const handled = await this.finishWithFallback(messages, "tool_round_limit", this.model, turnController.signal);
+      const handled = await this.finishWithFallback(messages, "tool_round_limit", turnModel, turnController.signal);
       if (handled) return;
       const evidenceSafetyAnswer = buildEvidenceSafetyAnswer(messages);
       if (evidenceSafetyAnswer) {
@@ -746,7 +761,7 @@ export class LynnAgentSession {
         }
       }
       const handled = fallbackMessages.length
-        ? await this.finishWithFallback(fallbackMessages, "model_error", this.model, turnController.signal)
+        ? await this.finishWithFallback(fallbackMessages, "model_error", this.activeTurnModel || this.model, turnController.signal)
         : false;
       if (handled) return;
       this.emit(eventError(isAbortError ? "aborted" : err instanceof Error ? err.message : String(err)));
@@ -756,7 +771,6 @@ export class LynnAgentSession {
         this.isStreaming = false;
         this.abortController = null;
         this.activeTurnAllowsDeliverables = true;
-        this.drainPendingPrompts();
       }
     }
   }
@@ -775,7 +789,7 @@ export class LynnAgentSession {
     contentDeltas: string[];
     streamedText: boolean;
   }> {
-    const model = options.model || this.model;
+    const model = options.model || this.activeTurnModel || this.model;
     const tools = filterDeliverableToolsForTurn(
       options.tools ?? this.getAllTools(),
       this.activeTurnAllowsDeliverables,

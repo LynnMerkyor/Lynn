@@ -1,6 +1,5 @@
 import { debugLog } from "../../lib/debug-log.js";
 import {
-  BRAIN_DEFAULT_MODEL_ID,
   BRAIN_PROVIDER_ID,
 } from "../../shared/brain-provider.js";
 import { finishSessionStream } from "../session-stream-store.js";
@@ -87,7 +86,7 @@ export function createLocalModelBridge({
     }
     emitStreamEvent(sessionPath, ss, { type: "model_hint", model: `${LOCAL_QWEN35_PROVIDER_ID}/${LOCAL_QWEN35_MODEL_ID}` });
     maybeAppendCodeVerificationPostscript(sessionPath, ss);
-    emitStreamEvent(sessionPath, ss, { type: "turn_end" });
+    emitStreamEvent(sessionPath, ss, { type: "turn_end", streamSource: ss.streamSource || "local_qwen35_direct" });
     lifecycleHooks.run("turn_end", {
       ss,
       sessionPath,
@@ -104,22 +103,12 @@ export function createLocalModelBridge({
     }
   }
 
-  async function switchCurrentSessionToBrainFallback(sessionPath: any, ss: any, reason: any, modelInfo: any = {}) {
+  async function resolveBrainTurnFallback(sessionPath: any, ss: any, reason: any, modelInfo: any = {}) {
     const brainModel = resolveBrainFallbackModel(engine);
     if (!brainModel) {
       debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] no brain fallback model available · reason=${reason} · ${sessionPath}`);
       return null;
     }
-    if (engine.currentSessionPath && engine.currentSessionPath !== sessionPath) {
-      debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] session is no longer focused; cannot switch current model · reason=${reason} · ${sessionPath}`);
-      return null;
-    }
-    const switcher = engine?._sessionCoord?.switchCurrentSessionModel;
-    if (typeof switcher !== "function") {
-      debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] session model switcher unavailable · reason=${reason} · ${sessionPath}`);
-      return null;
-    }
-    await switcher.call(engine._sessionCoord, brainModel);
     emitStreamEvent(sessionPath, ss, {
       type: "provider_meta",
       activeProvider: BRAIN_PROVIDER_ID,
@@ -128,8 +117,7 @@ export function createLocalModelBridge({
         reason,
       }],
     });
-    emitStreamEvent(sessionPath, ss, { type: "model_hint", model: `${BRAIN_PROVIDER_ID}/${brainModel.id || BRAIN_DEFAULT_MODEL_ID}` });
-    debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v1] switched session to brain fallback · reason=${reason} · model=${brainModel.id || ""} · ${sessionPath}`);
+    debugLog()?.warn("ws", `[LOCAL-QWEN35-FALLBACK v2] using one-turn brain fallback · reason=${reason} · model=${brainModel.id || ""} · ${sessionPath}`);
     return brainModel;
   }
 
@@ -138,6 +126,7 @@ export function createLocalModelBridge({
     streamToken,
     disableTools,
     turnInstruction,
+    modelOverride,
     returnedOpenReason = "hub_send_returned_open_safety_timeout",
     returnedClosedReason = "hub_send_returned_closed_without_turn_end",
   }: any = {}) {
@@ -145,8 +134,8 @@ export function createLocalModelBridge({
     await hub.send(
       text,
       images
-        ? { images, sessionPath, streamToken, disableTools, turnInstruction }
-        : { sessionPath, streamToken, disableTools, turnInstruction },
+        ? { images, sessionPath, streamToken, disableTools, turnInstruction, modelOverride }
+        : { sessionPath, streamToken, disableTools, turnInstruction, modelOverride },
     );
     if (!ss.isStreaming) {
       if (hasToolExecutionInFlight(ss)) {
@@ -170,7 +159,7 @@ export function createLocalModelBridge({
     if (ss.hasOutput || ss.hasThinking) {
       return false;
     }
-    const fallbackModel = await switchCurrentSessionToBrainFallback(sessionPath, ss, reason, modelInfo);
+    const fallbackModel = await resolveBrainTurnFallback(sessionPath, ss, reason, modelInfo);
     if (!fallbackModel) return false;
     ss.streamSource = "brain_fallback";
     ss.effectivePromptText = effectivePromptText || promptText;
@@ -179,6 +168,7 @@ export function createLocalModelBridge({
       streamToken,
       disableTools,
       turnInstruction,
+      modelOverride: fallbackModel,
       returnedOpenReason: `local_qwen35_${reason}_fallback_open_safety_timeout`,
       returnedClosedReason: `local_qwen35_${reason}_fallback_closed_without_turn_end`,
     });

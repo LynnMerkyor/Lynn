@@ -22,8 +22,10 @@ export type ModelIdLiteral =
   | 'mimo-v2.5'
   | 'mimo-v2-omni'
   | 'deepseek-v4-flash'
+  | 'deepseek-v4-flash-vision-exp'
   | 'deepseek-v4-pro'
-  | 'GLM-5-Turbo';
+  | 'GLM-5-Turbo'
+  | 'GLM-5.3-Flash';
 
 export type ProviderId = Brand<ProviderIdLiteral, 'ProviderId'>;
 export type ModelId = Brand<ModelIdLiteral, 'ModelId'>;

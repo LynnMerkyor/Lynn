@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatToolTraceText, friendlyToolName } from "../src/ink-chat.js";
+import { commitInkChatAssistant, formatToolTraceText, friendlyToolName } from "../src/ink-chat.js";
 
 describe("Ink chat trace formatting", () => {
   it("formats server tool progress in a Kimi-style trace line", () => {
@@ -27,5 +27,27 @@ describe("Ink chat trace formatting", () => {
       name: "flux-studio.generate_image",
       ok: false,
     })).toBe("Failed FluxStudio.GenerateImage");
+  });
+});
+
+describe("Ink chat history commits", () => {
+  it("keeps a visible assistant answer paired with the user turn", () => {
+    const messages = [{ role: "user" as const, content: "hello" }];
+
+    expect(commitInkChatAssistant(messages, "answer")).toBe(true);
+    expect(messages).toEqual([
+      { role: "user", content: "hello" },
+      { role: "assistant", content: "answer" },
+    ]);
+  });
+
+  it("removes the unmatched user history entry when the stream ends empty", () => {
+    const messages = [
+      { role: "system" as const, content: "system" },
+      { role: "user" as const, content: "hello" },
+    ];
+
+    expect(commitInkChatAssistant(messages, "  \n")).toBe(false);
+    expect(messages).toEqual([{ role: "system", content: "system" }]);
   });
 });

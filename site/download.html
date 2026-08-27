@@ -9,14 +9,14 @@
     <title>Lynn 下载 | macOS 与 Windows 安装包</title>
     <meta
       name="description"
-      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.86.2,CLI 当前为 v0.86.2。"
+      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.86.3,CLI 当前为 v0.86.3。"
     />
     <meta name="theme-color" content="#f7f1e6" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Lynn 下载 | macOS 与 Windows 安装包" />
     <meta
       property="og:description"
-      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.86.2,CLI 当前为 v0.86.2。"
+      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.86.3,CLI 当前为 v0.86.3。"
     />
     <meta property="og:image" content="../.github/assets/screenshot-main-20260407-v3.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -47,9 +47,9 @@
             <span class="eyebrow">Lynn 下载页</span>
             <h1>选择适合你设备的版本</h1>
             <p class="lead">
-              客户端 GUI 当前为 <strong id="gui-release-version">0.86.2</strong>,
-              CLI 当前为 <strong id="cli-release-version">0.86.2</strong>。
-              GUI 下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作和显式启用的本地模型；CLI 可独立安装,也可作为 Fleet worker 或 manager。V0.86.2 的 Lynn Code/CLI 编码任务默认自动探测并选择 Codex app-server harness，不兼容时在任务开始前回到原架构；Windows 安装包已内置 llama.cpp 本地模型运行时。
+              客户端 GUI 当前为 <strong id="gui-release-version">0.86.3</strong>,
+              CLI 当前为 <strong id="cli-release-version">0.86.3</strong>。
+              GUI 下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作和显式启用的本地模型；CLI 可独立安装,也可作为 Fleet worker 或 manager。V0.86.3 加固 Lynn Code/CLI 的 Codex app-server 自动探测和原架构回退，并修复空答、单轮模型接班与历史污染；Windows 安装包继续内置 llama.cpp 本地模型运行时。
             </p>
             <div class="platform-callout" id="platform-callout">
               系统识别中…
@@ -62,7 +62,7 @@
             <span class="eyebrow">Lynn CLI / Lynn Code</span>
             <h2>给开发者和其他智能体的安装方式</h2>
             <p>
-              Lynn CLI 当前最新为 <strong>v0.86.2</strong>。它是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、Markdown 渲染、流式输出、工具调用和长任务续跑。
+              Lynn CLI 当前最新为 <strong>v0.86.3</strong>。它是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、Markdown 渲染、流式输出、工具调用和长任务续跑。
               一行命令装好,不用克隆仓库、不用编译;也可以被 Claude Code、Codex CLI、Kimi Code、Qwen CLI、CI 或 Lynn GUI Fleet 以无交互方式调用。
             </p>
           </div>
@@ -94,7 +94,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
             </div>
             <div class="code-copy-block">
               <button class="copy-button" type="button" data-copy-target="cli-install">复制</button>
-              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.2.tgz</code></pre>
+              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.3.tgz</code></pre>
             </div>
           </div>
           <div class="cli-install-card">
@@ -108,7 +108,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
               <pre><code id="cli-start">Lynn                 # 交互式聊天 TUI
 Lynn code            # 编码 agent TUI
 Lynn manager run -p "拆分并验收这个长任务" --jsonl
-Lynn --version       # 应输出 0.86.2
+Lynn --version       # 应输出 0.86.3
 Lynn agents          # 输出可复制的 Fleet / 其他 CLI 调用方式
 
 # 无交互编码 worker 示例
@@ -128,7 +128,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill">推荐给 Apple Silicon Mac</span>
               <h2>macOS Apple Silicon</h2>
             </div>
-            <p>适用于 Apple Silicon 芯片的 Mac。V0.86.2 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
+            <p>适用于 Apple Silicon 芯片的 Mac。V0.86.3 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
               <li>签名状态：Developer ID 签名</li>
@@ -138,7 +138,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="macArm"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.86.2-macOS-arm64.dmg"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.86.3-macOS-arm64.dmg"
               target="_blank"
               rel="noreferrer"
             >下载 Apple Silicon 版</a>
@@ -149,7 +149,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill pill-soft">适用于 Intel Mac</span>
               <h2>macOS Intel</h2>
             </div>
-            <p>适用于 Intel 芯片的 Mac。V0.86.2 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
+            <p>适用于 Intel 芯片的 Mac。V0.86.3 DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。</p>
             <ul>
               <li>文件格式：`.dmg`</li>
               <li>签名状态：Developer ID 签名</li>
@@ -159,7 +159,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="macIntel"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.86.2-macOS-x64.dmg"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.86.3-macOS-x64.dmg"
               target="_blank"
               rel="noreferrer"
             >下载 Intel 版</a>
@@ -170,7 +170,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill pill-warm">Windows 安装版</span>
               <h2>Windows</h2>
             </div>
-            <p>V0.86.2 Windows 安装包内置固定版本 llama.cpp CPU 运行时；导入本地 GGUF 不再需要手工安装 <code>llama-server.exe</code>。</p>
+            <p>V0.86.3 Windows 安装包内置固定版本 llama.cpp CPU 运行时；导入本地 GGUF 不再需要手工安装 <code>llama-server.exe</code>。</p>
             <ul>
               <li>文件格式：`.exe`</li>
               <li>安装方式：图形安装向导</li>
@@ -180,7 +180,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="windows"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.86.2-Windows-Setup.exe"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.86.3-Windows-Setup.exe"
               target="_blank"
               rel="noreferrer"
             >下载 Windows 版</a>
@@ -231,14 +231,18 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
 
         <section class="section release-summary">
           <div class="release-card">
-            <h2>V0.86.2:Codex app-server harness 与 Windows 本地运行时</h2>
+            <h2>V0.86.3:Agent Loop 稳定性与确定性回退</h2>
             <p>
-              V0.86.2 为 Lynn Code/CLI 编码任务加入默认 <code>auto</code> 的 Codex app-server harness，并保持原 Loop 作为兼容与安全回退。GUI 同步采用更严格的可终结运行状态。选择发生在任务启动前，运行中不临时换架构。
-              Windows 安装包新增内置 llama.cpp 运行时，最终 NSIS payload 会在 Windows 上完成真实 GGUF 加载和连续生成门禁。
+              V0.86.3 加固 Lynn Code/CLI 默认 <code>auto</code> 的 Codex app-server harness，并保持原 Loop 作为兼容与安全回退。可选状态接口不可用时仍会继续做带认证的 Responses 真实预检；显式 Codex 模式也必须验证当前 provider/model。GUI 与 CLI 同步修复空答、单轮接班和来源追踪。
+              Windows 安装包继续内置 llama.cpp 运行时，最终 NSIS payload 仍会在 Windows 上完成真实 GGUF 加载和连续生成门禁。
             </p>
             <ul>
-              <li>启动前探测 app-server 可执行文件、协议、认证、provider/model 与 Brain capability</li>
+              <li>启动前探测 app-server 可执行文件、协议、认证与当前 provider/model</li>
               <li>兼容才走 Codex harness；失败或不支持时直接选择原 Loop</li>
+              <li>本地模型失败只做单轮 Brain 接班，不永久修改会话模型</li>
+              <li>空正文或 reasoning-only 候选立即交接，并进入短暂跨轮 cooldown</li>
+              <li>Ink TUI 不再把空 assistant 或 unmatched user 写进后续上下文</li>
+              <li>GUI turn_end 透传 streamSource，便于定位本地或 Brain fallback</li>
               <li>多模态、JSON 审计、Ultra 和严格审批保持原有经过验证的执行语义</li>
               <li>CLI 记录 requested/selected harness、协议与选择原因；GUI/CLI 共享终态契约</li>
               <li>Windows 内置 llama-server.exe、依赖 DLL、许可证和逐文件 SHA-256 清单</li>
@@ -270,6 +274,6 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
       </footer>
     </div>
 
-    <script src="./app.js?v=0.86.2-cli"></script>
+    <script src="./app.js?v=0.86.3-cli"></script>
   </body>
 </html>

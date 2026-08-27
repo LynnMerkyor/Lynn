@@ -48,6 +48,7 @@ describe("tool turn finalizer fallback persistence", () => {
       hasOutput: false,
       isThinking: false,
       activeStreamToken: "tok",
+      streamSource: "brain_fallback",
     };
     let emittedText = "";
     const finalizer = createToolTurnFinalizer({
@@ -91,6 +92,9 @@ describe("tool turn finalizer fallback persistence", () => {
     expect(lines.at(-1)?.message?.content?.[0]?.text).toContain("模型这次没有返回可见内容");
     expect(session.messages.at(-1)?.role).toBe("assistant");
     expect(session.messages.at(-1)?.content?.[0]?.text).toContain("模型这次没有返回可见内容");
+    expect(ss.events).toContainEqual(expect.objectContaining({
+      event: expect.objectContaining({ type: "turn_end", streamSource: "brain_fallback" }),
+    }));
   });
 
   it("persists the user prompt before a direct fallback answer", () => {

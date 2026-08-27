@@ -253,6 +253,96 @@ describe("createLynnAgentSession native runtime", () => {
     expect(session.getActiveToolNames()).toEqual(["read", "present-files"]);
   });
 
+  it("uses a one-turn Brain override without changing the persisted session model", async () => {
+    const fetchMock = vi.fn(async () => sseResponse([
+      "data: {\"choices\":[{\"delta\":{\"content\":\"Brain fallback answer\"}}]}\n\n",
+      "data: [DONE]\n\n",
+    ]));
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+    const localModel = {
+      id: "local-qwen",
+      provider: "local-llamacpp",
+      api: "openai-completions",
+      baseUrl: "http://127.0.0.1:65530/v1",
+      apiKey: "local-key",
+    };
+    const brainModel = {
+      id: "brain-router",
+      provider: "brain",
+      api: "openai-completions",
+      baseUrl: "https://brain.example.test/v1",
+      apiKey: "brain-key",
+    };
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: localModel,
+      tools: [
+        { name: "read", description: "read file", parameters: { type: "object", properties: {} } },
+        { name: "web_search", description: "brain-owned search", parameters: { type: "object", properties: {} } },
+      ],
+    });
+
+    await session.prompt("retry via Brain", { modelOverride: brainModel });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][0]).toBe("https://brain.example.test/v1/chat/completions");
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(requestBody.tools.map((tool) => tool.function.name)).toEqual(["read"]);
+    expect(session.model).toMatchObject({ id: "local-qwen", provider: "local-llamacpp" });
+    expect(manager.buildSessionContext().messages.at(-1)).toMatchObject({
+      role: "assistant",
+      content: "Brain fallback answer",
+    });
+  });
+
+  it("clears a one-turn model override before draining a queued follow-up", async () => {
+    let releaseFirst;
+    const fetchMock = vi.fn(async () => {
+      if (fetchMock.mock.calls.length === 1) {
+        return await new Promise((resolve) => {
+          releaseFirst = () => resolve(sseResponse([
+            "data: {\"choices\":[{\"delta\":{\"content\":\"fallback done\"}}]}\n\n",
+            "data: [DONE]\n\n",
+          ]));
+        });
+      }
+      return sseResponse([
+        "data: {\"choices\":[{\"delta\":{\"content\":\"local follow-up\"}}]}\n\n",
+        "data: [DONE]\n\n",
+      ]);
+    });
+    globalThis.fetch = fetchMock;
+    const localModel = {
+      id: "local-qwen",
+      provider: "local-llamacpp",
+      api: "openai-completions",
+      baseUrl: "http://127.0.0.1:65530/v1",
+    };
+    const brainModel = {
+      id: "brain-router",
+      provider: "brain",
+      api: "openai-completions",
+      baseUrl: "https://brain.example.test/v1",
+    };
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: SessionManager.create(tempDir, tempDir),
+      model: localModel,
+    });
+
+    const firstTurn = session.prompt("first", { modelOverride: brainModel });
+    await waitFor(() => fetchMock.mock.calls.length === 1);
+    await session.followUp("second");
+    releaseFirst();
+    await firstTurn;
+    await waitFor(() => fetchMock.mock.calls.length === 2);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("https://brain.example.test/v1/chat/completions");
+    expect(fetchMock.mock.calls[1][0]).toBe("http://127.0.0.1:65530/v1/chat/completions");
+  });
+
   it("exposes step_execute to Brain and local planners but not Step itself", async () => {
     const registry = {
       getAll: () => [
@@ -1490,6 +1580,55 @@ describe("createLynnAgentSession native runtime", () => {
     expect(finalMessage.content).toContain("书面辞退通知");
     expect(finalMessage.content).not.toContain("<reflect>");
     expect(finalMessage.content).not.toContain("internal planning");
+  });
+
+  it("keeps a complete short translation without appending a no-remaining-content continuation", async () => {
+    const fetchMock = vi.fn(async () => sseResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "r".repeat(980) } }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: { content: "你好，世界" } }] })}\n\n`,
+      "data: [DONE]\n\n",
+    ]));
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: { id: "test-model", provider: "test", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "test-key" },
+    });
+
+    await session.prompt("把 hello world 翻译成中文");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(manager.buildSessionContext().messages.at(-1)?.content).toBe("你好，世界");
+  });
+
+  it("does not append a no-remaining-content marker when a continuation probe finds nothing", async () => {
+    const original = "陈默，三十六岁，前结构工程师。左手食指有一道浅疤，斜切入";
+    const fetchMock = vi.fn(async () => {
+      if (fetchMock.mock.calls.length === 1) {
+        return sseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "r".repeat(491) } }] })}\n\n`,
+          `data: ${JSON.stringify({ choices: [{ delta: { content: original } }] })}\n\n`,
+          "data: [DONE]\n\n",
+        ]);
+      }
+      return sseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "无剩余正文。" } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ]);
+    });
+    globalThis.fetch = fetchMock;
+    const manager = SessionManager.create(tempDir, tempDir);
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: { id: "test-model", provider: "test", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "test-key" },
+    });
+
+    await session.prompt("给一个长篇小说主角写人物小传：前工程师、记忆有缺口、不信任权威");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(manager.buildSessionContext().messages.at(-1)?.content).toBe(original);
   });
 
   it("emits only normalized visible text from a buffered tool-capable model response", async () => {

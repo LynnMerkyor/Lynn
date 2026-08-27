@@ -39,6 +39,7 @@ export interface HubSendOptions {
   isGroup?: boolean;
   cwd?: string;
   model?: string;
+  modelOverride?: Record<string, unknown>;
   persist?: string;
   from?: string;
   to?: string;
@@ -167,6 +168,7 @@ export class Hub {
       isGroup = false,
       cwd,
       model,
+      modelOverride,
       persist,
       from,
       to,
@@ -191,8 +193,8 @@ export class Hub {
       { // 桌面端 owner
         match: o => !o.sessionKey && !o.ephemeral && o.role === "owner",
         handle: () => o.sessionPath
-          ? this._engine.promptSession(o.sessionPath, text, { images: o.images, disableTools: o.disableTools, turnInstruction: o.turnInstruction })
-          : this._engine.prompt(text, { images: o.images, disableTools: o.disableTools, turnInstruction: o.turnInstruction }),
+          ? this._engine.promptSession(o.sessionPath, text, { images: o.images, disableTools: o.disableTools, turnInstruction: o.turnInstruction, modelOverride })
+          : this._engine.prompt(text, { images: o.images, disableTools: o.disableTools, turnInstruction: o.turnInstruction, modelOverride }),
       },
       { // Bridge guest
         match: o => o.sessionKey && o.role === "guest",

@@ -138,8 +138,9 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse, 
   const messages = (body.messages || []) as ChatMessage[];
   // v0.77.7: extra_body 透传 (OpenAI 标准, 客户端可传 thinking:{type:disabled} 关思考)
   const extraBody = (body.extra_body && typeof body.extra_body === "object") ? body.extra_body as JsonObject : null;
-  const reviewArbitration = device && String(req.headers['x-lynn-review-arbitration'] || '').trim() === 'mimo-token-plan-pro'
-    ? providerId('mimo-token-plan-pro')
+  const requestedReviewProvider = String(req.headers['x-lynn-review-arbitration'] || '').trim();
+  const reviewArbitration = device && (requestedReviewProvider === 'mimo-token-plan-pro' || requestedReviewProvider === 'glm-coding')
+    ? providerId(requestedReviewProvider)
     : null;
   // Lynn ThinkingLevelButton (off/auto/high/xhigh) → Pi SDK reasoning_effort
   const reasoningEffort = (body.reasoning_effort || (extraBody && extraBody.reasoning_effort) || null) as string | null;

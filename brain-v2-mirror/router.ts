@@ -81,6 +81,51 @@ function looksLikeIncompleteVisibleStop(result: RunRoundResult): boolean {
   return true;
 }
 
+type ExplicitLengthMiss = {
+  requested: number;
+  observed: number;
+  unit: 'chars' | 'words';
+};
+
+function explicitLengthMiss(prompt: string, result: RunRoundResult): ExplicitLengthMiss | null {
+  if (result.finishReason !== 'stop' || result.toolCalls.length > 0) return null;
+  // A replacement is safe only while the first answer is still buffered.
+  if (!result.bufferedContentChunks?.length) return null;
+  const source = String(prompt || '').replace(/[０-９]/gu, (digit) => String(digit.charCodeAt(0) - 0xfee0));
+  const visible = String(result.contentAccum || '').trim();
+
+  const chinese = /(?:约|大约|大概|将近|至少|不少于|不低于)?\s*(\d{2,5})\s*(?:个)?(?:字|汉字|字符)(?:左右|上下)?/gu;
+  for (const match of source.matchAll(chinese)) {
+    const requested = Number(match[1]);
+    if (!Number.isFinite(requested) || requested < 100 || requested > 20_000) continue;
+    const start = match.index || 0;
+    const before = source.slice(Math.max(0, start - 12), start);
+    const after = source.slice(start + match[0].length, start + match[0].length + 12);
+    if (/(?:最多|至多|不超过)\s*$/u.test(before) || /^\s*(?:以内|以下|之内|上限)/u.test(after)) continue;
+    const isMinimum = /(?:至少|不少于|不低于)\s*$/u.test(before)
+      || /^(?:至少|不少于|不低于)/u.test(match[0]);
+    const observed = visible.replace(/\s/gu, '').length;
+    const threshold = Math.floor(requested * (isMinimum ? 0.9 : 0.6));
+    if (observed < threshold) return { requested, observed, unit: 'chars' };
+  }
+
+  const english = /(?:about|around|approximately|at\s+least)?\s*(\d{2,5})\s*words?\b/giu;
+  for (const match of source.matchAll(english)) {
+    const requested = Number(match[1]);
+    if (!Number.isFinite(requested) || requested < 100 || requested > 20_000) continue;
+    const start = match.index || 0;
+    const before = source.slice(Math.max(0, start - 16), start);
+    const after = source.slice(start + match[0].length, start + match[0].length + 16);
+    if (/(?:at\s+most|no\s+more\s+than|maximum)\s*$/iu.test(before) || /^\s*(?:or\s+less|max(?:imum)?)/iu.test(after)) continue;
+    const isMinimum = /(?:at\s+least|no\s+fewer\s+than)\s*$/iu.test(before)
+      || /^(?:at\s+least|no\s+fewer\s+than)/iu.test(match[0]);
+    const observed = visible.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu)?.length || 0;
+    const threshold = Math.floor(requested * (isMinimum ? 0.9 : 0.6));
+    if (observed < threshold) return { requested, observed, unit: 'words' };
+  }
+  return null;
+}
+
 function assistantToolContinuationMessage(result: RunRoundResult): ChatMessage {
   const message: ChatMessage = {
     role: 'assistant',
@@ -1533,6 +1578,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
   let evidenceHandoffDone = false;
   let summarizeFromEvidenceOnly = false;
   let lastChanceRecoveryUsed = false;
+  let forceNoToolsNextRound = false;
   // [tool-round effort-down] activeReasoning may be lowered after tool rounds only.
   // Empty visible answers must hand off to the next provider immediately instead of
   // retrying the same model and wasting the user's turn.
@@ -1698,7 +1744,8 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     iter++;
     const hasGroundedEvidenceContext = evidenceToolCount > 0 || groundedToolObserved;
     const shouldBufferProviderContent = hasGroundedEvidenceContext;
-    const toolsForRound = summarizeFromEvidenceOnly ? [] : mergedTools;
+    const toolsForRound = summarizeFromEvidenceOnly || forceNoToolsNextRound ? [] : mergedTools;
+    forceNoToolsNextRound = false;
     const hasCallableTools = Array.isArray(toolsForRound) && toolsForRound.length > 0;
     let result: RunRoundResult;
     try {
@@ -1805,6 +1852,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
           ? 'reasoning-only stop'
           : `empty-visible (${result.finishReason || 'unknown'})`;
       log && log('warn', `provider ${lastProviderId} ${reason}; cooldown and fallback`);
+      markUnhealthy(result.providerId, `empty_visible_response: ${reason}`, EMPTY_RESPONSE_COOLDOWN_MS);
       skippedProviders.add(result.providerId);
       workingMessages.push({
         role: 'user',
@@ -1819,6 +1867,19 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       workingMessages.push({
         role: 'user',
         content: '上一个候选模型只返回了没有句末的半句话。请忽略那段残缺正文，从头完整回答原问题；不要解释接手过程。',
+      });
+      continue;
+    }
+
+    const lengthMiss = explicitLengthMiss(turnUserPrompt, result);
+    if (lengthMiss) {
+      const unitLabel = lengthMiss.unit === 'words' ? 'words' : '字';
+      log && log('warn', `provider ${lastProviderId} returned ${lengthMiss.observed} ${unitLabel} for explicit ${lengthMiss.requested} ${unitLabel} request; hand off without tools`);
+      skippedProviders.add(result.providerId);
+      forceNoToolsNextRound = true;
+      workingMessages.push({
+        role: 'user',
+        content: `上一个候选模型只返回约 ${lengthMiss.observed} ${unitLabel}，明显没有满足原问题约 ${lengthMiss.requested} ${unitLabel}的要求。请从头完整回答原问题，内容达到要求，不调用工具，不解释接手过程。`,
       });
       continue;
     }
