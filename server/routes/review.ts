@@ -326,8 +326,12 @@ const REVIEW_EXEC_TIMEOUT_MS = 45_000;
 const REVIEW_FALLBACK_TIMEOUT_MS = 22_000;
 const AUTO_REVIEW_EXEC_TIMEOUT_MS = Number(process.env.LYNN_AUTO_REVIEW_TIMEOUT_MS || 35_000);
 const AUTO_REVIEW_FALLBACK_TIMEOUT_MS = Number(process.env.LYNN_AUTO_REVIEW_FALLBACK_TIMEOUT_MS || 18_000);
+const AUTO_REVIEW_BRAIN_TIMEOUT_MS = Math.max(
+  AUTO_REVIEW_EXEC_TIMEOUT_MS + 15_000,
+  Number(process.env.LYNN_AUTO_REVIEW_BRAIN_TIMEOUT_MS || 75_000),
+);
 const AUTO_REVIEW_CHAIN_TIMEOUT_MS = Math.max(
-  AUTO_REVIEW_EXEC_TIMEOUT_MS + AUTO_REVIEW_FALLBACK_TIMEOUT_MS + 15_000,
+  AUTO_REVIEW_BRAIN_TIMEOUT_MS + AUTO_REVIEW_FALLBACK_TIMEOUT_MS + 15_000,
   AUTO_REVIEW_EXEC_TIMEOUT_MS * 3,
 );
 const AUTO_REVIEW_MAX_OUTPUT_TOKENS = Math.max(1200, Math.min(2400, Number(process.env.LYNN_AUTO_REVIEW_MAX_TOKENS || 2000)));
@@ -723,6 +727,12 @@ function isAutoReviewGlmConfig(config: DirectReviewModelConfig): boolean {
   if (isAutoReviewGlmProvider(config.provider)) return true;
   return normalizeProviderId(config.provider) === "brain"
     && config.requestHeaders?.["X-Lynn-Review-Arbitration"] === "glm-coding";
+}
+
+function autoReviewCandidateTimeoutMs(config: DirectReviewModelConfig): number {
+  const isBrainArbitration = normalizeProviderId(config.provider) === "brain"
+    && config.requestHeaders?.["X-Lynn-Review-Arbitration"] === "glm-coding";
+  return isBrainArbitration ? AUTO_REVIEW_BRAIN_TIMEOUT_MS : AUTO_REVIEW_EXEC_TIMEOUT_MS;
 }
 
 function autoReviewProviderTier(provider: unknown): number {
@@ -1217,7 +1227,7 @@ async function runDirectReviewerSessionWithFallback(
           runDirectReviewerModel(engine, reviewer, config, prompt, {
             autoReview: true,
             reviewMode: timing.reviewMode,
-            timeoutMs: AUTO_REVIEW_EXEC_TIMEOUT_MS,
+            timeoutMs: autoReviewCandidateTimeoutMs(config),
             // The chain signal races the whole candidate loop. The per-model
             // timeout starts only when the candidate actually runs.
             signal: undefined,

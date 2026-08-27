@@ -226,6 +226,7 @@ describe('review route', () => {
         model: 'step-3.5-flash-2603',
         provider: 'brain',
         maxTokens: 2000,
+        timeoutMs: 75_000,
         reasoning: false,
         quirks: ['enable_thinking'],
         requestHeaders: { 'X-Lynn-Review-Arbitration': 'glm-coding' },
@@ -339,6 +340,7 @@ describe('review route', () => {
 
     expect(callText).toHaveBeenCalledTimes(3);
     expect(callText.mock.calls[2][0]).toEqual(expect.objectContaining({ provider: 'zhipu-coding', model: 'glm-5.3-flash' }));
+    expect(callText.mock.calls[2][0]).toEqual(expect.objectContaining({ timeoutMs: 35_000 }));
     expect(callText.mock.calls.some(([options]) => options.provider === 'brain' && options.model === 'lynn-brain-router')).toBe(false);
 
     resolveGlmRuns[2]('Third GLM review.\n```json\n{"summary":"Third GLM.","verdict":"pass","findings":[]}\n```');
