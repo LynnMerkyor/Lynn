@@ -1,4 +1,4 @@
-import fp from '../FloatingPanels.module.css';
+import fp from '../AutomationPanel.module.css';
 
 const DAY_KEYS_ZH = ['日', '一', '二', '三', '四', '五', '六'];
 const DAY_KEYS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

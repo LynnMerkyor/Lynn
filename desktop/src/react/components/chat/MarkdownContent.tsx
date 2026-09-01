@@ -31,6 +31,41 @@ function getMermaid() {
   return _mermaidReady;
 }
 
+let _katexReady: Promise<typeof import('katex') | null> | null = null;
+function getKatex() {
+  if (!_katexReady) {
+    _katexReady = Promise.all([
+      import('katex'),
+      import('katex/dist/katex.min.css'),
+    ]).then(([module]) => module).catch(() => null);
+  }
+  return _katexReady;
+}
+
+async function renderKatexBlocks(container: HTMLElement) {
+  const nodes = container.querySelectorAll<HTMLElement>('[data-lynn-math]:not([data-katex-rendered])');
+  if (nodes.length === 0) return;
+  const katexModule = await getKatex();
+  if (!katexModule) return;
+  for (const node of Array.from(nodes)) {
+    if (!node.isConnected) continue;
+    const encoded = node.dataset.lynnMath || '';
+    let source = encoded;
+    try {
+      source = decodeURIComponent(encoded);
+    } catch {
+      // Keep the encoded source visible when malformed.
+    }
+    node.dataset.katexRendered = '1';
+    katexModule.default.render(source, node, {
+      displayMode: node.dataset.display === 'block',
+      throwOnError: false,
+      strict: 'warn',
+      trust: false,
+    });
+  }
+}
+
 async function renderMermaidBlocks(container: HTMLElement) {
   // 找到所有 language-mermaid 代码块
   const codeBlocks = container.querySelectorAll('pre > code.language-mermaid, pre > code.hljs.language-mermaid');
@@ -82,6 +117,7 @@ export const MarkdownContent = memo(function MarkdownContent({ html, className, 
   useEffect(() => {
     if (ref.current) {
       postprocessMarkdown(ref.current, { stateKey });
+      void renderKatexBlocks(ref.current);
       void renderMermaidBlocks(ref.current);
     }
   }, [html, stateKey]);

@@ -108,8 +108,16 @@ export default defineConfig({
             return 'codemirror-vendor';
           }
 
-          if (id.includes('node_modules/katex') || id.includes('markdown-it') || id.includes('dompurify')) {
-            return 'rendering-vendor';
+          if (id.includes('node_modules/katex') || id.includes('@traptitech/markdown-it-katex')) {
+            return 'katex-vendor';
+          }
+
+          if (id.includes('node_modules/markdown-it') || id.includes('markdown-it-task-lists')) {
+            return 'markdown-vendor';
+          }
+
+          if (id.includes('node_modules/dompurify')) {
+            return 'sanitize-vendor';
           }
         },
       },

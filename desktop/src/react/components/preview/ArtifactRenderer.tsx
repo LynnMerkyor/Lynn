@@ -5,12 +5,12 @@
  * 每种 artifact 类型对应一个 JSX 分支或子组件。
  */
 
-import { useEffect, useMemo, useRef } from 'react';
-import { renderMarkdown } from '../../utils/markdown';
+import { useEffect, useMemo } from 'react';
 import { sanitizeHtml, sanitizeHtmlArtifact } from '../../utils/sanitize';
-import { parseCSV, injectCopyButtons } from '../../utils/format';
+import { parseCSV } from '../../utils/format';
 import { fileIconSvg } from '../../utils/icons';
 import type { Artifact } from '../../types';
+import { AsyncMarkdownContent } from '../chat/AsyncMarkdownContent';
 
 interface ArtifactRendererProps {
   artifact: Artifact;
@@ -19,21 +19,7 @@ interface ArtifactRendererProps {
 // ── MarkdownPreview ──
 
 function MarkdownPreview({ content }: { content: string }) {
-  const divRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (divRef.current) {
-      injectCopyButtons(divRef.current);
-    }
-  }, [content]);
-
-  return (
-    <div
-      ref={divRef}
-      className="preview-markdown md-content"
-      dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
-    />
-  );
+  return <AsyncMarkdownContent markdown={content} className="preview-markdown md-content" stateKey="artifact-markdown" />;
 }
 
 // ── CsvPreview ──

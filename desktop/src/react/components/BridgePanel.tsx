@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../stores';
 import { hanaFetch } from '../hooks/use-hana-fetch';
 import { formatSessionDate, parseMoodFromContent } from '../utils/format';
-import { renderMarkdown } from '../utils/markdown';
 import { stripPseudoToolCallMarkup } from '../../../../shared/pseudo-tool-call.js';
 import fp from './FloatingPanels.module.css';
+import { AsyncMarkdownContent } from './chat/AsyncMarkdownContent';
 
 interface BridgeSession {
   sessionKey: string;
@@ -406,7 +406,7 @@ function ChatBubble({ message: m }: { message: BridgeMessage }) {
     const cleaned = stripPseudoToolCallMarkup(text || m.content);
     return (
       <div className={`${fp.bridgeBubbleWrap} ${fp.bridgeBubbleIn}`}>
-        <div className={`${fp.bridgeBubble} md-content`} dangerouslySetInnerHTML={{ __html: renderMarkdown(cleaned) }} />
+        <AsyncMarkdownContent markdown={cleaned} className={`${fp.bridgeBubble} md-content`} stateKey={`bridge:${m.ts || cleaned.length}`} />
         {time && <span className={fp.bridgeBubbleTime}>{time}</span>}
       </div>
     );

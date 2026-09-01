@@ -21,9 +21,17 @@ const SCENARIOS = [
   { id: "tools", expect: ["UI_SMOKE_TOOL_CARD", "reports/summary.md"] },
   { id: "image-tool-empty", expect: ["UI_SMOKE_IMAGE_TOOL", "image_analyze", "编辑重发"] },
   { id: "long-code", expect: ["UI_SMOKE_LONG_CODE", "calculateTotal"] },
+  { id: "automation", expect: ["自动任务", "定时工作小结", "文件自动归纳"] },
 ];
 
-type Scenario = typeof SCENARIOS[number];
+const AUTOMATION_VISUAL_CASES = [
+  { theme: "warm-paper", width: 1440, height: 900 },
+  { theme: "warm-paper", width: 1024, height: 768 },
+  { theme: "warm-paper", width: 720, height: 900 },
+  { theme: "midnight", width: 1440, height: 900 },
+  { theme: "midnight", width: 1024, height: 768 },
+  { theme: "midnight", width: 720, height: 900 },
+];
 
 interface DebugPage {
   type?: string;
@@ -62,6 +70,13 @@ interface ScenarioResult {
   ok: boolean;
   failures: string[];
   screenshot: string;
+}
+
+interface VisualSnapshot {
+  visibleText?: string;
+  rootOverflowX: number;
+  dialogOverflowX: number;
+  dialogInsideViewport: boolean;
 }
 
 function nowStamp() {
@@ -106,7 +121,9 @@ async function terminateProcess(child: ChildProcess | null, timeoutMs = 3000): P
   if (result !== timedOut || child.exitCode !== null || child.signalCode !== null) return;
   try {
     child.kill("SIGKILL");
-  } catch {}
+  } catch {
+    // Process already exited between the state check and signal delivery.
+  }
 }
 
 async function fetchJson<T = unknown>(url: string, timeoutMs = 1000): Promise<T> {
@@ -201,7 +218,9 @@ class CdpClient {
   close(): void {
     try {
       this.ws.close();
-    } catch {}
+    } catch {
+      // The debugger socket may already be closed during Electron teardown.
+    }
   }
 }
 
@@ -229,6 +248,40 @@ function assertScenario(id: string, snapshot: Snapshot, expectedTexts: string[])
   return failures;
 }
 
+function comparePng(actual: Buffer, baseline: Buffer): { changedRatio: number; diff: Buffer } {
+  const { PNG } = require("pngjs") as typeof import("pngjs");
+  const actualPng = PNG.sync.read(actual);
+  const baselinePng = PNG.sync.read(baseline);
+  if (actualPng.width !== baselinePng.width || actualPng.height !== baselinePng.height) {
+    throw new Error(`image dimensions differ: actual ${actualPng.width}x${actualPng.height}, baseline ${baselinePng.width}x${baselinePng.height}`);
+  }
+  const diffPng = new PNG({ width: actualPng.width, height: actualPng.height });
+  let changed = 0;
+  const pixelCount = actualPng.width * actualPng.height;
+  for (let offset = 0; offset < actualPng.data.length; offset += 4) {
+    const delta = Math.max(
+      Math.abs(actualPng.data[offset] - baselinePng.data[offset]),
+      Math.abs(actualPng.data[offset + 1] - baselinePng.data[offset + 1]),
+      Math.abs(actualPng.data[offset + 2] - baselinePng.data[offset + 2]),
+      Math.abs(actualPng.data[offset + 3] - baselinePng.data[offset + 3]),
+    );
+    if (delta > 24) changed += 1;
+    if (delta > 24) {
+      diffPng.data[offset] = 255;
+      diffPng.data[offset + 1] = 42;
+      diffPng.data[offset + 2] = 72;
+      diffPng.data[offset + 3] = 255;
+    } else {
+      const gray = Math.round((baselinePng.data[offset] + baselinePng.data[offset + 1] + baselinePng.data[offset + 2]) / 3);
+      diffPng.data[offset] = gray;
+      diffPng.data[offset + 1] = gray;
+      diffPng.data[offset + 2] = gray;
+      diffPng.data[offset + 3] = 96;
+    }
+  }
+  return { changedRatio: changed / pixelCount, diff: PNG.sync.write(diffPng) };
+}
+
 async function main(): Promise<void> {
   const rendererEntry = path.join(ROOT, "desktop", "dist-renderer", "index.html");
   try {
@@ -239,6 +292,10 @@ async function main(): Promise<void> {
 
   const outputDir = path.join(DEFAULT_OUTPUT_ROOT, `ui-smoke-${nowStamp()}`);
   await fs.mkdir(outputDir, { recursive: true });
+  const baselineDir = path.join(ROOT, "desktop", "__tests__", "visual-baselines", "automation");
+  const updateBaselines = process.env.LYNN_UPDATE_VISUAL_BASELINES === "1";
+  const visualOnly = process.argv.includes("--automation-visual-only");
+  if (updateBaselines) await fs.mkdir(baselineDir, { recursive: true });
 
   const electronBin = require("electron");
   const debugPort = await getFreePort();
@@ -285,7 +342,7 @@ async function main(): Promise<void> {
 
     await waitForExpression(cdp, "window.__lynnUiSmokeReady === true");
 
-    for (const scenario of SCENARIOS) {
+    for (const scenario of visualOnly ? [] : SCENARIOS) {
       await cdp.evaluate(`window.__lynnSetUiSmokeScenario(${JSON.stringify(scenario.id)})`);
       await waitForExpression(cdp, `document.body.dataset.uiSmokeScenario === ${JSON.stringify(scenario.id)}`);
       await wait(350);
@@ -315,6 +372,67 @@ async function main(): Promise<void> {
         screenshot: path.relative(ROOT, screenshotPath),
       });
       console.log(`[ui-smoke] ${scenario.id}: ${failures.length === 0 ? "PASS" : "FAIL"}`);
+      for (const failure of failures) console.log(`  - ${failure}`);
+    }
+
+    for (const visualCase of AUTOMATION_VISUAL_CASES) {
+      const id = `automation-${visualCase.theme}-${visualCase.width}x${visualCase.height}`;
+      await cdp.call("Emulation.setDeviceMetricsOverride", {
+        width: visualCase.width,
+        height: visualCase.height,
+        deviceScaleFactor: 1,
+        mobile: false,
+      });
+      await cdp.evaluate(`window.applyTheme(${JSON.stringify(visualCase.theme)})`);
+      await waitForExpression(cdp, `document.documentElement.dataset.theme === ${JSON.stringify(visualCase.theme)}`);
+      await cdp.evaluate(`window.__lynnSetUiSmokeScenario("automation")`);
+      await waitForExpression(cdp, `document.body.dataset.uiSmokeScenario === "automation"`);
+      await waitForExpression(cdp, `document.body.innerText.includes("定时工作小结") && !!document.querySelector('[class*="automationDialog"]')`);
+      await wait(500);
+      await cdp.evaluate(`window.__lynnPrepareUiSmokeCapture?.()`);
+      await wait(50);
+
+      const snapshot = await cdp.evaluate(`(() => {
+        const root = document.documentElement;
+        const body = document.body;
+        const dialog = document.querySelector('[class*="automationDialog"]');
+        const rect = dialog?.getBoundingClientRect();
+        return {
+          visibleText: body.innerText || '',
+          rootOverflowX: Math.max(root.scrollWidth, body.scrollWidth) - window.innerWidth,
+          dialogOverflowX: dialog ? dialog.scrollWidth - dialog.clientWidth : 999,
+          dialogInsideViewport: !!rect && rect.left >= -1 && rect.top >= -1 && rect.right <= window.innerWidth + 1 && rect.bottom <= window.innerHeight + 1,
+        };
+      })()`) as VisualSnapshot;
+      const failures: string[] = [];
+      if (snapshot.rootOverflowX > 2) failures.push(`root horizontal overflow: ${snapshot.rootOverflowX}px`);
+      if (snapshot.dialogOverflowX > 2) failures.push(`dialog horizontal overflow: ${snapshot.dialogOverflowX}px`);
+      if (!snapshot.dialogInsideViewport) failures.push("automation dialog escapes the viewport");
+      for (const text of ["自动任务", "定时工作小结", "文件自动归纳", "新建自定义任务"]) {
+        if (!String(snapshot.visibleText || "").includes(text)) failures.push(`missing visible text: ${text}`);
+      }
+
+      const screenshot = await cdp.call("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }) as { data?: string };
+      const actual = Buffer.from(String(screenshot.data || ""), "base64");
+      const screenshotPath = path.join(outputDir, `${id}.png`);
+      const baselinePath = path.join(baselineDir, `${id}.png`);
+      await fs.writeFile(screenshotPath, actual);
+      if (updateBaselines) {
+        await fs.writeFile(baselinePath, actual);
+      } else {
+        try {
+          const baseline = await fs.readFile(baselinePath);
+          const comparison = comparePng(actual, baseline);
+          if (comparison.changedRatio > 0.005) {
+            failures.push(`visual difference ${(comparison.changedRatio * 100).toFixed(3)}% exceeds 0.500%`);
+            await fs.writeFile(path.join(outputDir, `${id}-diff.png`), comparison.diff);
+          }
+        } catch (error) {
+          failures.push(`visual baseline unavailable: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      results.push({ id, ok: failures.length === 0, failures, screenshot: path.relative(ROOT, screenshotPath) });
+      console.log(`[ui-smoke] ${id}: ${failures.length === 0 ? "PASS" : "FAIL"}`);
       for (const failure of failures) console.log(`  - ${failure}`);
     }
   } finally {

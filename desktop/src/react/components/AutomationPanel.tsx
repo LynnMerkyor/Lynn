@@ -1,684 +1,123 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo } from 'react';
+import { useDialogA11y } from '../hooks/use-dialog-a11y';
 import { useStore } from '../stores';
-import { hanaFetch } from '../hooks/use-hana-fetch';
-import { buildAutomationModelOptions } from './AutomationPanel.helpers';
-import { AutomationJobCard } from './automation/AutomationJobCard';
-import {
-  buildScheduleFromPreset,
-  inferSchedulePreset,
-  parseCronDays,
-  parseCronTime,
-  type SchedulePreset,
-} from './automation/cron-utils';
-import { folderLabel, resolveJobModelValue } from './automation/job-utils';
-import { DaySelector, TimePicker } from './automation/ScheduleControls';
-import { CATEGORY_DEFS, TEMPLATES, type AutomationCategory, type TemplateDefinition } from './automation/templates';
-import type { CronJob, ModelOption } from './automation/types';
-import fp from './FloatingPanels.module.css';
-
-function updateBadge(jobs: CronJob[]) {
-  useStore.setState({ automationCount: jobs.length });
-}
+import { AutomationEditor } from './automation/AutomationEditor';
+import { AutomationTemplateLibrary } from './automation/AutomationTemplateLibrary';
+import { folderLabel } from './automation/job-utils';
+import { useAutomationData } from './automation/useAutomationData';
+import { useAutomationDraft } from './automation/useAutomationDraft';
+import styles from './AutomationPanel.module.css';
 
 export function AutomationPanel() {
-  const activePanel = useStore((s) => s.activePanel);
-  const locale = useStore((s) => s.locale || 'zh');
-  const selectedFolder = useStore((s) => s.selectedFolder || '');
-  const homeFolder = useStore((s) => s.homeFolder || '');
-  const currentSessionPath = useStore((s) => s.currentSessionPath);
-  const sessions = useStore((s) => s.sessions);
-  const setPendingConfirm = useStore((s) => s.setPendingConfirm);
-  const addToast = useStore((s) => s.addToast);
+  const activePanel = useStore((state) => state.activePanel);
+  const locale = useStore((state) => state.locale || 'zh');
+  const selectedFolder = useStore((state) => state.selectedFolder || '');
+  const homeFolder = useStore((state) => state.homeFolder || '');
+  const currentSessionPath = useStore((state) => state.currentSessionPath);
+  const sessions = useStore((state) => state.sessions);
   const isZh = locale.startsWith('zh');
   const translate = window.t;
   const tt = useCallback((key: string, zhText: string, enText: string) => {
     const value = translate ? translate(key) : key;
     return !value || value === key ? (isZh ? zhText : enText) : value;
   }, [isZh, translate]);
-
-  const [jobs, setJobs] = useState<CronJob[]>([]);
-  const [availableModels, setAvailableModels] = useState<ModelOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<AutomationCategory>('reports');
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [editingJobId, setEditingJobId] = useState<string | null>(null);
-  const [draftName, setDraftName] = useState('');
-  const [draftPrompt, setDraftPrompt] = useState('');
-  const [draftProject, setDraftProject] = useState('');
-  const [draftModel, setDraftModel] = useState('');
-  const [draftSchedulePreset, setDraftSchedulePreset] = useState<SchedulePreset>('daily');
-  const [draftHour, setDraftHour] = useState('09');
-  const [draftMinute, setDraftMinute] = useState('00');
-  const [draftWeeklyDay, setDraftWeeklyDay] = useState(1);
-  const [draftCustomDays, setDraftCustomDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [showTemplatePrompt, setShowTemplatePrompt] = useState(false);
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const sectionRefs = useRef<Record<AutomationCategory, HTMLDivElement | null>>({
-    reports: null,
-    organize: null,
-    followup: null,
-  });
+  const close = useCallback(() => useStore.getState().setActivePanel(null), []);
+  const isOpen = activePanel === 'automation';
+  const dialogRef = useDialogA11y({ open: isOpen, onClose: close });
 
   const currentSession = useMemo(
     () => sessions.find((session) => session.path === currentSessionPath) || null,
     [sessions, currentSessionPath],
   );
-
   const projectOptions = useMemo(() => {
     const seen = new Set<string>();
-    const rawPaths = [selectedFolder, homeFolder, currentSession?.cwd || ''].filter(Boolean);
-    return rawPaths
+    return [selectedFolder, homeFolder, currentSession?.cwd || '']
+      .filter(Boolean)
       .map((value) => String(value).trim())
       .filter((value) => value && !seen.has(value) && (seen.add(value), true))
-      .map((value) => ({
-        value,
-        label: folderLabel(value),
-        meta: value,
-      }));
+      .map((value) => ({ value, label: folderLabel(value), meta: value }));
   }, [currentSession?.cwd, homeFolder, selectedFolder]);
-  const currentTemplate = selectedTemplateId
-    ? TEMPLATES.find((template) => template.id === selectedTemplateId) || null
-    : null;
-  const templateMode = Boolean(currentTemplate) && !editingJobId;
+
+  const data = useAutomationData({ enabled: isOpen, isZh, tt });
+  const draft = useAutomationDraft({ isZh, projectOptions, availableModels: data.availableModels });
   const defaultModelLabel = tt('automation.defaultModel', '默认工作模型', 'Default work model');
 
-  const resetComposer = useCallback(() => {
-    setSelectedTemplateId(null);
-    setEditingJobId(null);
-    setShowTemplatePrompt(false);
-    setDraftName('');
-    setDraftPrompt('');
-    setDraftModel('');
-    setDraftProject(projectOptions[0]?.value || '');
-    setDraftSchedulePreset('daily');
-    setDraftHour('09');
-    setDraftMinute('00');
-    setDraftWeeklyDay(1);
-    setDraftCustomDays([1, 2, 3, 4, 5]);
-  }, [projectOptions]);
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const [cronRes, modelsRes] = await Promise.all([
-        hanaFetch('/api/desk/cron'),
-        hanaFetch('/api/models'),
-      ]);
-      const cronData = await cronRes.json();
-      const modelsData = await modelsRes.json();
-      const nextJobs = (cronData.jobs || []) as CronJob[];
-      const nextModels = buildAutomationModelOptions(modelsData.models || []);
-      setJobs(nextJobs);
-      setAvailableModels(nextModels);
-      updateBadge(nextJobs);
-    } catch (error) {
-      console.error('[automation] load failed:', error);
-      setLoadError(
-        isZh
-          ? '自动任务面板刚才没完全加载好。点一次重试，我会重新读取任务、模板和模型。'
-          : 'The automation panel did not load correctly. Retry to reload tasks, templates, and models.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [isZh]);
-
-  useEffect(() => {
-    if (activePanel === 'automation') {
-      void loadData();
-    }
-  }, [activePanel, loadData]);
-
-  useEffect(() => {
-    if (activePanel !== 'automation') return undefined;
-    const onActivityUpdated = (event: Event) => {
-      const customEvent = event as CustomEvent<{ type?: string }>;
-      if (customEvent.detail?.type === 'cron') {
-        void loadData();
-      }
-    };
-    window.addEventListener('hana-activity-updated', onActivityUpdated as EventListener);
-    return () => window.removeEventListener('hana-activity-updated', onActivityUpdated as EventListener);
-  }, [activePanel, loadData]);
-
-  useEffect(() => {
-    if (activePanel !== 'automation') return undefined;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        useStore.getState().setActivePanel(null);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activePanel]);
-
-  useEffect(() => {
-    if (!draftProject) {
-      setDraftProject(projectOptions[0]?.value || '');
-    }
-  }, [draftProject, projectOptions]);
-
-  const startFromTemplate = useCallback((template: TemplateDefinition) => {
-    setSelectedTemplateId(template.id);
-    setEditingJobId(null);
-    setShowTemplatePrompt(false);
-    setDraftName(isZh ? template.defaultLabelZh : template.defaultLabelEn);
-    setDraftPrompt(isZh ? template.promptZh : template.promptEn);
-    setDraftProject(projectOptions[0]?.value || '');
-    setDraftModel('');
-    setDraftSchedulePreset(template.defaultPreset);
-    setDraftHour(template.defaultHour);
-    setDraftMinute(template.defaultMinute);
-    setDraftWeeklyDay(template.defaultWeeklyDay ?? 1);
-    setDraftCustomDays(template.defaultDays || [1, 2, 3, 4, 5]);
-  }, [isZh, projectOptions]);
-
-  const startCustom = useCallback(() => {
-    setSelectedTemplateId('custom');
-    setEditingJobId(null);
-    setShowTemplatePrompt(true);
-    setDraftName(isZh ? '自定义自动任务' : 'Custom task');
-    setDraftPrompt('');
-    setDraftProject(projectOptions[0]?.value || '');
-    setDraftModel('');
-    setDraftSchedulePreset('daily');
-    setDraftHour('09');
-    setDraftMinute('00');
-    setDraftWeeklyDay(1);
-    setDraftCustomDays([1, 2, 3, 4, 5]);
-  }, [isZh, projectOptions]);
-
-  const editJob = useCallback((job: CronJob) => {
-    const preset = inferSchedulePreset(job.schedule);
-    const cronTime = parseCronTime(job.schedule) || { hour: '09', minute: '00' };
-    const cronDays = parseCronDays(job.schedule);
-    setSelectedTemplateId(null);
-    setEditingJobId(job.id);
-    setShowTemplatePrompt(true);
-    setDraftName(job.label || '');
-    setDraftPrompt(job.prompt || '');
-    setDraftProject(job.workspace || projectOptions[0]?.value || '');
-    setDraftModel(resolveJobModelValue(job.model, availableModels));
-    setDraftSchedulePreset(preset);
-    setDraftHour(cronTime.hour);
-    setDraftMinute(cronTime.minute);
-    setDraftWeeklyDay(cronDays.find((day) => day >= 0 && day <= 6) ?? 1);
-    setDraftCustomDays(cronDays.length > 0 ? cronDays : [1, 2, 3, 4, 5]);
-  }, [availableModels, projectOptions]);
-
-  const close = useCallback(() => {
-    useStore.getState().setActivePanel(null);
-  }, []);
-
-  const toggleJob = useCallback(async (jobId: string) => {
-    try {
-      await hanaFetch('/api/desk/cron', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'toggle', id: jobId }),
-      });
-      await loadData();
-    } catch (error) {
-      console.error('[automation] toggle failed:', error);
-    }
-  }, [loadData]);
-
-  const removeJob = useCallback(async (jobId: string) => {
-    setPendingConfirm({
-      title: tt('common.delete', '删除任务', 'Delete task'),
-      message: tt('automation.deleteConfirm', '确定要删除这个定时任务吗？', 'Delete this scheduled task?'),
-      confirmLabel: tt('common.delete', '删除', 'Delete'),
-      cancelLabel: tt('common.cancel', '取消', 'Cancel'),
-      onConfirm: async () => {
-        await hanaFetch('/api/desk/cron', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'remove', id: jobId }),
-        });
-        await loadData();
-      },
+  const saveDraft = useCallback(async (runNow: boolean) => {
+    const name = draft.name.trim() || (draft.currentTemplate ? (isZh ? draft.currentTemplate.defaultLabelZh : draft.currentTemplate.defaultLabelEn) : '');
+    const prompt = draft.prompt.trim() || (draft.currentTemplate ? (isZh ? draft.currentTemplate.promptZh : draft.currentTemplate.promptEn) : '');
+    const saved = await data.saveJob({
+      editingJobId: draft.editingJobId,
+      name,
+      prompt,
+      project: draft.project,
+      model: draft.model,
+      schedulePreset: draft.schedulePreset,
+      hour: draft.hour,
+      minute: draft.minute,
+      weeklyDay: draft.weeklyDay,
+      customDays: draft.customDays,
+      runNow,
     });
-  }, [loadData, setPendingConfirm, tt]);
+    if (saved) draft.reset();
+  }, [data, draft, isZh]);
 
-  const runJobNow = useCallback(async (jobId: string) => {
-    try {
-      const res = await hanaFetch('/api/desk/cron', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'run', id: jobId }),
-      });
-      const data = await res.json();
-      if (!res.ok || data?.error) {
-        throw new Error(data?.error || (isZh ? '没能启动这条自动任务' : 'Failed to start task'));
-      }
-      addToast(
-        isZh
-          ? '这条自动任务已经开始执行，完成后结果会出现在活动里，并写入工作区结果文件夹。'
-          : 'Task started. When it finishes, the result will appear in Activity and in the workspace result folder.',
-        'success',
-      );
-      await loadData();
-    } catch (error) {
-      console.error('[automation] run-now failed:', error);
-      addToast(error instanceof Error ? error.message : String(error), 'error');
-    }
-  }, [addToast, isZh, loadData]);
-
-  const saveDraft = useCallback(async (opts?: { runNow?: boolean }) => {
-    const resolvedName = draftName.trim()
-      || (currentTemplate ? (isZh ? currentTemplate.defaultLabelZh : currentTemplate.defaultLabelEn) : '');
-    const resolvedPrompt = draftPrompt.trim()
-      || (currentTemplate ? (isZh ? currentTemplate.promptZh : currentTemplate.promptEn) : '');
-    if (!resolvedName || !resolvedPrompt) return;
-    setSaving(true);
-    try {
-      const schedule = buildScheduleFromPreset(
-        draftSchedulePreset,
-        draftHour,
-        draftMinute,
-        draftWeeklyDay,
-        draftCustomDays,
-      );
-      const payload: Record<string, unknown> = editingJobId
-        ? {
-            action: 'update',
-            id: editingJobId,
-            label: resolvedName,
-            prompt: resolvedPrompt,
-            schedule,
-            workspace: draftProject,
-          }
-        : {
-            action: 'add',
-            type: 'cron',
-            label: resolvedName,
-            prompt: resolvedPrompt,
-            schedule,
-            workspace: draftProject,
-          };
-      if (draftModel) payload.model = draftModel;
-      const res = await hanaFetch('/api/desk/cron', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok || data?.error) {
-        throw new Error(data?.error || tt('settings.saveFailed', '自动任务保存失败', 'Failed to save task'));
-      }
-      const savedJobId = String(data?.job?.id || editingJobId || '').trim();
-      if (opts?.runNow && savedJobId) {
-        const runRes = await hanaFetch('/api/desk/cron', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'run', id: savedJobId }),
-        });
-        const runData = await runRes.json();
-        if (!runRes.ok || runData?.error) {
-          throw new Error(runData?.error || (isZh ? '创建成功，但立即测试没有启动起来' : 'Task was created, but the test run did not start'));
-        }
-      }
-      await loadData();
-      addToast(
-        opts?.runNow
-          ? (editingJobId
-              ? tt('settings.saved', '自动任务已更新，并且已经开始测试执行', 'Task updated and test run started')
-              : tt('settings.saved', '自动任务已创建，并且已经开始测试执行', 'Task created and test run started'))
-          : (editingJobId
-              ? tt('settings.saved', '自动任务已更新', 'Task updated')
-              : tt('settings.saved', '自动任务已创建', 'Task created')),
-        'success',
-      );
-      resetComposer();
-    } catch (error) {
-      console.error('[automation] save failed:', error);
-      addToast(error instanceof Error ? error.message : tt('settings.saveFailed', '自动任务保存失败', 'Failed to save task'), 'error');
-    } finally {
-      setSaving(false);
-    }
-  }, [
-    addToast,
-    currentTemplate,
-    draftCustomDays,
-    draftHour,
-    draftMinute,
-    draftModel,
-    draftName,
-    draftProject,
-    draftPrompt,
-    draftSchedulePreset,
-    draftWeeklyDay,
-    editingJobId,
-    isZh,
-    loadData,
-    resetComposer,
-    tt,
-  ]);
-
-  const templateSections = useMemo(() => {
-    return CATEGORY_DEFS.map((category) => ({
-      ...category,
-      templates: TEMPLATES.filter((template) => template.category === category.key),
-    }));
-  }, []);
-
-  const scrollToCategory = useCallback((category: AutomationCategory) => {
-    setActiveCategory(category);
-    const container = scrollContainerRef.current;
-    const section = sectionRefs.current[category];
-    if (!container || !section) return;
-    const top = section.offsetTop - 8;
-    container.scrollTo({ top, behavior: 'smooth' });
-  }, []);
-
-  if (activePanel !== 'automation') return null;
-
+  if (!isOpen) return null;
   return (
-    <div className={fp.automationOverlay} onClick={close}>
+    <div className={styles.automationOverlay} onClick={close}>
       <div
-        className={fp.automationDialog}
+        ref={dialogRef}
+        className={styles.automationDialog}
         role="dialog"
         aria-modal="true"
         aria-label={tt('automation.title', '自动任务', 'Scheduled tasks')}
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className={fp.automationDialogHeader}>
-          <div className={fp.automationDialogTitleBlock}>
-            <div className={fp.automationDialogTitle}>{tt('automation.title', '自动任务', 'Scheduled tasks')}</div>
-              <div className={fp.automationDialogSubtitle}>
-                {tt(
-                  'automation.guideDesc',
-                  '先选一个日常工作模板，再在底部设置项目、时间和模型。创建后，Lynn 会按计划自动执行，并把结果记到活动里；只有提示里明确要求写文件时，才会落到工作区。',
-                  'Pick a daily-work template, then set the project, schedule, and model at the bottom. Results appear in Activity unless the prompt explicitly writes files into the workspace.',
-                )}
-              </div>
+        <div className={styles.automationDialogHeader}>
+          <div className={styles.automationDialogTitleBlock}>
+            <div className={styles.automationDialogTitle}>{tt('automation.title', '自动任务', 'Scheduled tasks')}</div>
+            <div className={styles.automationDialogSubtitle}>
+              {tt(
+                'automation.guideDesc',
+                '先选一个日常工作模板，再在底部设置项目、时间和模型。创建后，Lynn 会按计划自动执行，并把结果记到活动里；只有提示里明确要求写文件时，才会落到工作区。',
+                'Pick a daily-work template, then set the project, schedule, and model at the bottom. Results appear in Activity unless the prompt explicitly writes files into the workspace.',
+              )}
+            </div>
           </div>
-          <div className={fp.automationDialogActions}>
-            <button type="button" className={fp.automationGhostBtn} onClick={startCustom}>
-              {isZh ? '新建自定义任务' : 'New custom task'}
-            </button>
-            <button type="button" className={fp.automationCloseBtn} onClick={close} aria-label={isZh ? '关闭' : 'Close'}>
-              ×
-            </button>
+          <div className={styles.automationDialogActions}>
+            <button type="button" className={styles.automationGhostBtn} onClick={draft.startCustom}>{isZh ? '新建自定义任务' : 'New custom task'}</button>
+            <button type="button" className={styles.automationCloseBtn} onClick={close} aria-label={isZh ? '关闭' : 'Close'}>×</button>
           </div>
         </div>
 
-        <div className={fp.automationDialogBody}>
-          <aside className={fp.automationSidebar}>
-            {CATEGORY_DEFS.map((category) => (
-              <button
-                key={category.key}
-                type="button"
-                className={`${fp.automationCategoryBtn}${activeCategory === category.key ? ` ${fp.automationCategoryBtnActive}` : ''}`}
-                onClick={() => scrollToCategory(category.key)}
-              >
-                {isZh ? category.zhLabel : category.enLabel}
-              </button>
-            ))}
-          </aside>
-
-          <section className={fp.automationMain}>
-            <div
-              ref={scrollContainerRef}
-              className={fp.automationScroll}
-            >
-              {loadError && (
-                <div className={fp.automationPanelNotice}>
-                  <div>{loadError}</div>
-                  <button
-                    type="button"
-                    className={fp.automationLinkBtn}
-                    onClick={() => void loadData()}
-                    style={{ marginTop: 10 }}
-                  >
-                    {isZh ? '重试' : 'Retry'}
-                  </button>
-                </div>
-              )}
-
-              {jobs.length > 0 && (
-                <div className={fp.automationSection}>
-                  <div className={fp.automationSectionHeader}>
-                    <div className={fp.automationSectionTitle}>{isZh ? '已创建任务' : 'Created tasks'}</div>
-                    <div className={fp.automationSectionMeta}>{jobs.length}</div>
-                  </div>
-                  <div className={fp.automationJobGrid}>
-                    {jobs.map((job) => (
-                      <AutomationJobCard
-                        key={job.id}
-                        job={job}
-                        modelOptions={availableModels}
-                        isZh={isZh}
-                        defaultModelLabel={defaultModelLabel}
-                        onToggle={toggleJob}
-                        onEdit={editJob}
-                        onRemove={removeJob}
-                        onRunNow={runJobNow}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {templateSections.map((category) => (
-                <div
-                  key={category.key}
-                  id={`automation-section-${category.key}`}
-                  ref={(node) => {
-                    sectionRefs.current[category.key] = node;
-                  }}
-                  className={fp.automationSection}
-                >
-                  <div className={fp.automationSectionHeader}>
-                    <div className={fp.automationSectionTitle}>
-                      {isZh ? category.zhLabel : category.enLabel}
-                    </div>
-                    <div className={fp.automationSectionMeta}>{category.templates.length}</div>
-                  </div>
-                  <div className={fp.automationTemplateGrid}>
-                    {category.templates.map((template) => {
-                      const selected = selectedTemplateId === template.id;
-                      return (
-                        <button
-                          key={template.id}
-                          type="button"
-                          className={`${fp.automationTemplateCard}${selected ? ` ${fp.automationTemplateCardActive}` : ''}`}
-                          onClick={() => startFromTemplate(template)}
-                        >
-                          <div className={fp.automationTemplateIcon}>{template.icon}</div>
-                          <div className={fp.automationTemplateBody}>
-                            <div className={fp.automationTemplateTitle}>
-                              {isZh ? template.zhTitle : template.enTitle}
-                            </div>
-                            <div className={fp.automationTemplateDesc}>
-                              {isZh ? template.zhDesc : template.enDesc}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-
-              {loading && (
-                <div className={fp.automationPanelNotice}>
-                  {isZh ? '正在读取自动任务…' : 'Loading scheduled tasks...'}
-                </div>
-              )}
-            </div>
-
-            <div className={fp.automationComposer}>
-              <div className={fp.automationComposerTop}>
-                <div className={fp.automationComposerTitle}>
-                  {editingJobId
-                    ? (isZh ? '编辑自动任务' : 'Edit task')
-                    : currentTemplate
-                      ? (isZh ? `使用模板：${currentTemplate.zhTitle}` : `Use template: ${currentTemplate.enTitle}`)
-                      : (isZh ? '先选一个模板，或新建自定义任务' : 'Pick a template or create a custom task')}
-                </div>
-                <div className={fp.automationComposerHint}>
-                  {isZh
-                    ? '模板任务默认已经带好目标和输出格式。通常只需要选项目、时间和模型；只有你想改写模板时，才需要展开下面的任务内容。'
-                    : 'Template tasks already come with a goal and output shape. Usually you only need project, schedule, and model here; only expand the prompt when you want to customize the template.'}
-                </div>
-              </div>
-
-              <div className={fp.automationComposerFields}>
-                {!templateMode && (
-                  <label className={fp.automationField}>
-                    <span className={fp.automationFieldLabel}>{isZh ? '任务名称' : 'Task name'}</span>
-                    <input
-                      className={fp.automationFieldInput}
-                      value={draftName}
-                      onChange={(event) => setDraftName(event.target.value)}
-                      placeholder={isZh ? '例如：工作日项目巡检' : 'e.g. Weekday project review'}
-                    />
-                  </label>
-                )}
-                <label className={fp.automationField}>
-                  <span className={fp.automationFieldLabel}>{isZh ? '项目' : 'Project'}</span>
-                  <select
-                    className={fp.automationFieldSelect}
-                    value={draftProject}
-                    onChange={(event) => setDraftProject(event.target.value)}
-                  >
-                    {projectOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label && option.label !== option.meta
-                          ? `${option.label} · ${option.meta}`
-                          : option.meta}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className={fp.automationField}>
-                  <span className={fp.automationFieldLabel}>{isZh ? '频率' : 'Schedule'}</span>
-                  <select
-                    className={fp.automationFieldSelect}
-                    value={draftSchedulePreset}
-                    onChange={(event) => setDraftSchedulePreset(event.target.value as SchedulePreset)}
-                  >
-                    <option value="daily">{isZh ? '每天' : 'Daily'}</option>
-                    <option value="weekdays">{isZh ? '工作日' : 'Weekdays'}</option>
-                    <option value="weekly">{isZh ? '每周' : 'Weekly'}</option>
-                    <option value="custom">{isZh ? '定制' : 'Custom'}</option>
-                  </select>
-                </label>
-                <label className={fp.automationField}>
-                  <span className={fp.automationFieldLabel}>{isZh ? '模型' : 'Model'}</span>
-                  <select
-                    className={fp.automationFieldSelect}
-                    value={draftModel}
-                    onChange={(event) => setDraftModel(event.target.value)}
-                  >
-                    <option value="">{defaultModelLabel}</option>
-                    {availableModels.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className={fp.automationField}>
-                  <span className={fp.automationFieldLabel}>{isZh ? '时间' : 'Time'}</span>
-                  <TimePicker hour={draftHour} minute={draftMinute} onChange={(hour, minute) => {
-                    setDraftHour(hour);
-                    setDraftMinute(minute);
-                  }} />
-                </div>
-              </div>
-
-              {templateMode && currentTemplate && (
-                <div className={fp.automationPanelNotice} style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 6 }}>
-                    {isZh ? currentTemplate.zhTitle : currentTemplate.enTitle}
-                  </div>
-                  <div style={{ marginBottom: 8 }}>
-                    {isZh ? currentTemplate.zhDesc : currentTemplate.enDesc}
-                  </div>
-                  <button
-                    type="button"
-                    className={fp.automationLinkBtn}
-                    onClick={() => setShowTemplatePrompt((value) => !value)}
-                  >
-                    {showTemplatePrompt
-                      ? (isZh ? '收起模板内容' : 'Hide template details')
-                      : (isZh ? '查看模板内容' : 'View template details')}
-                  </button>
-                </div>
-              )}
-
-              {(draftSchedulePreset === 'weekly' || draftSchedulePreset === 'custom') && (
-                <div className={fp.automationComposerDays}>
-                  <div className={fp.automationFieldLabel}>
-                    {draftSchedulePreset === 'weekly'
-                      ? (isZh ? '每周哪天' : 'Day of week')
-                      : (isZh ? '定制日期' : 'Custom days')}
-                  </div>
-                  <DaySelector
-                    isZh={isZh}
-                    selected={draftSchedulePreset === 'weekly' ? [draftWeeklyDay] : draftCustomDays}
-                    single={draftSchedulePreset === 'weekly'}
-                    onChange={(days) => {
-                      if (draftSchedulePreset === 'weekly') {
-                        setDraftWeeklyDay(days[0] ?? 1);
-                      } else {
-                        setDraftCustomDays(days);
-                      }
-                    }}
-                  />
-                </div>
-              )}
-
-              {(!templateMode || showTemplatePrompt) && (
-                <label className={`${fp.automationField} ${fp.automationFieldGrow}`}>
-                  <span className={fp.automationFieldLabel}>{isZh ? '任务内容' : 'Prompt'}</span>
-                  <textarea
-                    className={fp.automationFieldTextarea}
-                    rows={4}
-                    value={draftPrompt}
-                    onChange={(event) => setDraftPrompt(event.target.value)}
-                    placeholder={isZh ? '写下这条自动任务要替你做什么' : 'Describe what this scheduled task should do'}
-                  />
-                </label>
-              )}
-
-              <div className={fp.automationComposerActions}>
-                <button type="button" className={fp.automationGhostBtn} onClick={resetComposer}>
-                  {isZh ? '清空' : 'Clear'}
-                </button>
-                <button
-                  type="button"
-                  className={fp.automationGhostBtn}
-                  disabled={saving || (!draftName.trim() && !currentTemplate) || (!draftPrompt.trim() && !currentTemplate)}
-                  onClick={() => void saveDraft({ runNow: true })}
-                >
-                  {saving
-                    ? (isZh ? '处理中…' : 'Saving...')
-                    : editingJobId
-                      ? (isZh ? '保存并测试' : 'Save & test')
-                      : (isZh ? '创建并测试' : 'Create & test')}
-                </button>
-                <button
-                  type="button"
-                  className={fp.automationPrimaryBtn}
-                  disabled={saving || (!draftName.trim() && !currentTemplate) || (!draftPrompt.trim() && !currentTemplate)}
-                  onClick={() => void saveDraft()}
-                >
-                  {saving
-                    ? (isZh ? '处理中…' : 'Saving...')
-                    : editingJobId
-                      ? (isZh ? '保存修改' : 'Save changes')
-                      : (isZh ? '创建自动任务' : 'Create task')}
-                </button>
-              </div>
-            </div>
-          </section>
-        </div>
+        <AutomationTemplateLibrary
+          jobs={data.jobs}
+          availableModels={data.availableModels}
+          loading={data.loading}
+          loadError={data.loadError}
+          selectedTemplateId={draft.selectedTemplateId}
+          editingJobId={draft.editingJobId}
+          defaultModelLabel={defaultModelLabel}
+          isZh={isZh}
+          onRetry={() => void data.loadData()}
+          onSelectTemplate={draft.startFromTemplate}
+          onToggleJob={(id) => void data.toggleJob(id)}
+          onEditJob={draft.editJob}
+          onRemoveJob={data.removeJob}
+          onRunJobNow={(id) => void data.runJobNow(id)}
+          editor={(rootRef) => (
+            <AutomationEditor
+              rootRef={rootRef}
+              draft={draft}
+              projectOptions={projectOptions}
+              availableModels={data.availableModels}
+              defaultModelLabel={defaultModelLabel}
+              isZh={isZh}
+              saving={data.saving}
+              onSave={(runNow) => void saveDraft(runNow)}
+            />
+          )}
+        />
       </div>
     </div>
   );

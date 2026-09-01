@@ -95,12 +95,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.3.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.4.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.86.3
+Lynn --version  # should print 0.86.4
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -126,7 +126,25 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details open>
-<summary><strong>Lynn v0.86.3</strong> · 2026-08-27 · Agent-loop stability and deterministic fallback <em>(latest)</em></summary>
+<summary><strong>Lynn v0.86.4</strong> · 2026-09-01 · Automation UI and on-demand rendering <em>(latest)</em></summary>
+
+**v0.86.4 Automation experience and frontend engineering update**:
+- **Readable Automation UI in dark mode**: templates, job cards, forms, status pills, and actions use theme-semantic colors instead of light-only surfaces and low-contrast text.
+- **Modular Automation surface**: data access, draft state, the template library, and the editor are separate modules; Automation-specific CSS is no longer mixed into the shared Floating Panels stylesheet.
+- **Real on-demand renderer loading**: Mermaid, Wardley, KaTeX, Markdown, and sanitization vendors load as separate asynchronous chunks, backed by a static dependency gate.
+- **Visual regression in the release gate**: light and dark themes are checked at 1440×900, 1024×768, and 720×900 against six reviewed baselines.
+- **Existing Agent-loop contracts remain intact**: Codex app-server auto-preflight, original-loop fallback, one-turn local-model recovery, empty-response cooldown, and GUI/CLI terminal-state tracing are preserved.
+
+```bash
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.4.tgz"
+```
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.4)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.86.3</strong> · 2026-08-27 · Agent-loop stability and deterministic fallback</summary>
 
 **v0.86.3 agent-loop and cross-client reliability update**:
 - **More reliable Codex harness auto-selection**: when the optional Brain status endpoint is unavailable, Lynn proceeds to the authenticated Responses route preflight instead of declaring the harness unsupported. Explicit `--harness codex` now validates the current provider, model, and authentication too. Human-readable headless runs show the selected harness and reason before execution.
@@ -1102,11 +1120,11 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases). The V0.86.3 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases). The V0.86.4 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
 
 **Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-> **Windows SmartScreen notice:** The v0.86.3 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt while the new release builds reputation.
+> **Windows SmartScreen notice:** The v0.86.4 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt while the new release builds reputation.
 
 Linux builds are planned.
 
@@ -1169,8 +1187,8 @@ tests/          Vitest test suite
 
 | Platform | Status |
 |----------|--------|
-| macOS (Apple Silicon) | Supported (V0.86.3 notarized DMG) |
-| macOS (Intel) | Supported (V0.86.3 notarized DMG) |
+| macOS (Apple Silicon) | Supported (V0.86.4 notarized DMG) |
+| macOS (Intel) | Supported (V0.86.4 notarized DMG) |
 | Windows | Beta |
 | Linux | Planned |
 | Mobile (PWA) | Planned |

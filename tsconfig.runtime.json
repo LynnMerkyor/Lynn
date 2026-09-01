@@ -18,6 +18,7 @@
   "include": [
     "index.ts",
     "scripts/download-git-portable.ts",
+    "scripts/**/*.d.ts",
     "scripts/generate-update-manifest.ts",
     "scripts/launch.ts",
     "scripts/run-electron-ui-smoke.ts",

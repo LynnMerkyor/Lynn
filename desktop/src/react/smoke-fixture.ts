@@ -2,13 +2,18 @@ import { useStore } from './stores';
 import { renderMarkdown } from './utils/markdown';
 import type { ChatListItem, ChatMessage, ContentBlock } from './stores/chat-types';
 
-type SmokeScenario = 'home' | 'short' | 'tools' | 'image-tool-empty' | 'long-code';
+type SmokeScenario = 'home' | 'short' | 'tools' | 'image-tool-empty' | 'long-code' | 'automation';
 
 declare global {
   interface Window {
     __lynnUiSmokeReady?: boolean;
     __lynnUiSmokeScenario?: SmokeScenario;
     __lynnSetUiSmokeScenario?: (scenario: SmokeScenario) => boolean;
+    __lynnPrepareUiSmokeCapture?: () => boolean;
+    __lynnAutomationSmokeData?: {
+      jobs: Array<Record<string, unknown>>;
+      models: Array<{ id: string; name?: string; provider?: string }>;
+    };
   }
 }
 
@@ -187,6 +192,39 @@ function applyScenario(scenario: SmokeScenario): void {
   const now = new Date().toISOString();
   const isHome = scenario === 'home';
 
+  window.__lynnAutomationSmokeData = scenario === 'automation' ? {
+    jobs: [
+      {
+        id: 'visual-daily-summary',
+        enabled: true,
+        label: '定时工作小结',
+        prompt: '按固定时间整理当前项目、工作地图和活动流。',
+        schedule: '0 10 * * *',
+        workspace: '/tmp/Lynn',
+        nextRunAt: '2026-09-02T02:00:00.000Z',
+        lastRunAt: '2026-09-01T05:10:00.000Z',
+        latestRun: { status: 'success', finishedAt: '2026-09-01T05:10:00.000Z' },
+        latestActivity: { summary: '定时工作小结 · Lynn', status: 'success' },
+      },
+      {
+        id: 'visual-file-archive',
+        enabled: true,
+        label: '文件自动归纳',
+        prompt: '查看工作区里新增或变化的文件，整理出重点。',
+        schedule: '0 17 * * 1-5',
+        workspace: '/tmp/Lynn',
+        nextRunAt: '2026-09-01T09:00:00.000Z',
+        lastRunAt: '2026-09-01T01:23:00.000Z',
+        latestRun: { status: 'success', finishedAt: '2026-09-01T01:23:00.000Z' },
+        latestActivity: { summary: '文件自动归纳 · Lynn', status: 'success' },
+      },
+    ],
+    models: [
+      { id: 'step-3.7-flash', name: 'StepFun 3.7 Flash', provider: 'brain' },
+      { id: 'glm-5.3-flash', name: 'GLM-5.3 Flash', provider: 'brain' },
+    ],
+  } : undefined;
+
   useStore.setState({
     serverPort: '0',
     serverToken: 'ui-smoke',
@@ -195,7 +233,7 @@ function applyScenario(scenario: SmokeScenario): void {
     statusKey: 'status.connected',
     statusVars: {},
     currentTab: 'chat',
-    activePanel: null,
+    activePanel: scenario === 'automation' ? 'automation' : null,
     locale: 'zh',
     agentName: 'Lynn',
     userName: 'Smoke Tester',
@@ -207,6 +245,8 @@ function applyScenario(scenario: SmokeScenario): void {
     pendingNewSession: isHome,
     sessionCreationPending: false,
     currentSessionPath: isHome ? null : sessionPath,
+    selectedFolder: '/tmp/Lynn',
+    homeFolder: '/tmp',
     sessions: isHome ? [] : [{
       path: sessionPath,
       title: `UI Smoke · ${scenario}`,
@@ -239,6 +279,13 @@ function applyScenario(scenario: SmokeScenario): void {
 export function installUiSmokeFixture(initialScenario: SmokeScenario = 'home'): void {
   window.__lynnSetUiSmokeScenario = (scenario: SmokeScenario) => {
     applyScenario(scenario);
+    return true;
+  };
+  window.__lynnPrepareUiSmokeCapture = () => {
+    // Background connection attempts are intentionally unavailable in smoke mode.
+    // Clear their transient notifications so visual baselines contain only the
+    // scenario under test, never timing-dependent network noise.
+    useStore.setState({ toasts: [] });
     return true;
   };
   applyScenario(initialScenario);

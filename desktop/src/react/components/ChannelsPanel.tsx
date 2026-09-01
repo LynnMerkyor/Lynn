@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../stores';
 import { useI18n } from '../hooks/use-i18n';
-import { renderMarkdown } from '../utils/markdown';
 import { sendChannelMessage } from '../stores/channel-actions';
+import { AsyncMarkdownContent } from './chat/AsyncMarkdownContent';
 import { resolveChannelMember, formatChannelTime, MemberAvatar } from './channels/ChannelList';
 import type { MemberInfo } from './channels/ChannelList';
 import styles from './channels/Channels.module.css';
@@ -67,10 +67,7 @@ export function ChannelMessages() {
                   <span className={styles.channelMsgTime}>{formatChannelTime(msg.timestamp)}</span>
                 </div>
               )}
-              <div
-                className={styles.channelMsgText}
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.body || '') }}
-              />
+              <AsyncMarkdownContent markdown={msg.body || ''} className={styles.channelMsgText} stateKey={`channel:${msg.timestamp}:${idx}`} />
             </div>
           </div>
         );

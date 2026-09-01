@@ -1,16 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../stores';
 import { switchSession } from '../stores/session-actions';
 import { hanaFetch, hanaUrl } from '../hooks/use-hana-fetch';
-import { formatSessionDate, injectCopyButtons, parseMoodFromContent } from '../utils/format';
+import { formatSessionDate, parseMoodFromContent } from '../utils/format';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
-import { getMd } from '../utils/markdown';
-import { sanitizeHtml } from '../utils/sanitize';
 import { stripPseudoToolCallMarkup } from '../../../../shared/pseudo-tool-call.js';
 import fp from './FloatingPanels.module.css';
 import chatStyles from './chat/Chat.module.css';
 import { WorkerCard } from './fleet/WorkerCard';
 import fleetStyles from './fleet/Fleet.module.css';
+import { AsyncMarkdownContent } from './chat/AsyncMarkdownContent';
 
 // ── 稳定头像时间戳（避免每次渲染生成新 URL） ──
 const _avatarTs = Date.now();
@@ -375,18 +374,10 @@ function DetailHeader({ detail }: { detail: DetailState }) {
 }
 
 function DetailBody({ messages }: { messages: DetailMessage[] }) {
-  const bodyRef = useRef<HTMLDivElement>(null);
   const t = window.t ?? ((p: string) => p);
-  const mdInstance = getMd();
-
-  useEffect(() => {
-    if (bodyRef.current) {
-      injectCopyButtons(bodyRef.current);
-    }
-  }, [messages]);
 
   return (
-    <div className={fp.floatingPanelBody} ref={bodyRef}>
+    <div className={fp.floatingPanelBody}>
       {messages.map((m, i) => {
         if (m.role === 'assistant') {
           const { mood, text } = parseMoodFromContent(m.content);
@@ -402,16 +393,7 @@ function DetailBody({ messages }: { messages: DetailMessage[] }) {
                 {text && (
                   (() => {
                     const cleanedText = stripPseudoToolCallMarkup(text);
-                    return (
-                  <div
-                    className="md-content"
-                    dangerouslySetInnerHTML={{
-                      __html: mdInstance
-                        ? sanitizeHtml(mdInstance.render(cleanedText))
-                        : cleanedText,
-                    }}
-                  />
-                    );
+                    return <AsyncMarkdownContent markdown={cleanedText} stateKey={`activity:${i}`} />;
                   })()
                 )}
               </div>

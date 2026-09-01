@@ -9,8 +9,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../stores';
 import { hanaFetch } from '../hooks/use-hana-fetch';
 
-import { getMdWithOpts } from '../utils/markdown';
-import { sanitizeHtml } from '../utils/sanitize';
+import { AsyncMarkdownContent } from './chat/AsyncMarkdownContent';
 
 declare function t(key: string, vars?: Record<string, string | number>): string;
 
@@ -27,8 +26,6 @@ interface TreeItem {
   isDir?: boolean;
   children?: TreeItem[];
 }
-
-const md = getMdWithOpts({ html: false, linkify: true, breaks: true });
 
 export function SkillViewerOverlay() {
   const data = useStore(s => s.skillViewerData) as SkillInfo | null;
@@ -92,8 +89,8 @@ export function SkillViewerOverlay() {
 
   // 渲染 markdown 或代码
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
-  let rendered = '';
   let description = '';
+  let markdownBody = content || '';
   if (content != null) {
     if (ext === 'md' || ext === 'markdown') {
       let body = content;
@@ -102,7 +99,7 @@ export function SkillViewerOverlay() {
         body = content.slice(fmMatch[0].length);
         description = parseFmDescription(fmMatch[1]);
       }
-      rendered = sanitizeHtml(md.render(body));
+      markdownBody = body;
     }
   }
 
@@ -150,7 +147,7 @@ export function SkillViewerOverlay() {
                     <div className="sv-description-text">{description}</div>
                   </div>
                 )}
-                <div className="md-content" dangerouslySetInnerHTML={{ __html: rendered }} />
+                <AsyncMarkdownContent markdown={markdownBody} stateKey={`skill:${activeFile || fileName}`} />
               </>
             ) : (
               <pre><code>{content}</code></pre>

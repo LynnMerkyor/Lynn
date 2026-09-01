@@ -55,6 +55,7 @@ const MARKDOWN_ATTRS = [
   'colspan', 'rowspan',
   'target', 'rel',
   'style',
+  'data-lynn-math', 'data-display',
   // KaTeX
   'mathvariant', 'encoding',
 ];

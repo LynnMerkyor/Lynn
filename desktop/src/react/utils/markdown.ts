@@ -5,16 +5,15 @@
  */
 
 import markdownit from 'markdown-it';
-import mk from '@traptitech/markdown-it-katex';
 import taskLists from 'markdown-it-task-lists';
-import 'katex/dist/katex.min.css';
 import { sanitizeHtml } from './sanitize';
+import { markdownMathPlaceholders } from './markdown-math-placeholders';
 
 type MarkdownIt = ReturnType<typeof markdownit>;
 
 let _md: MarkdownIt | null = null;
 
-/** 获取默认 md 实例（html: false, katex 插件） */
+/** 获取默认 md 实例（html: false，数学公式在 DOM 阶段按需渲染） */
 export function getMd(): MarkdownIt {
   if (_md) return _md;
   _md = markdownit({
@@ -23,7 +22,7 @@ export function getMd(): MarkdownIt {
     linkify: true,
     typographer: true,
   });
-  _md.use(mk);
+  _md.use(markdownMathPlaceholders);
   _md.use(taskLists, { enabled: true, label: true, labelAfter: true });
   return _md;
 }
@@ -38,6 +37,7 @@ export function getMdWithOpts(opts: Parameters<typeof markdownit>[0]): MarkdownI
   let inst = _cache.get(key);
   if (!inst) {
     inst = markdownit(safeOpts);
+    inst.use(markdownMathPlaceholders);
     _cache.set(key, inst);
   }
   return inst;

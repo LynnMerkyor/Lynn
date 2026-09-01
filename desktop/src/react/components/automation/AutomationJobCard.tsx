@@ -1,5 +1,5 @@
 import { cronToHuman } from '../../utils/format';
-import fp from '../FloatingPanels.module.css';
+import fp from '../AutomationPanel.module.css';
 import { formatAutomationDateTime } from './cron-utils';
 import { folderLabel, resolveJobModelValue } from './job-utils';
 import type { CronJob, ModelOption } from './types';
@@ -62,6 +62,10 @@ export function AutomationJobCard({
           type="button"
           className={`${fp.automationJobSwitch}${job.enabled ? ` ${fp.automationJobSwitchOn}` : ''}`}
           onClick={() => onToggle(job.id)}
+          aria-pressed={job.enabled}
+          aria-label={isZh
+            ? `${job.label || job.prompt || job.id}：${job.enabled ? '已开启' : '已暂停'}`
+            : `${job.label || job.prompt || job.id}: ${job.enabled ? 'on' : 'paused'}`}
         >
           {job.enabled ? (isZh ? '已开启' : 'On') : (isZh ? '已暂停' : 'Paused')}
         </button>
