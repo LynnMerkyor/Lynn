@@ -262,6 +262,41 @@ describe("createLynnAgentSession native runtime", () => {
     expect(secondTools).toEqual(["read", "flux-studio.generate_image", "flux-studio_edit_image", "view_image"]);
   });
 
+  it("exposes todo only for explicit task state changes or operational agent work", async () => {
+    const fetchMock = vi.fn(async () => sseResponse([
+      "data: {\"choices\":[{\"delta\":{\"content\":\"已回答。\"}}]}\n\n",
+      "data: [DONE]\n\n",
+    ]));
+    globalThis.fetch = fetchMock;
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: SessionManager.create(tempDir, tempDir),
+      model: {
+        id: "test-model",
+        provider: "test-provider",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:65530/v1",
+        apiKey: "test-key",
+      },
+      tools: [
+        { name: "read", description: "read", parameters: { type: "object", properties: {} } },
+        { name: "todo", description: "todo", parameters: { type: "object", properties: {} } },
+      ],
+    });
+
+    await session.prompt("帮一个两周项目拆 OKR，目标是上线一个后端回归测试工具");
+    await session.prompt("把买牛奶加入我的待办");
+    await session.prompt("修复这个仓库的登录 bug，测试通过后提交代码");
+
+    const toolNames = fetchMock.mock.calls.map((call) => JSON.parse(call[1].body).tools.map((tool) => tool.function.name));
+    expect(toolNames).toEqual([
+      ["read"],
+      ["read", "todo"],
+      ["read", "todo"],
+    ]);
+  });
+
   it("does not expose Brain-managed tools to the local native runtime for Brain models", async () => {
     const { session } = await createLynnAgentSession({
       cwd: tempDir,

@@ -5,9 +5,11 @@ import {
   filterToolsForTurn,
   hasExplicitDeliverableIntent,
   hasExplicitImageToolIntent,
+  hasTaskToolIntent,
   isDeliverableToolName,
   isFileMutationToolName,
   isImageMutationToolName,
+  isTaskStateToolName,
   isStructurallyCompletePartialAnswer,
   shouldRecoverIncompleteVisibleAnswer,
 } from "../core/agent-runtime/turn-tool-policy.js";
@@ -96,5 +98,23 @@ describe("turn deliverable tool policy", () => {
     expect(hasExplicitImageToolIntent("把这张头图翻译成英文版")).toBe(true);
     expect(hasExplicitImageToolIntent("Create a poster image for the release")).toBe(true);
     expect(hasExplicitImageToolIntent("Write a character biography for a former engineer")).toBe(false);
+  });
+
+  it("hides todo for advisory plans while preserving explicit task state and agent execution", () => {
+    const tools = [{ name: "read" }, { name: "todo" }];
+    const okrPrompt = "帮一个两周项目拆 OKR，目标是上线一个后端回归测试工具";
+    expect(hasTaskToolIntent(okrPrompt)).toBe(false);
+    expect(hasTaskToolIntent("给跨部门项目做一个风险登记表，包含概率、影响、负责人")).toBe(false);
+    expect(hasTaskToolIntent("Design a two-week OKR plan for a regression testing tool")).toBe(false);
+    expect(filterToolsForTurn(tools, {
+      allowDeliverables: false,
+      allowImageTools: false,
+      allowTaskTools: hasTaskToolIntent(okrPrompt),
+    })).toEqual([{ name: "read" }]);
+    expect(hasTaskToolIntent("把买牛奶加入我的待办")).toBe(true);
+    expect(hasTaskToolIntent("修复这个仓库的登录 bug，测试通过后提交代码")).toBe(true);
+    expect(hasTaskToolIntent("Fix the login bug in this repo and run the tests")).toBe(true);
+    expect(isTaskStateToolName("todo")).toBe(true);
+    expect(isTaskStateToolName("calendar")).toBe(false);
   });
 });

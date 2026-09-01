@@ -65,6 +65,7 @@ import {
   filterToolsForTurn,
   hasExplicitDeliverableIntent,
   hasExplicitImageToolIntent,
+  hasTaskToolIntent,
   isStructurallyCompletePartialAnswer,
   shouldRecoverIncompleteVisibleAnswer,
 } from "./turn-tool-policy.js";
@@ -137,6 +138,7 @@ export class LynnAgentSession {
   private stepExecuteDepth = 0;
   private activeTurnAllowsDeliverables = true;
   private activeTurnAllowsImageTools = true;
+  private activeTurnAllowsTaskTools = true;
 
   constructor(options: LynnCreateAgentSessionOptions = {}) {
     this.cwd = path.resolve(options.cwd || process.cwd());
@@ -212,6 +214,7 @@ export class LynnAgentSession {
     this.agent.replaceMessages(this.sessionManager.buildSessionContext().messages || []);
     this.activeTurnAllowsDeliverables = hasExplicitDeliverableIntent(prompt);
     this.activeTurnAllowsImageTools = hasExplicitImageToolIntent(prompt);
+    this.activeTurnAllowsTaskTools = hasTaskToolIntent(prompt);
     this.activeTurnModel = options?.modelOverride || null;
     try {
       await this.runTurn();
@@ -775,6 +778,7 @@ export class LynnAgentSession {
         this.abortController = null;
         this.activeTurnAllowsDeliverables = true;
         this.activeTurnAllowsImageTools = true;
+        this.activeTurnAllowsTaskTools = true;
       }
     }
   }
@@ -799,6 +803,7 @@ export class LynnAgentSession {
       {
         allowDeliverables: this.activeTurnAllowsDeliverables,
         allowImageTools: this.activeTurnAllowsImageTools,
+        allowTaskTools: this.activeTurnAllowsTaskTools,
       },
     );
     const streamTextImmediately = options.streamText ?? tools.length === 0;
@@ -921,6 +926,7 @@ export class LynnAgentSession {
     tools = filterToolsForTurn(this.getAllTools(), {
       allowDeliverables: this.activeTurnAllowsDeliverables,
       allowImageTools: this.activeTurnAllowsImageTools,
+      allowTaskTools: this.activeTurnAllowsTaskTools,
     }),
     signal = this.abortController?.signal,
   ): Promise<ToolResult> {
@@ -935,6 +941,7 @@ export class LynnAgentSession {
         filterToolsForTurn(this.getFallbackTools(), {
           allowDeliverables: this.activeTurnAllowsDeliverables,
           allowImageTools: this.activeTurnAllowsImageTools,
+          allowTaskTools: this.activeTurnAllowsTaskTools,
         }),
       );
     }
