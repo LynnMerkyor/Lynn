@@ -29,6 +29,7 @@ Lynn
 - **重型渲染器真正按需加载**：Mermaid、Wardley、KaTeX、Markdown 与 sanitize vendor 拆成独立异步块，并新增静态依赖门禁，防止动态导入被其他静态引用悄悄抵消。
 - **截图回归门禁覆盖主题和分辨率**：自动任务页面加入亮色/暗色 × 1440×900、1024×768、720×900 六组基线，发布 UI 门禁会直接阻止明显视觉退化。
 - **生图工具按明确视觉意图开放**：人物小传、小说、摘要等纯文字请求不再误调用 Flux；只有明确要求生成或编辑图片、海报、封面等视觉产物时才开放生图工具。
+- **咨询型计划不再写入真实待办**：OKR、计划、清单、排期和框架请求直接在正文回答；只有明确修改待办或执行多步骤代码/文件/部署任务时才开放 `todo`。
 - **既有 Agent Loop 保持不变**：v0.86.3 的 Codex app-server 自动预检、原 Loop 回退、单轮本地模型接班、空答熔断和跨端终态契约全部保留。
 
 ## English highlights
@@ -38,4 +39,5 @@ Lynn
 - Mermaid, Wardley, KaTeX, Markdown, and sanitization vendors are emitted as real on-demand chunks, with a dependency gate that catches accidental static reachability from the main bundle.
 - Visual regression now covers light/dark themes at 1440×900, 1024×768, and 720×900.
 - Image-generation tools are now exposed only for explicit visual creation or editing requests, preventing text-only writing prompts from being routed to Flux.
+- Advisory OKR, plan, checklist, schedule, and framework prompts no longer mutate the session todo list; `todo` remains available for explicit task-state changes and real multi-step agent work.
 - The v0.86.3 Codex harness preflight, original-loop fallback, one-turn local-model recovery, empty-response cooldown, and cross-client terminal-state contract remain intact.
