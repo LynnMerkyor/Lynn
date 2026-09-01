@@ -62,8 +62,9 @@ import {
 } from "./session-runtime-helpers.js";
 import { buildEvidenceSafetyAnswer } from "../../shared/evidence-safety-answer.js";
 import {
-  filterDeliverableToolsForTurn,
+  filterToolsForTurn,
   hasExplicitDeliverableIntent,
+  hasExplicitImageToolIntent,
   isStructurallyCompletePartialAnswer,
   shouldRecoverIncompleteVisibleAnswer,
 } from "./turn-tool-policy.js";
@@ -135,6 +136,7 @@ export class LynnAgentSession {
   private disposed = false;
   private stepExecuteDepth = 0;
   private activeTurnAllowsDeliverables = true;
+  private activeTurnAllowsImageTools = true;
 
   constructor(options: LynnCreateAgentSessionOptions = {}) {
     this.cwd = path.resolve(options.cwd || process.cwd());
@@ -209,6 +211,7 @@ export class LynnAgentSession {
     this.sessionManager.appendMessage(userMessage);
     this.agent.replaceMessages(this.sessionManager.buildSessionContext().messages || []);
     this.activeTurnAllowsDeliverables = hasExplicitDeliverableIntent(prompt);
+    this.activeTurnAllowsImageTools = hasExplicitImageToolIntent(prompt);
     this.activeTurnModel = options?.modelOverride || null;
     try {
       await this.runTurn();
@@ -771,6 +774,7 @@ export class LynnAgentSession {
         this.isStreaming = false;
         this.abortController = null;
         this.activeTurnAllowsDeliverables = true;
+        this.activeTurnAllowsImageTools = true;
       }
     }
   }
@@ -790,9 +794,12 @@ export class LynnAgentSession {
     streamedText: boolean;
   }> {
     const model = options.model || this.activeTurnModel || this.model;
-    const tools = filterDeliverableToolsForTurn(
+    const tools = filterToolsForTurn(
       options.tools ?? this.getAllTools(),
-      this.activeTurnAllowsDeliverables,
+      {
+        allowDeliverables: this.activeTurnAllowsDeliverables,
+        allowImageTools: this.activeTurnAllowsImageTools,
+      },
     );
     const streamTextImmediately = options.streamText ?? tools.length === 0;
     const body = buildRequestBody(model, messages, tools, this.thinkingLevel);
@@ -911,7 +918,10 @@ export class LynnAgentSession {
 
   private async executeToolCall(
     toolCall: ToolCall,
-    tools = filterDeliverableToolsForTurn(this.getAllTools(), this.activeTurnAllowsDeliverables),
+    tools = filterToolsForTurn(this.getAllTools(), {
+      allowDeliverables: this.activeTurnAllowsDeliverables,
+      allowImageTools: this.activeTurnAllowsImageTools,
+    }),
     signal = this.abortController?.signal,
   ): Promise<ToolResult> {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
@@ -922,7 +932,10 @@ export class LynnAgentSession {
     if (!tool?.execute && isBrainManagedCustomToolName(toolCall.function.name)) {
       tool = this.resolveToolByName(
         toolCall.function.name,
-        filterDeliverableToolsForTurn(this.getFallbackTools(), this.activeTurnAllowsDeliverables),
+        filterToolsForTurn(this.getFallbackTools(), {
+          allowDeliverables: this.activeTurnAllowsDeliverables,
+          allowImageTools: this.activeTurnAllowsImageTools,
+        }),
       );
     }
     const args = normalized.args;

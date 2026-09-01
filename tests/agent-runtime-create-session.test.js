@@ -228,6 +228,40 @@ describe("createLynnAgentSession native runtime", () => {
     expect(secondTools).toEqual(["read", "create_artifact", "create-report"]);
   });
 
+  it("exposes image mutation tools only when the current turn explicitly asks for visual output", async () => {
+    const fetchMock = vi.fn(async () => sseResponse([
+      "data: {\"choices\":[{\"delta\":{\"content\":\"已回答。\"}}]}\n\n",
+      "data: [DONE]\n\n",
+    ]));
+    globalThis.fetch = fetchMock;
+
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: SessionManager.create(tempDir, tempDir),
+      model: {
+        id: "test-model",
+        provider: "test-provider",
+        api: "openai-completions",
+        baseUrl: "http://127.0.0.1:65530/v1",
+        apiKey: "test-key",
+      },
+      tools: [
+        { name: "read", description: "read", parameters: { type: "object", properties: {} } },
+        { name: "flux-studio.generate_image", description: "generate", parameters: { type: "object", properties: {} } },
+        { name: "flux-studio_edit_image", description: "edit", parameters: { type: "object", properties: {} } },
+        { name: "view_image", description: "view", parameters: { type: "object", properties: {} } },
+      ],
+    });
+
+    await session.prompt("给一个长篇小说主角写人物小传：前工程师、记忆有缺口、不信任权威");
+    await session.prompt("为这个人物生成一张小说封面图片");
+
+    const firstTools = JSON.parse(fetchMock.mock.calls[0][1].body).tools.map((tool) => tool.function.name);
+    const secondTools = JSON.parse(fetchMock.mock.calls[1][1].body).tools.map((tool) => tool.function.name);
+    expect(firstTools).toEqual(["read", "view_image"]);
+    expect(secondTools).toEqual(["read", "flux-studio.generate_image", "flux-studio_edit_image", "view_image"]);
+  });
+
   it("does not expose Brain-managed tools to the local native runtime for Brain models", async () => {
     const { session } = await createLynnAgentSession({
       cwd: tempDir,

@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   filterDeliverableToolsForTurn,
+  filterToolsForTurn,
   hasExplicitDeliverableIntent,
+  hasExplicitImageToolIntent,
   isDeliverableToolName,
   isFileMutationToolName,
+  isImageMutationToolName,
   isStructurallyCompletePartialAnswer,
   shouldRecoverIncompleteVisibleAnswer,
 } from "../core/agent-runtime/turn-tool-policy.js";
@@ -67,5 +70,31 @@ describe("turn deliverable tool policy", () => {
     expect(isDeliverableToolName("create-report")).toBe(true);
     expect(isDeliverableToolName("present-files")).toBe(true);
     expect(isDeliverableToolName("web-search")).toBe(false);
+  });
+
+  it("hides image mutation tools from text-only writing turns", () => {
+    const visualTools = [
+      { name: "web_search" },
+      { name: "generate_image" },
+      { name: "flux-studio.generate_image" },
+      { name: "flux-studio_edit_image" },
+      { name: "view_image" },
+    ];
+    const biography = "给一个长篇小说主角写人物小传：前工程师、记忆有缺口、不信任权威";
+    expect(hasExplicitImageToolIntent(biography)).toBe(false);
+    expect(filterToolsForTurn(visualTools, {
+      allowDeliverables: false,
+      allowImageTools: hasExplicitImageToolIntent(biography),
+    }).map((tool) => tool.name)).toEqual(["web_search", "view_image"]);
+    expect(isImageMutationToolName("flux-studio.generate_image")).toBe(true);
+    expect(isImageMutationToolName("flux-studio_edit_image")).toBe(true);
+    expect(isImageMutationToolName("view_image")).toBe(false);
+  });
+
+  it("opens image tools only for explicit visual creation or editing", () => {
+    expect(hasExplicitImageToolIntent("画一张雨夜里的赛博朋克城市插画")).toBe(true);
+    expect(hasExplicitImageToolIntent("把这张头图翻译成英文版")).toBe(true);
+    expect(hasExplicitImageToolIntent("Create a poster image for the release")).toBe(true);
+    expect(hasExplicitImageToolIntent("Write a character biography for a former engineer")).toBe(false);
   });
 });

@@ -12,16 +12,22 @@ const DELIVERABLE_TOOL_NAMES = new Set([
 
 const FILE_MUTATION_TOOL_NAMES = new Set(["write", "edit"]);
 
+const IMAGE_TOOL_NAME_RE = /(?:^|_)(?:generate|edit)_image$/;
+
 const ZH_DELIVERABLE_ACTION_RE = /(?:生成|创建|制作|导出|保存|下载|交付|撰写|写成|做成|转成|转换成|转换为|渲染成|画成|编辑|修改|改写|重写|更新|修复|补充)/;
 const ZH_DELIVERABLE_FORMAT_RE = /(?:报告|网页|页面|html|文档|文件|附件|pptx?|幻灯片|docx?|pdf|海报|图片|长图|png|jpe?g|markdown|md\s*文件|README|可视化|(?:^|[\s`])[^\s`]+\.(?:md|markdown|txt|json|yaml|yml|csv|tsv|tsx?|jsx?|py|js|css|html?|pdf|docx?|xlsx?)(?:$|[\s`]))/i;
 const EN_DELIVERABLE_ACTION_RE = /\b(?:create|generate|make|export|save|download|deliver|render|convert|turn|write)\b/i;
 const EN_DELIVERABLE_FORMAT_RE = /\b(?:report|web\s?page|html|document|file|attachment|pptx?|slides?|docx?|pdf|poster|image|png|jpe?g|markdown|visualization)\b/i;
+const ZH_IMAGE_ACTION_RE = /(?:生成|创建|制作|设计|绘制|画|生图|编辑|修改|替换|去掉|移除|添加|翻译成|做成|改成)/;
+const ZH_IMAGE_FORMAT_RE = /(?:图片|图像|照片|插画|海报|封面|头图|头像|图标|壁纸|视觉稿|效果图|长图|png|jpe?g)/i;
+const EN_IMAGE_ACTION_RE = /\b(?:create|generate|make|design|draw|paint|illustrate|edit|modify|replace|remove|add|translate|turn|convert)\b/i;
+const EN_IMAGE_FORMAT_RE = /\b(?:image|picture|photo|illustration|poster|cover|hero\s?image|avatar|icon|wallpaper|visual|png|jpe?g)\b/i;
 const SHORT_ANSWER_REQUEST_RE = /(?:一句话|只给|只回复|简短|简要|用一个词|用数字|只要答案|yes\s*\/\s*no|a\s*\/\s*b\s*\/\s*c\s*\/\s*d)/iu;
 const TERMINAL_VISIBLE_CHAR_RE = /[。！？!?；;：:）)\]}＞>"'”’]$/u;
 const SIMPLE_TRANSLATION_REQUEST_RE = /^(?:请)?(?:把|将)?\s*[A-Za-z][A-Za-z\d\s.'’_-]{0,48}\s*(?:翻译成|译成)\s*(?:中文|汉语|英文|英语)\s*[。.!！]?$/iu;
 
 function normalizedToolName(name: unknown): string {
-  return String(name || "").trim().toLowerCase().replace(/-/g, "_");
+  return String(name || "").trim().toLowerCase().replace(/[.-]/g, "_");
 }
 
 export function isDeliverableToolName(name: unknown): boolean {
@@ -30,6 +36,10 @@ export function isDeliverableToolName(name: unknown): boolean {
 
 export function isFileMutationToolName(name: unknown): boolean {
   return FILE_MUTATION_TOOL_NAMES.has(normalizedToolName(name));
+}
+
+export function isImageMutationToolName(name: unknown): boolean {
+  return IMAGE_TOOL_NAME_RE.test(normalizedToolName(name));
 }
 
 /**
@@ -76,10 +86,35 @@ export function hasExplicitDeliverableIntent(prompt: unknown): boolean {
     || (EN_DELIVERABLE_ACTION_RE.test(text) && EN_DELIVERABLE_FORMAT_RE.test(text));
 }
 
+export function hasExplicitImageToolIntent(prompt: unknown): boolean {
+  const text = String(prompt || "").trim();
+  if (!text) return false;
+  return (ZH_IMAGE_ACTION_RE.test(text) && ZH_IMAGE_FORMAT_RE.test(text))
+    || (EN_IMAGE_ACTION_RE.test(text) && EN_IMAGE_FORMAT_RE.test(text));
+}
+
+export interface TurnToolPolicy {
+  allowDeliverables: boolean;
+  allowImageTools: boolean;
+}
+
+export function filterToolsForTurn<T extends NamedTool>(
+  tools: T[],
+  policy: TurnToolPolicy,
+): T[] {
+  return tools.filter((tool) => {
+    if (!policy.allowDeliverables
+      && (isDeliverableToolName(tool?.name) || isFileMutationToolName(tool?.name))) {
+      return false;
+    }
+    if (!policy.allowImageTools && isImageMutationToolName(tool?.name)) return false;
+    return true;
+  });
+}
+
 export function filterDeliverableToolsForTurn<T extends NamedTool>(
   tools: T[],
   allowDeliverables: boolean,
 ): T[] {
-  if (allowDeliverables) return tools;
-  return tools.filter((tool) => !isDeliverableToolName(tool?.name) && !isFileMutationToolName(tool?.name));
+  return filterToolsForTurn(tools, { allowDeliverables, allowImageTools: true });
 }
