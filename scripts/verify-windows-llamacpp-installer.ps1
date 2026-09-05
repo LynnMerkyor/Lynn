@@ -41,6 +41,22 @@ if ($LASTEXITCODE -ne 0) {
   throw "Unable to extract the packaged application payload (7-Zip exit $LASTEXITCODE)."
 }
 
+$packagedNode = Join-Path $appDir "resources\server\node.exe"
+$packagedCli = Join-Path $appDir "resources\cli\lynn.mjs"
+if (-not (Test-Path $packagedNode) -or -not (Test-Path $packagedCli)) {
+  throw "Final installer is missing the bundled Node or Lynn CLI runtime."
+}
+$expectedVersion = (Get-Content (Join-Path $root "package.json") -Raw | ConvertFrom-Json).version
+$cliVersion = & $packagedNode $packagedCli --version
+if ($LASTEXITCODE -ne 0 -or "$cliVersion" -notmatch "@lynn/cli\s+$([regex]::Escape($expectedVersion))\b") {
+  throw "Final-installer CLI version check failed: $cliVersion"
+}
+$workerOutput = & $packagedNode $packagedCli worker run --brief (Join-Path $root "cli\fixtures\worker-brief.md") --worktree $root --mock --jsonl
+if ($LASTEXITCODE -ne 0 -or "$workerOutput" -notmatch '"type":"worker.started"' -or "$workerOutput" -notmatch '"type":"worker.finished"') {
+  throw "Final-installer CLI worker smoke failed."
+}
+Write-Host "[packaged-cli] final-installer version and worker smoke passed: $cliVersion"
+
 $binary = Join-Path $appDir "resources\llamacpp\bin\llama-server.exe"
 if (-not (Test-Path $binary)) {
   throw "Packaged llama-server.exe not found at $binary"
@@ -61,6 +77,16 @@ $runtimeFileCount = @($runtime.files.PSObject.Properties).Count
 if ($runtime.sourceTag -ne "b10153" -or $runtimeFileCount -ne 23) {
   throw "Packaged runtime manifest does not match the pinned b10153 package."
 }
+foreach ($entry in $runtime.files.PSObject.Properties) {
+  $file = Join-Path (Split-Path -Parent $manifest) $entry.Name
+  if (-not (Test-Path $file) -or (Get-Item $file).Length -ne $entry.Value.size) {
+    throw "Final-installer runtime file missing or size mismatch: $($entry.Name)"
+  }
+  if ((Get-FileHash -Algorithm SHA256 $file).Hash.ToLowerInvariant() -ne $entry.Value.sha256) {
+    throw "Final-installer runtime SHA-256 mismatch: $($entry.Name)"
+  }
+}
+Write-Host "[llama.cpp] final-installer SHA-256 verification passed: $runtimeFileCount files"
 
 $modelUrl = "https://huggingface.co/ggml-org/models/resolve/499bc8821c6b12b4e53c5bffcb21ec206f212d81/tinyllamas/stories260K.gguf?download=true"
 $modelSize = 1185376

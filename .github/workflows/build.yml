@@ -35,6 +35,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build bundled CLI
+        run: npm run build:cli
+
       # Windows: 下载 MinGit 用于打包进安装包
       - name: Download MinGit
         if: runner.os == 'Windows'
