@@ -487,9 +487,9 @@ async function main(): Promise<void> {
         })()`);
         await wait(150);
       };
-      const captureState = async (state: string, expected: string[], assertion = 'true') => {
+      const captureState = async (state: string, expected: string[], assertion = 'true', preserveFocus = false) => {
         await wait(250);
-        await cdp!.evaluate(`window.__lynnPrepareUiSmokeCapture?.()`);
+        await cdp!.evaluate(`window.__lynnPrepareUiSmokeCapture?.(${preserveFocus})`);
         await cdp!.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 });
         await wait(250);
         const stateId = `${id}-${state}`;
@@ -552,6 +552,24 @@ async function main(): Promise<void> {
       await clickText('保存修改');
       await clickText('编辑');
       await captureState('default-model', ['保留原有执行计划'], `window.__lynnAutomationSmokeData.jobs[0].schedule === '0 9 1 * *' && window.__lynnAutomationSmokeData.jobs[0].model === '' && !Object.hasOwn(window.__lynnAutomationRequests.filter(r => r.action === 'update').at(-1), 'schedule')`);
+
+      await cdp.evaluate(`window.__lynnSetUiSmokeScenario('home')`);
+      await wait(50);
+      await cdp.evaluate(`window.__lynnSetUiSmokeScenario('automation-long-path')`);
+      await waitForExpression(cdp, `!!document.querySelector('[class*="automationJobGrid"]')`);
+      await clickText('编辑');
+      await captureState('long-project', ['长期维护与自动任务验收', '保存修改'], `document.querySelector('[class*="automationComposer"] select').value.includes('very-long-project-name')`);
+
+      await cdp.evaluate(`document.querySelector('[role="dialog"] button').focus({ preventScroll: true })`);
+      await cdp.call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+      await cdp.call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+      await captureState('keyboard-focus', ['自动任务'], `document.activeElement.matches('button:focus-visible') && parseFloat(getComputedStyle(document.activeElement).outlineWidth) >= 2 && getComputedStyle(document.activeElement).outlineStyle !== 'none'`, true);
+
+      await cdp.evaluate(`window.__lynnSetUiSmokeScenario('home')`);
+      await wait(50);
+      await cdp.evaluate(`window.__lynnSetUiSmokeScenario('automation-empty')`);
+      await waitForExpression(cdp, `document.body.innerText.includes('还没有自动任务')`);
+      await captureState('empty', ['还没有自动任务', '新建任务 / 模板'], `window.__lynnAutomationSmokeData.jobs.length === 0`);
     }
   } finally {
     cdp?.close();

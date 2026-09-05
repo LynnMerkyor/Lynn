@@ -2,14 +2,14 @@ import { useStore } from './stores';
 import { renderMarkdown } from './utils/markdown';
 import type { ChatListItem, ChatMessage, ContentBlock } from './stores/chat-types';
 
-type SmokeScenario = 'home' | 'short' | 'tools' | 'image-tool-empty' | 'long-code' | 'automation' | 'history-100' | 'history-500' | 'history-2000';
+type SmokeScenario = 'home' | 'short' | 'tools' | 'image-tool-empty' | 'long-code' | 'automation' | 'automation-empty' | 'automation-long-path' | 'history-100' | 'history-500' | 'history-2000';
 
 declare global {
   interface Window {
     __lynnUiSmokeReady?: boolean;
     __lynnUiSmokeScenario?: SmokeScenario;
     __lynnSetUiSmokeScenario?: (scenario: SmokeScenario) => boolean;
-    __lynnPrepareUiSmokeCapture?: () => boolean;
+    __lynnPrepareUiSmokeCapture?: (preserveFocus?: boolean) => boolean;
     __lynnAutomationSmokeRequest?: (url: string, options?: RequestInit) => Promise<Response>;
     __lynnAutomationFailNextRun?: boolean;
     __lynnAutomationRequests?: Array<Record<string, unknown>>;
@@ -200,8 +200,9 @@ function applyScenario(scenario: SmokeScenario): void {
   const sessionPath = `/tmp/lynn-ui-smoke-${scenario}.jsonl`;
   const now = new Date().toISOString();
   const isHome = scenario === 'home';
+  const isAutomation = scenario.startsWith('automation');
 
-  window.__lynnAutomationSmokeData = scenario === 'automation' ? {
+  window.__lynnAutomationSmokeData = isAutomation ? {
     jobs: [
       {
         id: 'visual-daily-summary',
@@ -233,9 +234,13 @@ function applyScenario(scenario: SmokeScenario): void {
       { id: 'glm-5.3-flash', name: 'GLM-5.3 Flash', provider: 'brain' },
     ],
   } : undefined;
+  if (scenario === 'automation-empty') window.__lynnAutomationSmokeData!.jobs = [];
+  if (scenario === 'automation-long-path') {
+    window.__lynnAutomationSmokeData!.jobs[0].workspace = '/workspace/团队项目/年度计划与跨部门交付/very-long-project-name-for-layout-regression/长期维护与自动任务验收';
+  }
   window.__lynnAutomationRequests = [];
   window.__lynnAutomationFailNextRun = false;
-  window.__lynnAutomationSmokeRequest = scenario === 'automation' ? async (_url, options) => {
+  window.__lynnAutomationSmokeRequest = isAutomation ? async (_url, options) => {
     const data = window.__lynnAutomationSmokeData!;
     const payload = options?.body ? JSON.parse(String(options.body)) : {};
     window.__lynnAutomationRequests!.push(payload);
@@ -257,7 +262,7 @@ function applyScenario(scenario: SmokeScenario): void {
     statusKey: 'status.connected',
     statusVars: {},
     currentTab: 'chat',
-    activePanel: scenario === 'automation' ? 'automation' : null,
+    activePanel: isAutomation ? 'automation' : null,
     locale: 'zh',
     agentName: 'Lynn',
     userName: 'Smoke Tester',
@@ -307,12 +312,12 @@ export async function installUiSmokeFixture(initialScenario: SmokeScenario = 'ho
     applyScenario(scenario);
     return true;
   };
-  window.__lynnPrepareUiSmokeCapture = () => {
+  window.__lynnPrepareUiSmokeCapture = (preserveFocus = false) => {
     // Background connection attempts are intentionally unavailable in smoke mode.
     // Clear their transient notifications so visual baselines contain only the
     // scenario under test, never timing-dependent network noise.
     useStore.setState({ toasts: [] });
-    (document.activeElement as HTMLElement | null)?.blur?.();
+    if (!preserveFocus) (document.activeElement as HTMLElement | null)?.blur?.();
     const main = document.querySelector<HTMLElement>('[class*="automationMain"]');
     if (main) {
       const editing = Boolean(main.querySelector('[class*="automationComposer"]'));
