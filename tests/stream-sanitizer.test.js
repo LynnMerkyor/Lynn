@@ -113,6 +113,33 @@ describe("stream sanitizer · cross-chunk carry buffer", () => {
     expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
   });
 
+  it.each([1, 2, 7, 64, 2048])("preserves comparison-led planning answers with chunk size %i", (size) => {
+    // GUI100 case 72: a real OKR answer stopped at '< 5 分钟' because later
+    // planning terms were mistaken for an unfinished Chinese wrapper label.
+    const raw = "| KR3 | 达到基本可用 | 单次批量执行 50+ 用例耗时 < 5 分钟，失败用例有明确错误定位 |\n"
+      + "\n## 两周执行拆解\n第一周：确定接口、实现用例执行与报告。\n"
+      + "第二周：补齐回归用例并验证部署。\n".repeat(40)
+      + "这四个前提确认后，可以把上面的框架细化成带具体代码结构和文件组织的执行方案。";
+    const ss = {};
+    let visible = "";
+    for (let index = 0; index < raw.length; index += size) {
+      visible += stripStreamingPseudoToolBlocks(ss, raw.slice(index, index + size)).text;
+    }
+    visible += flushStreamingPseudoToolBlocks(ss).text;
+    expect(visible).toBe(raw);
+  });
+
+  it.each([
+    "耗时 <5 分钟，按计划执行。",
+    "a < b，这是后续步骤。",
+    "低延迟 < 新方案阈值，继续执行。",
+    "阈值 <\n## 实施计划\n完整回答。",
+  ])("does not interpret comparison prose as a structural label: %s", (raw) => {
+    const ss = {};
+    expect(stripStreamingPseudoToolBlocks(ss, raw)).toEqual({ text: raw, suppressed: false });
+    expect(flushStreamingPseudoToolBlocks(ss)).toEqual({ text: "", suppressed: false });
+  });
+
   it("does not withhold legitimate markup: <details>, JSX, TS generics, comparisons", () => {
     // None of these match the pseudo-tool tag registry (tool*/execute/read*/invoke/function/
     // parameter/command/query/template tags), so they must flow through unchanged and leave an

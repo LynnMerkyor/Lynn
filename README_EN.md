@@ -129,6 +129,7 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 <summary><strong>Lynn v0.86.6</strong> · 2026-09-05 · Reliable automation and long-conversation performance <em>(latest)</em></summary>
 
 - **Keep early harness terminal events**: completion/failure notifications arriving with the start response no longer leave the loop waiting; early process exit also settles waiters. Includes all v0.86.5 UI and architecture repairs.
+- **Keep complete answers after less-than comparisons**: ordinary expressions such as “duration < 5 minutes” no longer trigger unfinished-tag filtering; full-answer chunk replay guards against recurrence.
 - **Lossless automation edits** preserve monthly, range, step, one-shot, and interval schedules. Assigned models can be reset to the default.
 - **Saving and testing have separate outcomes**: a failed test keeps the saved job ID and a persistent explanation; retries cannot create duplicate jobs.
 - **Isolated IM history** prevents delayed responses or errors from a previous conversation from replacing the active one.

@@ -19,6 +19,7 @@ Lynn --version
 ## 中文重点
 
 - 修复 Codex app-server 启动响应与回合完成/失败通知同批到达时漏终态、长期等待的问题；子进程提前退出也会立即结束等待。新增确定性竞态回归，保留原有超时门槛。
+- 修复 GUI 长回答中的“小于号”被误判为未闭合标签、导致后半段答案消失的问题；完整真实失败答案按多种分块方式重放验证，内部推理与伪工具过滤保持不变。
 - CLI 提前关闭输出管道的测试改用原生进程，不再依赖 Windows 上的 Bash 启动和路径转义；Windows 安装包校验包含 CLI 与 llama.cpp 真实加载/生成。
 - 自动任务编辑保留月度、范围、步长、一次性和间隔计划；简化控件无法表达的计划明确显示原始规则，不再静默改成每天。
 - 创建后测试失败会保留已保存的任务 ID 和持续可见的失败提示；再次保存并测试不会重复创建启用任务。已指定的模型可以恢复默认。
@@ -32,6 +33,7 @@ Lynn --version
 ## English highlights
 
 - Retain early Codex app-server completion/failure events when they arrive with the turn-start response, and reject waiters promptly after process exit. Deterministic race regressions keep the existing timeout thresholds.
+- Preserve the complete GUI answer after less-than comparisons instead of treating later planning prose as an unfinished tag. Replay the actual failed answer at multiple chunk sizes without weakening reasoning or pseudo-tool filtering.
 - Test early CLI pipe closure with native processes instead of relying on Bash startup and Windows path quoting; validate the packaged CLI and real llama.cpp loading/generation on Windows.
 - Preserve arbitrary automation schedules during non-schedule edits, and allow assigned models to return to the default.
 - Separate save and test outcomes. A failed test retains the saved ID and a persistent explanation; retrying does not create duplicate enabled jobs.

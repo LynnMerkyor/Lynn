@@ -195,6 +195,11 @@ function findUnresolvedVisibleStructuralTagStart(text: string): number {
   if (knownEnglishTag) return start;
 
   // Models also emit Chinese planning wrappers such as <大纲>...</大纲>.
+  // A label must start directly after '<' (or '</') and stay on one line.
+  // Otherwise ordinary '< 5 分钟' comparisons can retain an entire answer
+  // just because a later paragraph mentions '计划' or '框架'. Bound the label
+  // before buffering, so long prose can never be silently truncated by the cap.
+  if (!/^<\/?\p{L}/u.test(tail) || /[\r\n]/u.test(tail) || tail.length > SANITIZER_CARRY_MAX) return -1;
   // Hold a split opener/closer only when the unfinished label already contains
   // one of the explicit structural terms, or its final characters are a prefix
   // of one. Ordinary HTML, JSX and comparison text continue to stream normally.
