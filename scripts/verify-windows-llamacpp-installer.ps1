@@ -41,7 +41,7 @@ if ($LASTEXITCODE -ne 0) {
   throw "Unable to extract the packaged application payload (7-Zip exit $LASTEXITCODE)."
 }
 
-$packagedNode = Join-Path $appDir "resources\server\node.exe"
+$packagedNode = Join-Path $appDir "resources\server\lynn-server.exe"
 $packagedCli = Join-Path $appDir "resources\cli\lynn.mjs"
 if (-not (Test-Path $packagedNode) -or -not (Test-Path $packagedCli)) {
   throw "Final installer is missing the bundled Node or Lynn CLI runtime."
