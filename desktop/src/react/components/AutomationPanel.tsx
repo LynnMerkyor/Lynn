@@ -43,6 +43,7 @@ export function AutomationPanel() {
   const defaultModelLabel = tt('automation.defaultModel', '默认工作模型', 'Default work model');
 
   const saveDraft = useCallback(async (runNow: boolean) => {
+    const isCurrentDraft = draft.captureSelection();
     const name = draft.name.trim() || (draft.currentTemplate ? (isZh ? draft.currentTemplate.defaultLabelZh : draft.currentTemplate.defaultLabelEn) : '');
     const prompt = draft.prompt.trim() || (draft.currentTemplate ? (isZh ? draft.currentTemplate.promptZh : draft.currentTemplate.promptEn) : '');
     const saved = await data.saveJob({
@@ -58,9 +59,9 @@ export function AutomationPanel() {
       customDays: draft.customDays,
       runNow,
       preserveSchedule: draft.preserveSchedule,
-      onSaved: draft.acceptSavedJob,
+      onSaved: (job) => { if (isCurrentDraft()) draft.acceptSavedJob(job); },
     });
-    if (saved.saved && !saved.testError) draft.reset();
+    if (isCurrentDraft() && saved.saved && !saved.testError) draft.reset();
   }, [data, draft, isZh]);
 
   if (!isOpen) return null;

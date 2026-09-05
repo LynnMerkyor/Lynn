@@ -61,3 +61,34 @@ it('retains the saved identity on test failure and retries as update/run', async
   await act(async () => { await data.saveJob({ ...input, editingJobId: draft.editingJobId, runNow: true }); });
   expect(actions).toEqual(['add', 'run', 'update', 'run']);
 });
+
+it('does not overwrite or reset a newer draft when an old save resolves', async () => {
+  await act(async () => draft.startCustom());
+  const isCurrentDraft = draft.captureSelection();
+  let resolveSave!: (value: unknown) => void;
+  fixture.fetch.mockImplementation(async (_url, opts) => {
+    if (opts?.body && JSON.parse(opts.body).action === 'add') return await new Promise(resolve => { resolveSave = resolve; });
+    return { ok: true, json: async () => ({ jobs: [], models: [] }) };
+  });
+  let pending!: Promise<void>;
+  await act(async () => {
+    pending = data.saveJob({ ...input, onSaved: job => { if (isCurrentDraft()) draft.acceptSavedJob(job); } }).then(result => {
+      if (isCurrentDraft() && result.saved && !result.testError) draft.reset();
+    });
+  });
+  await act(async () => draft.editJob({ id: 'new-selection', label: 'Keep this draft', prompt: 'Keep this content', schedule: '0 10 * * *', enabled: true }));
+  await act(async () => {
+    resolveSave({ ok: true, json: async () => ({ job: { id: 'old-created' } }) });
+    await pending;
+  });
+  expect(draft.editingJobId).toBe('new-selection');
+  expect(draft.name).toBe('Keep this draft');
+  expect(draft.prompt).toBe('Keep this content');
+});
+
+it('invalidates pending save callbacks even when starting custom twice', async () => {
+  await act(async () => draft.startCustom());
+  const isCurrentDraft = draft.captureSelection();
+  await act(async () => draft.startCustom());
+  expect(isCurrentDraft()).toBe(false);
+});

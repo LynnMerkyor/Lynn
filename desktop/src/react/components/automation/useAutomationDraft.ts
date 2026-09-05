@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { inferSchedulePreset, isSimpleSchedule, parseCronDays, parseCronTime, type SchedulePreset } from './cron-utils';
 import { resolveJobModelValue } from './job-utils';
 import { TEMPLATES, type TemplateDefinition } from './templates';
@@ -21,6 +21,15 @@ export function useAutomationDraft({
 }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [selectionVersion, setSelectionVersion] = useState(0);
+  const selectionRef = useRef(0);
+  const nextSelection = useCallback(() => {
+    selectionRef.current += 1;
+    setSelectionVersion(selectionRef.current);
+  }, []);
+  const captureSelection = useCallback(() => {
+    const version = selectionRef.current;
+    return () => version === selectionRef.current;
+  }, []);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -45,6 +54,7 @@ export function useAutomationDraft({
   const templateMode = Boolean(currentTemplate) && !editingJobId;
 
   const reset = useCallback(() => {
+    nextSelection();
     setOriginalSchedule(null);
     setSelectedTemplateId(null);
     setEditingJobId(null);
@@ -58,14 +68,14 @@ export function useAutomationDraft({
     setMinute('00');
     setWeeklyDay(1);
     setCustomDays([1, 2, 3, 4, 5]);
-  }, [projectOptions]);
+  }, [nextSelection, projectOptions]);
 
   useEffect(() => {
     if (!project) setProject(projectOptions[0]?.value || '');
   }, [project, projectOptions]);
 
   const startFromTemplate = useCallback((template: TemplateDefinition) => {
-    setSelectionVersion((value) => value + 1);
+    nextSelection();
     setOriginalSchedule(null);
     setSelectedTemplateId(template.id);
     setEditingJobId(null);
@@ -79,10 +89,10 @@ export function useAutomationDraft({
     setMinute(template.defaultMinute);
     setWeeklyDay(template.defaultWeeklyDay ?? 1);
     setCustomDays(template.defaultDays || [1, 2, 3, 4, 5]);
-  }, [isZh, projectOptions]);
+  }, [isZh, nextSelection, projectOptions]);
 
   const startCustom = useCallback(() => {
-    setSelectionVersion((value) => value + 1);
+    nextSelection();
     setOriginalSchedule(null);
     setSelectedTemplateId('custom');
     setEditingJobId(null);
@@ -96,10 +106,10 @@ export function useAutomationDraft({
     setMinute('00');
     setWeeklyDay(1);
     setCustomDays([1, 2, 3, 4, 5]);
-  }, [isZh, projectOptions]);
+  }, [isZh, nextSelection, projectOptions]);
 
   const editJob = useCallback((job: CronJob) => {
-    setSelectionVersion((value) => value + 1);
+    nextSelection();
     const cronTime = parseCronTime(job.schedule) || { hour: '09', minute: '00' };
     const cronDays = parseCronDays(job.schedule);
     setOriginalSchedule(job);
@@ -120,10 +130,11 @@ export function useAutomationDraft({
     setMinute(cronTime.minute);
     setWeeklyDay(cronDays.find((day) => day >= 0 && day <= 6) ?? 1);
     setCustomDays(cronDays.length > 0 ? cronDays : [1, 2, 3, 4, 5]);
-  }, [availableModels, projectOptions]);
+  }, [availableModels, nextSelection, projectOptions]);
 
   return {
     selectionVersion,
+    captureSelection,
     selectedTemplateId,
     editingJobId,
     name,

@@ -299,6 +299,7 @@ async function main(): Promise<void> {
   const updateBaselines = process.env.LYNN_UPDATE_VISUAL_BASELINES === "1";
   if (updateBaselines) console.log('[ui-smoke] CANDIDATE CAPTURE: interaction assertions only; screenshots require review and a separate baseline-comparison run.');
   const visualOnly = process.argv.includes("--automation-visual-only");
+  const historyOnly = process.argv.includes('--history-performance-only');
   if (updateBaselines) await fs.mkdir(baselineDir, { recursive: true });
 
   const electronBin = require("electron");
@@ -348,7 +349,7 @@ async function main(): Promise<void> {
 
     await waitForExpression(cdp, "window.__lynnUiSmokeReady === true");
 
-    for (const scenario of visualOnly ? [] : SCENARIOS) {
+    for (const scenario of visualOnly || historyOnly ? [] : SCENARIOS) {
       await cdp.evaluate(`window.__lynnSetUiSmokeScenario(${JSON.stringify(scenario.id)})`);
       await waitForExpression(cdp, `document.body.dataset.uiSmokeScenario === ${JSON.stringify(scenario.id)}`);
       await wait(350);
@@ -387,6 +388,11 @@ async function main(): Promise<void> {
     for (const count of visualOnly ? [] : [100, 500, 2000]) {
       await cdp.evaluate(`window.__lynnSetUiSmokeScenario('home')`);
       await wait(50);
+      await cdp.evaluate(`(() => {
+        window.__lynnHistoryLongTasks = [];
+        window.__lynnHistoryObserver = new PerformanceObserver(list => window.__lynnHistoryLongTasks.push(...list.getEntries().map(entry => entry.duration)));
+        window.__lynnHistoryObserver.observe({ type: 'longtask', buffered: false });
+      })()`);
       const started = Date.now();
       await cdp.evaluate(`window.__lynnSetUiSmokeScenario('history-${count}')`);
       await waitForExpression(cdp, `document.querySelector('[role="log"][aria-hidden="false"]')?.innerText.includes('HISTORY_${count - 1}')`);
@@ -407,14 +413,19 @@ async function main(): Promise<void> {
       await waitForExpression(cdp, `document.querySelector('[role="log"][aria-hidden="false"]')?.innerText.includes('HISTORY_0:')`);
       await wait(400);
       const top = await cdp.evaluate(`document.querySelector('[role="log"][aria-hidden="false"]').scrollTop`) as number;
+      const longTasks = await cdp.evaluate(`(() => {
+        window.__lynnHistoryObserver.disconnect();
+        const times = window.__lynnHistoryLongTasks;
+        return { longTaskCount: times.length, maxLongTaskMs: Math.max(0, ...times), totalLongTaskMs: times.reduce((sum, ms) => sum + ms, 0) };
+      })()`) as Record<string, number>;
       if (top > 50) failures.push(`history top anchor drifted: ${top}px`);
-      historyMetrics.push({ ...metric, topScroll: top });
+      historyMetrics.push({ ...metric, topScroll: top, ...longTasks, heapMeasurement: 'Chromium approximate/coarsened; not a before/after memory claim' });
       results.push({ id: `history-${count}`, ok: !failures.length, failures, screenshot: '' });
       console.log(`[ui-smoke] history-${count}: ${failures.length ? 'FAIL' : 'PASS'} (${firstPaintMs}ms, ${metric.mounted} mounted)`, failures.join('; '));
     }
     if (historyMetrics.length) await fs.writeFile(path.join(outputDir, 'history-performance.json'), JSON.stringify(historyMetrics, null, 2));
 
-    for (const visualCase of AUTOMATION_VISUAL_CASES) {
+    for (const visualCase of historyOnly ? [] : AUTOMATION_VISUAL_CASES) {
       const id = `automation-${visualCase.theme}-${visualCase.width}x${visualCase.height}`;
       await cdp.call("Emulation.setDeviceMetricsOverride", {
         width: visualCase.width,

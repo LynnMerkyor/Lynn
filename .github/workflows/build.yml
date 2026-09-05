@@ -187,6 +187,8 @@ jobs:
           path: |
             dist/*.dmg
             dist/*.exe
+            dist/*.blockmap
+            dist/latest*.yml
           if-no-files-found: error
 
   # 双平台构建完成后，自动创建 GitHub Release 并上传安装包
