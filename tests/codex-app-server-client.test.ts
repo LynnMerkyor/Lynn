@@ -54,6 +54,37 @@ describe("Codex app-server JSONL client", () => {
     await expect(client.startThread({ cwd: process.cwd() })).resolves.toHaveProperty("thread.id", "thread-1");
   });
 
+  it.each(["coalesced-completed", "coalesced-error"])("retains %s arriving before the turn waiter", async (scenario) => {
+    const client = createClient(scenario);
+    await client.start();
+    const terminalSeen = new Promise<void>((resolve) => {
+      const off = client.onNotification((notification) => {
+        if (notification.method === "turn/completed" || notification.method === "error") {
+          off();
+          resolve();
+        }
+      });
+    });
+    await client.startTurn({ threadId: "thread-1", input: [] });
+    await terminalSeen;
+    const result = client.waitForTurn("thread-1", "turn-1", { timeoutMs: 50 });
+    if (scenario === "coalesced-completed") {
+      await expect(result).resolves.toMatchObject({ turn: { id: "turn-1", status: "completed" } });
+    } else {
+      await expect(result).rejects.toThrow("coalesced failure");
+    }
+    await expect(client.waitForTurn("another-thread", "turn-1", { timeoutMs: 20 })).rejects.toThrow("timed out");
+  });
+
+  it("rejects immediately when the child has already exited before waiting", async () => {
+    const client = createClient("crash");
+    await client.start();
+    const exited = new Promise<void>((resolve) => client.onExit(() => resolve()));
+    await client.startTurn({ threadId: "thread-1", input: [] });
+    await exited;
+    await expect(client.waitForTurn("thread-1", "turn-1", { timeoutMs: 50 })).rejects.toThrow(/exited/i);
+  });
+
   it("rejects an in-flight turn immediately when app-server exits", async () => {
     const client = createClient("crash");
     await client.start();

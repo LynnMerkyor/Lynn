@@ -640,42 +640,55 @@ describe("prompt stdin handling", () => {
     const address = provider.address();
     if (!address || typeof address === "string") throw new Error("provider test server failed to listen");
 
-    const quote = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
-    const cliCommand = [
-      quote(process.execPath),
+    const cliArgs = [
       "--import",
       "tsx",
       "src/cli.ts",
       "-p",
-      quote("hello"),
+      "hello",
       "--json",
       "--brain-url",
-      quote("http://127.0.0.1:1"),
+      "http://127.0.0.1:1",
       "--base-url",
-      quote(`http://127.0.0.1:${address.port}/v1`),
+      `http://127.0.0.1:${address.port}/v1`,
       "--api-key",
-      quote("sk-command-test"),
+      "sk-command-test",
       "--model",
-      quote("command-model"),
-    ].join(" ");
+      "command-model",
+    ];
 
-    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
-      const child = spawn("bash", ["-lc", `${cliCommand} | head -n 1`], { cwd: cliRoot });
-      let stdout = "";
-      let stderr = "";
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(new Error("CLI pipeline did not exit"));
-      }, 5000);
-      child.stdout.on("data", (chunk) => { stdout += String(chunk); });
-      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
-      child.on("error", reject);
-      child.on("close", (code) => {
-        clearTimeout(timer);
-        resolve({ code, stdout, stderr });
+    let result: { code: number | null; stdout: string; stderr: string };
+    try {
+      result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+        // Closing the native pipe reproduces head -n 1 without requiring Git Bash,
+        // shell startup files, or POSIX quoting of Windows executable paths.
+        const child = spawn(process.execPath, cliArgs, { cwd: cliRoot, windowsHide: true });
+        child.stdin.end();
+        let stdout = "";
+        let stderr = "";
+        const timer = setTimeout(() => {
+          child.kill();
+          reject(new Error("CLI pipeline did not exit"));
+        }, 5000);
+        child.stdout.on("data", (chunk) => {
+          stdout += String(chunk);
+          const newline = stdout.indexOf("\n");
+          if (newline >= 0) {
+            stdout = stdout.slice(0, newline + 1);
+            child.stdout.destroy();
+          }
+        });
+        child.stderr.on("data", (chunk) => { stderr += String(chunk); });
+        child.on("error", (error) => { clearTimeout(timer); reject(error); });
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          resolve({ code, stdout, stderr });
+        });
       });
-    });
-    await new Promise<void>((resolve) => provider.close(() => resolve()));
+    } finally {
+      provider.closeAllConnections();
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
 
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("\"type\":\"run.started\"");

@@ -27,6 +27,16 @@ lines.on("line", (line) => {
     return;
   }
   if (message.method === "turn/start") {
+    if (scenario === "coalesced-completed" || scenario === "coalesced-error") {
+      const terminal = scenario === "coalesced-completed"
+        ? { method: "turn/completed", params: { threadId: "thread-1", turn: { id: "turn-1", status: "completed", items: [] } } }
+        : { method: "error", params: { threadId: "thread-1", turnId: "turn-1", willRetry: false, error: { message: "coalesced failure" } } };
+      process.stdout.write([
+        { id: message.id, result: { turn: { id: "turn-1", status: "inProgress", items: [] } } },
+        terminal,
+      ].map((item) => JSON.stringify(item)).join("\n") + "\n");
+      return;
+    }
     send({ id: message.id, result: { turn: { id: "turn-1", status: "inProgress", items: [] } } });
     if (scenario === "crash") {
       setTimeout(() => process.exit(17), 10);

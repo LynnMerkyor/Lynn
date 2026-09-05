@@ -89,6 +89,10 @@ export class CodexAppServerClient {
   private exitListeners = new Set<ExitListener>();
   private startPromise: Promise<JsonObject> | null = null;
   private stopped = false;
+  private exitError: Error | null = null;
+  // JSONL replies and terminal notifications can arrive in the same stdout chunk,
+  // before the caller resumes from await startTurn() to register its waiter.
+  private turnOutcomes = new Map<string, CodexTurnResult | Error>();
 
   constructor(options: CodexAppServerClientOptions = {}) {
     this.options = {
@@ -231,6 +235,14 @@ export class CodexAppServerClient {
   }
 
   waitForTurn(threadId: string, turnId: string, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<CodexTurnResult> {
+    if (options.signal?.aborted) {
+      void this.interruptTurn(threadId, turnId).catch(() => undefined);
+      return Promise.reject(options.signal.reason instanceof Error ? options.signal.reason : new Error("Codex turn cancelled"));
+    }
+    const outcome = this.turnOutcomes.get(JSON.stringify([threadId, turnId]));
+    if (outcome) return outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome);
+    if (this.exitError) return Promise.reject(this.exitError);
+    if (this.stopped) return Promise.reject(new Error("Codex app-server stopped"));
     const timeoutMs = options.timeoutMs ?? 0;
     return new Promise((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | null = null;
@@ -285,7 +297,8 @@ export class CodexAppServerClient {
     const child = this.child;
     this.stdoutLines?.close();
     this.stderrLines?.close();
-    this.rejectPending(new Error("Codex app-server stopped"));
+    this.handleExit(new Error("Codex app-server stopped"));
+    this.turnOutcomes.clear();
     if (!child || child.exitCode !== null) return;
     child.kill("SIGTERM");
     await new Promise<void>((resolve) => {
@@ -335,11 +348,35 @@ export class CodexAppServerClient {
     }
     if (message.method) {
       const notification = { method: message.method, params: message.params };
+      this.rememberTurnOutcome(notification);
       for (const listener of this.notificationListeners) listener(notification);
     }
   }
 
+  private rememberTurnOutcome(notification: CodexAppServerNotification): void {
+    const params = asObject(notification.params);
+    const threadId = stringField(params.threadId);
+    const turn = asObject(params.turn);
+    const turnId = stringField(notification.method === "turn/completed" ? turn.id : params.turnId);
+    if (!threadId || !turnId) return;
+    let outcome: CodexTurnResult | Error;
+    if (notification.method === "turn/completed") {
+      outcome = { threadId, turnId, turn };
+    } else if (notification.method === "error" && params.willRetry !== true) {
+      outcome = new Error(stringField(asObject(params.error).message) || "Codex turn failed");
+    } else {
+      return;
+    }
+    const key = JSON.stringify([threadId, turnId]);
+    this.turnOutcomes.delete(key);
+    this.turnOutcomes.set(key, outcome);
+    // Bound retained turn payloads for clients used across many conversations.
+    if (this.turnOutcomes.size > 128) this.turnOutcomes.delete(this.turnOutcomes.keys().next().value!);
+  }
+
   private handleExit(error: Error): void {
+    if (this.exitError) return;
+    this.exitError = error;
     this.rejectPending(error);
     for (const listener of [...this.exitListeners]) listener(error);
     this.emitDiagnostic(error.message);
