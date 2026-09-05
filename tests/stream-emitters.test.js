@@ -31,16 +31,19 @@ function makeHarness(overrides = {}) {
 }
 
 describe("chat stream emitters", () => {
-  it.each([1, 7, 64, 4096])("streams the complete GUI72 OKR answer through every parser (chunk size %i)", (size) => {
-    const answer = readFileSync(new URL("./fixtures/gui-okr-comparison-answer.txt", import.meta.url), "utf8");
-    const { ss, emitters } = makeHarness();
+  it.each([1, 7, 64, 4096].flatMap((size) => ["LF", "CRLF"].map((eol) => ({ size, eol }))))("streams the complete GUI72 OKR answer through every parser ($eol, chunk size $size)", ({ size, eol }) => {
+    const fixture = readFileSync(new URL("./fixtures/gui-okr-comparison-answer.txt", import.meta.url), "utf8").replace(/\r\n/gu, "\n");
+    const answer = eol === "CRLF" ? fixture.replace(/\n/gu, "\r\n") : fixture;
+    const { ss, emitters, broadcast } = makeHarness();
     const raw = "<reflect>Internal planning must remain hidden.</reflect>" + answer;
     for (let index = 0; index < raw.length; index += size) {
       emitters.feedAssistantVisibleText("/tmp/gui72.jsonl", ss, raw.slice(index, index + size));
     }
     emitters.flushBufferedAssistantText("/tmp/gui72.jsonl", ss);
     expect(ss.visibleTextAcc).toBe(answer);
-    expect(ss.events.filter(({ event }) => event.type === "text_delta").map(({ event }) => event.delta).join("")).toBe(answer);
+    // ss.events is deliberately bounded for reconnect replay. Check the actual
+    // outbound stream, not that ring buffer, when emitting one event per character.
+    expect(broadcast.mock.calls.map(([event]) => event).filter((event) => event.type === "text_delta").map((event) => event.delta).join("")).toBe(answer);
   });
 
   it("emits visible text deltas and updates title/visible accumulators", () => {
