@@ -46,23 +46,45 @@ export async function loadMessages(forPath?: string): Promise<void> {
   if (!targetPath) return;
   if (!hasReadyServerPort()) return;
   try {
-    const res = await hanaFetch(`/api/sessions/messages?path=${encodeURIComponent(targetPath)}`);
+    const res = await hanaFetch(`/api/sessions/messages?path=${encodeURIComponent(targetPath)}&limit=80`);
     const data = await res.json();
+    if (data.error) throw new Error(data.error);
     const { buildItemsFromHistory } = await import('../utils/history-builder');
     // per-session todos
     useStore.getState().setSessionTodosForPath(targetPath, data.todos || []);
     const items = buildItemsFromHistory(data);
     if (items.length > 0) {
-      useStore.getState().initSession(targetPath, items, data.hasMore ?? false);
+      useStore.getState().initSession(targetPath, items, data.hasMore ?? false, data.nextBefore);
       if (targetPath === useStore.getState().currentSessionPath) {
         useStore.setState({ welcomeVisible: false });
       }
     } else {
-      useStore.getState().initSession(targetPath, [], false);
+      useStore.getState().initSession(targetPath, [], Boolean(data.hasMore), data.nextBefore);
+      if (data.hasMore && targetPath === useStore.getState().currentSessionPath) useStore.setState({ welcomeVisible: false });
     }
   } catch (err) {
     console.error('[loadMessages] error:', err);
     showActionError('session.loadFailed', 'Failed to load session', err, 'session-load-failed');
+  }
+}
+
+/** Load one older page; only merge into the exact session snapshot requested. */
+export async function loadOlderMessages(targetPath: string): Promise<void> {
+  const session = useStore.getState().chatSessions[targetPath];
+  if (!session?.hasMore || session.loadingMore || session.oldestId == null) return;
+  useStore.getState().setLoadingMore(targetPath, true);
+  try {
+    const res = await hanaFetch(`/api/sessions/messages?path=${encodeURIComponent(targetPath)}&limit=80&before=${encodeURIComponent(session.oldestId)}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    const latest = useStore.getState().chatSessions[targetPath];
+    if (!latest || latest.oldestId !== session.oldestId) return;
+    const { buildItemsFromHistory } = await import('../utils/history-builder');
+    useStore.getState().prependItems(targetPath, buildItemsFromHistory(data), Boolean(data.hasMore), data.nextBefore);
+  } catch (err) {
+    showActionError('session.loadFailed', 'Failed to load older messages', err, 'older-history-failed');
+  } finally {
+    useStore.getState().setLoadingMore(targetPath, false);
   }
 }
 

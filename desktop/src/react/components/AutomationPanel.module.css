@@ -287,7 +287,7 @@
     color: var(--text-muted);
     border-radius: 999px;
     padding: 4px 10px;
-    font-size: 0.62rem;
+    font-size: 0.75rem;
     cursor: pointer;
     flex-shrink: 0;
 }
@@ -321,8 +321,8 @@
     padding: 0 8px;
     border-radius: 999px;
     background: rgba(var(--accent-rgb), 0.08);
-    color: var(--accent);
-    font-size: 0.6rem;
+    color: var(--text-light);
+    font-size: 0.75rem;
 }
 
 .automationJobActions {
@@ -615,11 +615,18 @@
         width: 100%;
         min-width: 0;
         flex-direction: row;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        overflow-x: auto;
         border-right: none;
         border-bottom: 1px solid var(--border);
-        padding: 0 0 16px;
-        margin-bottom: 16px;
+        padding: 0 0 8px;
+        margin-bottom: 8px;
+    }
+
+    .automationCategoryBtn {
+        flex: 0 0 auto;
+        width: auto;
+        white-space: nowrap;
     }
 
     .automationMain {

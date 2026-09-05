@@ -10,6 +10,7 @@ export function AutomationTemplateLibrary({
   loading,
   loadError,
   selectedTemplateId,
+  selectionVersion,
   editingJobId,
   defaultModelLabel,
   isZh,
@@ -26,6 +27,7 @@ export function AutomationTemplateLibrary({
   loading: boolean;
   loadError: string | null;
   selectedTemplateId: string | null;
+  selectionVersion: number;
   editingJobId: string | null;
   defaultModelLabel: string;
   isZh: boolean;
@@ -38,6 +40,12 @@ export function AutomationTemplateLibrary({
   editor: (rootRef: RefObject<HTMLDivElement | null>) => ReactNode;
 }) {
   const [activeCategory, setActiveCategory] = useState<AutomationCategory>('reports');
+  const [view, setView] = useState<'jobs' | 'templates'>('jobs');
+  const currentView = view;
+  useEffect(() => {
+    if (editingJobId) setView('jobs');
+    else if (selectedTemplateId) setView('templates');
+  }, [selectedTemplateId, editingJobId, selectionVersion]);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
   const composerAutoScrollRef = useRef(false);
@@ -61,7 +69,7 @@ export function AutomationTemplateLibrary({
       const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
       const top = container.scrollTop + composer.getBoundingClientRect().top - container.getBoundingClientRect().top - 12;
       composerAutoScrollRef.current = true;
-      container.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? 'auto' : 'smooth' });
+      container.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? 'instant' : 'smooth' });
       releaseTimer = window.setTimeout(() => {
         composerAutoScrollRef.current = false;
       }, reduceMotion ? 0 : 500);
@@ -71,16 +79,17 @@ export function AutomationTemplateLibrary({
       if (releaseTimer !== null) window.clearTimeout(releaseTimer);
       composerAutoScrollRef.current = false;
     };
-  }, [editingJobId, selectedTemplateId]);
+  }, [editingJobId, selectedTemplateId, selectionVersion, currentView]);
 
   const scrollToCategory = useCallback((category: AutomationCategory) => {
+    setView('templates');
     composerAutoScrollRef.current = false;
     setActiveCategory(category);
     const container = scrollContainerRef.current;
     const section = sectionRefs.current[category];
     if (!container || !section) return;
     const top = container.scrollTop + section.getBoundingClientRect().top - container.getBoundingClientRect().top - 8;
-    container.scrollTo({ top, behavior: 'smooth' });
+    container.scrollTo({ top, behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
   }, []);
 
   const syncActiveCategoryFromScroll = useCallback(() => {
@@ -107,6 +116,9 @@ export function AutomationTemplateLibrary({
   return (
     <div className={styles.automationDialogBody}>
       <aside className={styles.automationSidebar}>
+        <button type="button" className={`${styles.automationCategoryBtn}${currentView === 'jobs' ? ` ${styles.automationCategoryBtnActive}` : ''}`} onClick={() => setView('jobs')} aria-pressed={currentView === 'jobs'}>{isZh ? '已创建任务' : 'Created tasks'} ({jobs.length})</button>
+        <button type="button" className={`${styles.automationCategoryBtn}${currentView === 'templates' ? ` ${styles.automationCategoryBtnActive}` : ''}`} onClick={() => setView('templates')} aria-pressed={currentView === 'templates'}>{isZh ? '新建任务 / 模板' : 'New task / templates'}</button>
+        {currentView === 'templates' && <>
         {CATEGORY_DEFS.map((category) => (
           <button
             key={category.key}
@@ -118,6 +130,7 @@ export function AutomationTemplateLibrary({
             {isZh ? category.zhLabel : category.enLabel}
           </button>
         ))}
+        </>}
       </aside>
 
       <section ref={scrollContainerRef} className={styles.automationMain} onScroll={syncActiveCategoryFromScroll}>
@@ -131,7 +144,8 @@ export function AutomationTemplateLibrary({
             </div>
           )}
 
-          {jobs.length > 0 && (
+          {currentView === 'jobs' && jobs.length === 0 && !loading && <div className={styles.automationPanelNotice}>{isZh ? '还没有自动任务。选择“新建任务 / 模板”开始。' : 'No tasks yet. Choose New task / templates to begin.'}</div>}
+          {currentView === 'jobs' && jobs.length > 0 && (
             <div className={styles.automationSection}>
               <div className={styles.automationSectionHeader}>
                 <div className={styles.automationSectionTitle}>{isZh ? '已创建任务' : 'Created tasks'}</div>
@@ -155,7 +169,7 @@ export function AutomationTemplateLibrary({
             </div>
           )}
 
-          {templateSections.map((category) => (
+          {currentView === 'templates' && templateSections.map((category) => (
             <div
               key={category.key}
               id={`automation-section-${category.key}`}
@@ -191,7 +205,7 @@ export function AutomationTemplateLibrary({
 
           {loading && <div className={styles.automationPanelNotice}>{isZh ? '正在读取自动任务…' : 'Loading scheduled tasks...'}</div>}
         </div>
-        {editor(composerRef)}
+        {((currentView === 'templates' && selectedTemplateId) || (currentView === 'jobs' && editingJobId)) && editor(composerRef)}
       </section>
     </div>
   );

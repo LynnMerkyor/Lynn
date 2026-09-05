@@ -1,6 +1,6 @@
 # @lynn/cli
 
-Terminal and worker-runner interface for Lynn v0.86.4.
+Terminal and worker-runner interface for Lynn v0.86.5.
 
 This package is intentionally thin. It handles terminal UX, worker JSONL, local
 file/shell orchestration, and headless agent contracts. Model routing defaults
@@ -15,7 +15,11 @@ Voice follows the same primary-chain rule: inside the `Lynn` chat, `/voice` and
 live waveform. File/record transcription and `--speak` TTS are auxiliary
 utilities, not the main voice experience.
 
-v0.86.4 improves the Automation experience and renderer startup discipline while
+v0.86.5 fixes lossless automation editing, saved-task retry identity, default-model
+reset, and IM history races. It adds bounded history rendering, adaptive streaming,
+on-demand editor languages, and shared GUI/CLI cancellation semantics.
+
+v0.86.4 improved the Automation experience and renderer startup discipline while
 preserving the Codex app-server and original Agent-loop selection contract from
 v0.86.3. Automation now has readable light/dark states, modular data/draft,
 template-library, and editor boundaries, plus screenshot regression coverage at
@@ -43,7 +47,7 @@ winget install OpenJS.NodeJS.LTS
 Install from the Lynn Tencent mirror:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.4.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.5.tgz"
 ```
 
 The package installs the `Lynn` command. If you installed an older preview that
@@ -62,7 +66,7 @@ If npm dependency downloads are slow in mainland China, keep the Lynn tarball UR
 as-is and add a registry mirror for third-party dependencies:
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.4.tgz" \
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.5.tgz" \
   --registry=https://registry.npmmirror.com
 ```
 
@@ -70,7 +74,7 @@ Release maintainers can smoke-test the exact CDN tarball before inviting
 external testers:
 
 ```bash
-LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.4.tgz" \
+LYNN_CLI_TARBALL_URL="https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.5.tgz" \
   npm run test:cli-install:remote
 ```
 
@@ -190,7 +194,7 @@ Agent quick contract:
 # Requires Node.js 20 LTS or 22 LTS with npm.
 
 # Install/update.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.4.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.5.tgz"
 
 # Human launch commands.
 Lynn

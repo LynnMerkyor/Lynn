@@ -1,0 +1,580 @@
+/* ═══ Agent 卡片弧形堆叠 ═══ */
+
+.agent-card-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: calc(var(--space-lg) * -0.5);
+    margin-bottom: var(--space-lg);
+    padding-top: 0;
+}
+
+.agent-cards {
+    position: relative;
+    width: 260px;
+    height: 110px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    transition: width 0.35s var(--ease-out) 0.8s;
+}
+
+.agent-cards:hover {
+    width: max(240px, calc(var(--cards-spread-width, 240) * 1px));
+    transition-delay: 0s;
+}
+
+/* 单张卡片 — 收起扇形，展开直线 */
+.agent-card {
+    position: absolute;
+    bottom: 16px;
+    width: 62px;
+    height: 62px;
+    cursor: pointer;
+    transform-origin: center 340px;
+    transform: rotate(var(--rot-tight, 0deg)) translateY(var(--lift, 0px));
+    z-index: var(--z, 0);
+    transition: transform 0.35s var(--ease-out) 0.8s,
+                transform-origin 0.35s var(--ease-out) 0.8s,
+                filter 0.2s var(--ease-out);
+}
+
+.agent-card.dragging {
+    z-index: 200 !important;
+    opacity: 0.85;
+    transition: none;
+}
+
+.agent-card.drag-over {
+    transform: scale(0.9);
+}
+
+.agent-card-inner {
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2.5px solid var(--bg-card);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
+    transition: border-color 0.2s var(--ease-out),
+                box-shadow 0.2s var(--ease-out),
+                transform 0.2s var(--ease-out);
+    background: var(--bg-card);
+}
+
+.agent-card.selected .agent-card-inner {
+    border-color: var(--text-muted, #999);
+    transform: scale(1.06);
+}
+
+.agent-card-avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center center;
+    display: block;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Active agent 底部角标 */
+.agent-card-badge {
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 1.5px solid var(--bg-card);
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* Selected 卡片 hover overlay（更换头像） */
+.agent-card-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    transition: opacity 0.2s var(--ease-out);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 0.6rem;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+}
+
+.agent-card.selected:hover .agent-card-overlay {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+
+
+.agent-card-name {
+    display: block;
+    text-align: center;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    opacity: 0;
+    transition: opacity 0.2s var(--ease-out);
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+/* Hover 展开：直线排列（rotate 归零 + translateX 展开） */
+.agent-cards:hover .agent-card {
+    transform-origin: center center;
+    transform: rotate(0deg) translateX(var(--tx-spread, 0px)) translateY(var(--lift, 0px));
+    transition-delay: 0s;
+}
+
+.agent-cards:hover .agent-card-name {
+    opacity: 1;
+}
+
+/* 单卡 hover：上浮 + 阴影 */
+.agent-card:hover {
+    --lift: -6px;
+    z-index: 100 !important;
+}
+
+.agent-card:hover .agent-card-inner {
+    box-shadow: 0 4px 16px var(--shadow);
+    transform: scale(1.06);
+}
+
+/* "+" 新建卡片 */
+.agent-card-add {
+    border: 1.5px dashed var(--border, rgba(0,0,0,0.15));
+    box-shadow: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    background: transparent;
+    transition: border-color 0.2s var(--ease-out),
+                color 0.2s var(--ease-out),
+                box-shadow 0.2s var(--ease-out);
+}
+
+.agent-card-add:hover {
+    border-color: var(--accent);
+    box-shadow: 0 2px 8px var(--shadow);
+}
+
+/* Agent 右键菜单 */
+.agent-context-menu {
+    background: var(--bg-card, #fff);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.06);
+    padding: 4px 0;
+    min-width: 120px;
+}
+
+.agent-context-header {
+    padding: 6px 14px 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--overlay-light, rgba(0,0,0,0.06));
+    margin-bottom: 2px;
+}
+
+.agent-context-item {
+    display: block;
+    width: 100%;
+    padding: 7px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 0.82rem;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.agent-context-item:hover {
+    background: var(--overlay-light, rgba(0,0,0,0.04));
+}
+
+.agent-context-danger {
+    color: var(--text-error, #c44);
+}
+
+.agent-context-danger:hover {
+    background: rgba(204, 68, 68, 0.08);
+}
+
+/* 新建助手浮层 */
+.agent-create-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 110;
+}
+
+.agent-create-overlay.visible {
+    display: flex;
+}
+
+.agent-create-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    width: 440px;
+    max-width: 90vw;
+    box-shadow: 0 12px 48px var(--shadow);
+    animation: dropdown-in 0.2s var(--ease-out);
+}
+
+.agent-create-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    margin-bottom: var(--space-md);
+    color: var(--text);
+}
+
+.agent-create-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.agent-create-cancel,
+.agent-create-confirm {
+    padding: 0.35rem 0.9rem;
+    border-radius: var(--radius-md);
+    border: none;
+    font-family: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.2s var(--ease-out);
+}
+
+.agent-create-cancel {
+    background: var(--overlay-subtle);
+    color: var(--text-light);
+}
+
+.agent-create-cancel:hover {
+    background: var(--overlay-light);
+}
+
+.agent-create-confirm {
+    background: var(--accent);
+    color: #fff;
+}
+
+.agent-create-confirm:hover {
+    background: var(--accent-hover);
+}
+
+/* 卡片下方操作栏 */
+.agent-stack-actions {
+    display: flex;
+    gap: var(--space-sm);
+    align-items: center;
+    justify-content: center;
+    margin-top: var(--space-xs);
+}
+
+/* 删除按钮 */
+.agent-delete-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1.5px dashed var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s var(--ease-out);
+}
+
+.agent-delete-btn:hover {
+    border-color: #C0616B;
+    color: #C0616B;
+    background: rgba(192, 97, 107, 0.08);
+    transform: scale(1.08);
+}
+
+.agent-delete-btn:active {
+    transform: scale(0.95);
+}
+
+.agent-delete-btn.hidden {
+    display: none;
+}
+
+/* 删除确认浮层 */
+.agent-delete-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 110;
+}
+
+.agent-delete-overlay.visible {
+    display: flex;
+}
+
+.agent-delete-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    width: 320px;
+    max-width: 90vw;
+    box-shadow: 0 12px 48px var(--shadow);
+    animation: dropdown-in 0.2s var(--ease-out);
+}
+
+.agent-delete-step.hidden {
+    display: none;
+}
+
+.agent-delete-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    margin-bottom: var(--space-sm);
+    color: var(--text);
+}
+
+.agent-delete-desc {
+    font-size: 0.82rem;
+    color: var(--text-light);
+    line-height: 1.5;
+    margin-bottom: var(--space-sm);
+}
+
+.agent-delete-input {
+    font-size: 0.88rem;
+}
+
+.agent-delete-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.agent-delete-cancel,
+.agent-delete-danger {
+    padding: 0.35rem 0.9rem;
+    border-radius: var(--radius-md);
+    border: none;
+    font-family: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.2s var(--ease-out);
+}
+
+.agent-delete-cancel {
+    background: var(--overlay-subtle);
+    color: var(--text-light);
+}
+
+.agent-delete-cancel:hover {
+    background: var(--overlay-light);
+}
+
+.agent-delete-danger {
+    background: #C0616B;
+    color: #fff;
+}
+
+.agent-delete-danger:hover {
+    background: #A8505A;
+}
+
+.agent-delete-danger:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.avatar-upload {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    min-width: 0;
+    min-height: 0;
+    border-radius: 50%;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s var(--ease-out);
+}
+
+.avatar-upload:hover {
+    transform: scale(1.04);
+}
+
+.avatar-upload:active {
+    transform: scale(0.97);
+}
+
+.avatar-preview {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    object-fit: cover;
+    object-position: center center;
+    display: block;
+    pointer-events: none;
+    user-select: none;
+}
+
+.avatar-preview-bundled-lynn {
+    transform: scale(1.18);
+    transform-origin: center;
+}
+
+.avatar-preview-emoji {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-light);
+    font-size: 1.6rem;
+    line-height: 1;
+}
+
+.avatar-upload-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    transition: opacity 0.2s var(--ease-out);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+}
+
+.avatar-upload:hover .avatar-upload-overlay {
+    opacity: 1;
+}
+
+.avatar-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+}
+
+/* 助手/我 tab：名字栏居中 */
+.settings-field-center {
+    text-align: center;
+}
+
+.settings-field-center .settings-input {
+    text-align: center;
+    max-width: 340px;
+    margin: 0 auto;
+}
+
+.settings-field-center .settings-field-hint {
+    text-align: center;
+}
+
+/* 助手名字输入框 */
+.agent-name-input {
+    width: 200px;
+    margin: 0 auto;
+    padding: 8px 12px;
+    border: 1px solid var(--overlay-medium, rgba(0,0,0,0.1));
+    border-radius: 8px;
+    outline: none;
+    font-size: 0.88rem;
+    font-family: inherit;
+    background: var(--bg-card, #fff);
+    color: var(--text);
+    text-align: center;
+    text-overflow: ellipsis;
+}
+
+.agent-name-input::placeholder {
+    color: var(--text-muted, #999);
+    opacity: 0.4;
+}
+
+.agent-name-input:focus {
+    border-color: var(--accent);
+}
+
+/* 胶囊控件：标签 + 输入/选框合为一体 */
+.model-capsule {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid var(--overlay-medium, rgba(0,0,0,0.1));
+    border-radius: 8px;
+    overflow: hidden;
+    width: 240px;
+    margin: 0 auto;
+}
+
+.model-capsule-label {
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    background: var(--bg-card-alt, var(--overlay-light, rgba(0,0,0,0.03)));
+    white-space: nowrap;
+    border-right: 1px solid var(--overlay-medium, rgba(0,0,0,0.1));
+    letter-spacing: 0.02em;
+}
+
+.model-capsule .sdw {
+    flex: 1;
+    min-width: 0;
+}
+
+.model-capsule .sdw-trigger {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
+.model-capsule-input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 12px;
+    border: none;
+    outline: none;
+    font-size: 0.88rem;
+    font-family: inherit;
+    background: var(--bg-card, #fff);
+    color: var(--text);
+    text-align: left;
+    text-overflow: ellipsis;
+}
+
+/* 聊天气泡中用户自定义头像（img 版本） */
+.user-avatar-img {
+    object-fit: cover;
+    object-position: center center;
+    pointer-events: none;
+    user-select: none;
+}

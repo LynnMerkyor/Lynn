@@ -2,7 +2,7 @@ import { useStore } from './stores';
 import { renderMarkdown } from './utils/markdown';
 import type { ChatListItem, ChatMessage, ContentBlock } from './stores/chat-types';
 
-type SmokeScenario = 'home' | 'short' | 'tools' | 'image-tool-empty' | 'long-code' | 'automation';
+type SmokeScenario = 'home' | 'short' | 'tools' | 'image-tool-empty' | 'long-code' | 'automation' | 'history-100' | 'history-500' | 'history-2000';
 
 declare global {
   interface Window {
@@ -10,6 +10,9 @@ declare global {
     __lynnUiSmokeScenario?: SmokeScenario;
     __lynnSetUiSmokeScenario?: (scenario: SmokeScenario) => boolean;
     __lynnPrepareUiSmokeCapture?: () => boolean;
+    __lynnAutomationSmokeRequest?: (url: string, options?: RequestInit) => Promise<Response>;
+    __lynnAutomationFailNextRun?: boolean;
+    __lynnAutomationRequests?: Array<Record<string, unknown>>;
     __lynnAutomationSmokeData?: {
       jobs: Array<Record<string, unknown>>;
       models: Array<{ id: string; name?: string; provider?: string }>;
@@ -70,6 +73,12 @@ function assistantMessage(id: string, blocks: ContentBlock[]): ChatListItem {
 }
 
 function itemsForScenario(scenario: SmokeScenario): ChatListItem[] {
+  if (scenario.startsWith('history-')) {
+    const count = Number(scenario.slice('history-'.length));
+    return Array.from({ length: count }, (_, index) => index % 2 === 0
+      ? userMessage(`history-${index}`, `HISTORY_${index}: 请整理第 ${index} 项工作。`)
+      : assistantMessage(`history-${index}`, [textBlock(`HISTORY_${index}\n\n已完成工作整理。\n\n| 项目 | 状态 |\n| --- | --- |\n| ${index} | 完成 |\n\n\`\`\`js\nconst result = ${index};\n\`\`\``)]));
+  }
   if (scenario === 'tools') {
     return [
       userMessage('ui-smoke-tools-user', 'UI_SMOKE_TOOLS：整理工作区并展示工具卡片。'),
@@ -224,6 +233,21 @@ function applyScenario(scenario: SmokeScenario): void {
       { id: 'glm-5.3-flash', name: 'GLM-5.3 Flash', provider: 'brain' },
     ],
   } : undefined;
+  window.__lynnAutomationRequests = [];
+  window.__lynnAutomationFailNextRun = false;
+  window.__lynnAutomationSmokeRequest = scenario === 'automation' ? async (_url, options) => {
+    const data = window.__lynnAutomationSmokeData!;
+    const payload = options?.body ? JSON.parse(String(options.body)) : {};
+    window.__lynnAutomationRequests!.push(payload);
+    if (payload.action === 'run' && window.__lynnAutomationFailNextRun) {
+      window.__lynnAutomationFailNextRun = false;
+      return Response.json({ error: '模拟执行失败' });
+    }
+    if (payload.action === 'add') data.jobs.push({ ...payload, id: `smoke-job-${data.jobs.length}`, enabled: true });
+    if (payload.action === 'update') Object.assign(data.jobs.find(job => job.id === payload.id) || {}, payload);
+    const job = payload.action === 'add' ? data.jobs[data.jobs.length - 1] : data.jobs.find(job => job.id === payload.id);
+    return Response.json({ ok: true, job, jobs: data.jobs });
+  } : undefined;
 
   useStore.setState({
     serverPort: '0',
@@ -276,7 +300,9 @@ function applyScenario(scenario: SmokeScenario): void {
   window.__lynnUiSmokeScenario = scenario;
 }
 
-export function installUiSmokeFixture(initialScenario: SmokeScenario = 'home'): void {
+export async function installUiSmokeFixture(initialScenario: SmokeScenario = 'home'): Promise<void> {
+  await window.i18n?.load('zh');
+  if (window.t?.('cron.dailyAt', { hour: '9', min: '00' }) === 'cron.dailyAt') throw new Error('UI smoke locale was not initialized');
   window.__lynnSetUiSmokeScenario = (scenario: SmokeScenario) => {
     applyScenario(scenario);
     return true;
@@ -286,6 +312,12 @@ export function installUiSmokeFixture(initialScenario: SmokeScenario = 'home'): 
     // Clear their transient notifications so visual baselines contain only the
     // scenario under test, never timing-dependent network noise.
     useStore.setState({ toasts: [] });
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    const main = document.querySelector<HTMLElement>('[class*="automationMain"]');
+    if (main) {
+      const editing = Boolean(main.querySelector('[class*="automationComposer"]'));
+      main.scrollTo({ top: editing ? main.scrollHeight : 0, behavior: 'instant' });
+    }
     return true;
   };
   applyScenario(initialScenario);

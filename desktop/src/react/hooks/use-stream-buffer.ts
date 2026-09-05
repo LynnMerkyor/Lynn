@@ -12,11 +12,11 @@ import type { ChatMessage, ContentBlock } from '../stores/chat-types';
 import { useStore } from '../stores';
 import { getCachedRenderMarkdown, loadRenderMarkdown } from '../utils/markdown-loader';
 import { cleanMoodText, sanitizeAssistantDisplayText } from '../utils/message-parser';
+import { streamRenderInterval } from '../utils/stream-render-budget';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- 流式消息 handle(msg) 接收动态 JSON */
 
 /** 主文本流式刷新间隔。配合轻量预览渲染，提高流式顺滑度并减少明显卡段。 */
-const FLUSH_INTERVAL = 32;
 
 interface Buffer {
   sessionPath: string;
@@ -258,13 +258,14 @@ class StreamBufferManager {
   /** 调度节流 flush */
   private scheduleFlush(buf: Buffer): void {
     const now = Date.now();
-    if (now - buf.lastFlushTime >= FLUSH_INTERVAL) {
+    const interval = streamRenderInterval(buf.textAcc.length);
+    if (now - buf.lastFlushTime >= interval) {
       this.flush(buf);
     } else if (!buf.flushTimer) {
       buf.flushTimer = setTimeout(() => {
         buf.flushTimer = null;
         this.flush(buf);
-      }, FLUSH_INTERVAL - (now - buf.lastFlushTime));
+      }, interval - (now - buf.lastFlushTime));
     }
   }
 

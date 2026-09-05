@@ -78,7 +78,9 @@ export function cronToHuman(schedule: number | string): string {
   const s = String(schedule);
   const parts = s.split(' ');
   if (parts.length !== 5) return s;
-  const [min, hour, , , dow] = parts;
+  const [min, hour, day, month, dow] = parts;
+  // Never label a monthly/seasonal/ranged rule as a daily schedule.
+  if (day !== '*' || month !== '*' || (dow !== '*' && !/^[0-6](?:,[0-6])*$/.test(dow))) return s;
   if (min.startsWith('*/') && hour === '*' && dow === '*') {
     return t('cron.everyMinutes', { n: min.slice(2) });
   }

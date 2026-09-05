@@ -1,5 +1,6 @@
 export interface CronJob {
   id: string;
+  type?: 'at' | 'every' | 'cron';
   enabled: boolean;
   label?: string;
   prompt?: string;

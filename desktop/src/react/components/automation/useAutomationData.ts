@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
-import { hanaFetch } from '../../hooks/use-hana-fetch';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { hanaFetch as liveFetch } from '../../hooks/use-hana-fetch';
 import { useStore } from '../../stores';
 import { buildAutomationModelOptions } from '../AutomationPanel.helpers';
 import { buildScheduleFromPreset, type SchedulePreset } from './cron-utils';
 import type { CronJob, ModelOption } from './types';
 
 type Translate = (key: string, zhText: string, enText: string) => string;
+const hanaFetch: typeof liveFetch = (url, options) => window.__lynnAutomationSmokeRequest
+  ? window.__lynnAutomationSmokeRequest(url, options)
+  : liveFetch(url, options);
 
 export interface SaveAutomationInput {
   editingJobId: string | null;
@@ -19,7 +22,11 @@ export interface SaveAutomationInput {
   weeklyDay: number;
   customDays: number[];
   runNow?: boolean;
+  preserveSchedule?: boolean;
+  onSaved?: (job: CronJob) => void;
 }
+
+export type SaveAutomationResult = { saved: false } | { saved: true; job: CronJob; testError?: string };
 
 function updateBadge(jobs: CronJob[]) {
   useStore.setState({ automationCount: jobs.length });
@@ -41,6 +48,8 @@ export function useAutomationData({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [testFailure, setTestFailure] = useState<{ id: string; message: string } | null>(null);
+  const saveInFlight = useRef(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -167,8 +176,9 @@ export function useAutomationData({
     }
   }, [addToast, isZh, loadData]);
 
-  const saveJob = useCallback(async (input: SaveAutomationInput) => {
-    if (!input.name || !input.prompt) return false;
+  const saveJob = useCallback(async (input: SaveAutomationInput): Promise<SaveAutomationResult> => {
+    if (!input.name || !input.prompt || saveInFlight.current) return { saved: false };
+    saveInFlight.current = true;
     setSaving(true);
     try {
       const schedule = buildScheduleFromPreset(
@@ -195,7 +205,8 @@ export function useAutomationData({
             schedule,
             workspace: input.project,
           };
-      if (input.model) payload.model = input.model;
+      if (input.editingJobId && input.preserveSchedule) delete payload.schedule;
+      payload.model = input.model;
       const response = await hanaFetch('/api/desk/cron', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -206,7 +217,12 @@ export function useAutomationData({
         throw new Error(data?.error || tt('settings.saveFailed', '自动任务保存失败', 'Failed to save task'));
       }
       const savedJobId = String(data?.job?.id || input.editingJobId || '').trim();
+      if (!savedJobId) throw new Error(isZh ? '服务未返回任务 ID，请刷新列表核对' : 'Missing saved task ID. Refresh the task list.');
+      const savedJob = { ...data.job, id: savedJobId } as CronJob;
+      input.onSaved?.(savedJob);
+      let testError: string | undefined;
       if (input.runNow && savedJobId) {
+        try {
         const runResponse = await hanaFetch('/api/desk/cron', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -216,8 +232,17 @@ export function useAutomationData({
         if (!runResponse.ok || runData?.error) {
           throw new Error(runData?.error || (isZh ? '创建成功，但立即测试没有启动起来' : 'Task was created, but the test run did not start'));
         }
+        } catch (error) {
+          testError = error instanceof Error ? error.message : String(error);
+        }
       }
       await loadData();
+      if (testError) {
+        setTestFailure({ id: savedJob.id, message: testError });
+        addToast(isZh ? `任务已保存，但测试未启动：${testError}。可再次保存并测试，不会重复创建。` : `Task saved, but the test did not start: ${testError}. Retry without creating another task.`, 'error');
+        return { saved: true, job: savedJob, testError };
+      }
+      setTestFailure(null);
       addToast(
         input.runNow
           ? (input.editingJobId
@@ -228,12 +253,13 @@ export function useAutomationData({
               : tt('settings.saved', '自动任务已创建', 'Task created')),
         'success',
       );
-      return true;
+      return { saved: true, job: savedJob };
     } catch (error) {
       console.error('[automation] save failed:', error);
       addToast(error instanceof Error ? error.message : tt('settings.saveFailed', '自动任务保存失败', 'Failed to save task'), 'error');
-      return false;
+      return { saved: false };
     } finally {
+      saveInFlight.current = false;
       setSaving(false);
     }
   }, [addToast, isZh, loadData, tt]);
@@ -244,6 +270,7 @@ export function useAutomationData({
     loading,
     loadError,
     saving,
+    testFailure,
     loadData,
     toggleJob,
     removeJob,

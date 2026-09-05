@@ -468,7 +468,7 @@ export function createSessionsRoute(engine: SessionsEngine): Hono {
 
       // 分页参数
       const beforeId = c.req.query("before") != null ? Number(c.req.query("before")) : null;
-      const limit = Math.min(Number(c.req.query("limit")) || 50, 200);
+      const limit = Math.max(1, Math.min(Math.floor(Number(c.req.query("limit"))) || 50, 200));
 
       // 提取可显示的消息（user/assistant 文本 + 文件/artifact 工具结果）
       // 每条消息带稳定 id（原始 sourceMessages 索引）
@@ -556,18 +556,20 @@ export function createSessionsRoute(engine: SessionsEngine): Hono {
         }
       }
 
-      // 分页：只在有 before 参数时切片，否则返回全量
+      // Explicit limit requests start at the tail; legacy callers retain full history.
       let messages: VisibleMessage[];
       let hasMore = false;
+      let nextBefore = 0;
       let slicedFileOutputs = fileOutputs;
       let slicedFileDiffs = fileDiffs;
       let slicedArtifacts = artifacts;
 
-      if (beforeId != null && beforeId > 0) {
-        const endIdx = Math.min(beforeId, allMessages.length);
+      if (beforeId != null || c.req.query("limit") != null) {
+        const endIdx = beforeId == null ? allMessages.length : Math.max(0, Math.min(Number.isFinite(beforeId) ? Math.floor(beforeId) : 0, allMessages.length));
         const startIdx = Math.max(0, endIdx - limit);
         messages = allMessages.slice(startIdx, endIdx);
         hasMore = startIdx > 0;
+        nextBefore = startIdx;
         // 重映射 afterIndex 到切片内偏移，过滤超出范围的
         slicedFileOutputs = fileOutputs
           .filter(fo => fo.afterIndex >= startIdx && fo.afterIndex < endIdx)
@@ -593,7 +595,7 @@ export function createSessionsRoute(engine: SessionsEngine): Hono {
         }
       }
 
-      return c.json({ messages, todos, fileOutputs: slicedFileOutputs, fileDiffs: slicedFileDiffs, artifacts: slicedArtifacts, hasMore });
+      return c.json({ messages, todos, fileOutputs: slicedFileOutputs, fileDiffs: slicedFileDiffs, artifacts: slicedArtifacts, hasMore, nextBefore: String(nextBefore) });
     } catch (err) {
       return c.json({ error: errorMessage(err) }, 500);
     }

@@ -1,4 +1,5 @@
 import { useStore } from '../stores';
+import { createRequestDeadline } from '../../../../shared/request-deadline';
 
 const DEFAULT_TIMEOUT = 30_000;
 
@@ -67,18 +68,13 @@ export async function lynnFetch(
   }
 
   const { timeout = DEFAULT_TIMEOUT, ...fetchOpts } = opts;
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeout);
+  const deadline = createRequestDeadline(timeout, opts.signal);
 
   try {
     const res = await fetch(`http://127.0.0.1:${serverPort}${path}`, {
       ...fetchOpts,
       headers,
-      signal: controller.signal,
+      signal: deadline.signal,
     });
     if (!res.ok) {
       let detail = `${res.status} ${res.statusText}`;
@@ -97,13 +93,13 @@ export async function lynnFetch(
     }
     return res;
   } catch (err) {
-    if (timedOut && controller.signal.aborted) {
+    if (deadline.timedOut && !opts.signal?.aborted) {
       const seconds = Math.max(1, Math.round(timeout / 1000));
       throw new Error(`lynnFetch ${path}: 请求超时（${seconds} 秒）`);
     }
     throw err;
   } finally {
-    clearTimeout(timer);
+    deadline.dispose();
   }
 }
 
@@ -122,27 +118,22 @@ export async function lynnFetchAllowError(
   }
 
   const { timeout = DEFAULT_TIMEOUT, ...fetchOpts } = opts;
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeout);
+  const deadline = createRequestDeadline(timeout, opts.signal);
 
   try {
     return await fetch(`http://127.0.0.1:${serverPort}${path}`, {
       ...fetchOpts,
       headers,
-      signal: controller.signal,
+      signal: deadline.signal,
     });
   } catch (err) {
-    if (timedOut && controller.signal.aborted) {
+    if (deadline.timedOut && !opts.signal?.aborted) {
       const seconds = Math.max(1, Math.round(timeout / 1000));
       throw new Error(`lynnFetch ${path}: 请求超时（${seconds} 秒）`);
     }
     throw err;
   } finally {
-    clearTimeout(timer);
+    deadline.dispose();
   }
 }
 

@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.86.4-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.86.4-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.86.5-brightgreen" alt="App Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.86.5-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF"><img src="https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d" alt="HuggingFace Models"></a>
@@ -112,12 +112,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.4.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.5.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI; 输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.86.4
+Lynn --version  # should print 0.86.5
 Lynn agents     # copyable headless worker commands for other agents
 ```
 
@@ -163,7 +163,21 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 ## 🆕 近期更新
 
 <details open>
-<summary><strong>Lynn v0.86.4</strong> · 2026-09-01 · 自动任务 UI 与渲染按需加载 <em>(最新)</em></summary>
+<summary><strong>Lynn v0.86.5</strong> · 2026-09-05 · 自动任务可靠性与长会话性能 <em>(最新)</em></summary>
+
+- **自动任务无损编辑**：保留月度、范围、步长和一次性/间隔计划；指定模型可恢复默认。
+- **保存与测试分离**：测试失败会保留已保存的任务 ID，持续提示失败原因，重试不再重复创建任务。
+- **IM 会话隔离**：快速切换会话时，旧请求的成功或失败都不会覆盖当前对话。
+- **长会话性能**：首屏加载最近 80 条消息，向上分页；富文本按页面保留可见区域，长回复按规模调整刷新节奏。
+- **编辑器按需加载**：CodeMirror 核心与可选语言解析器分离，并新增编辑器入口体积门禁。
+- **工程与 UI 门禁**：已有任务/新建模板分入口，设置样式、评审策略/执行及 CLI 持久化职责拆分；截图门禁加载真实翻译并覆盖编辑、复杂计划和失败重试。
+
+[完整 Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.5)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.86.4</strong> · 2026-09-01 · 自动任务 UI 与渲染按需加载</summary>
 
 **v0.86.4 自动任务体验与前端工程更新**:
 - **自动任务暗色模式可读性修复**：模板、任务卡、表单、状态标签和按钮统一使用主题语义变量，消除暗色背景上的浅色大块、白字和低对比度内容。
@@ -1416,7 +1430,7 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 **Windows**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.exe`，直接运行；版本记录见 [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)。
 
-> **Windows SmartScreen 提示：** V0.86.4 安装包已完成代码签名；首次运行仍可能因为新版应用声誉积累不足出现 SmartScreen 确认提示。
+> **Windows SmartScreen 提示：** V0.86.5 沿用现有 NSIS 安装方式，未包含公开信任的 Authenticode 代码签名。Windows 可能提示未知发布者或 SmartScreen 确认；请仅从上述正式渠道下载，并核对发布的 SHA-256。
 
 Linux 版本计划中。
 
@@ -1546,7 +1560,7 @@ npm run dist:local            # 仅本地测试包（macOS DMG，跳过公证；
 
 ### Q5：Windows 能用吗？
 
-可以。V0.85.6 的 **Windows 安装包会完成代码签名**，但 SmartScreen 仍可能因为新版应用声誉积累不足而提示确认；macOS Apple Silicon / Intel DMG 已完成 Apple notarization、staple 和 Gatekeeper 验证。
+可以。Windows 提供 NSIS 安装包，未包含公开信任的 Authenticode 代码签名，可能出现未知发布者或 SmartScreen 提示；请从正式渠道下载并核对 SHA-256。macOS Apple Silicon / Intel DMG 按发布流程完成 Apple notarization、staple 和 Gatekeeper 验证。
 
 ### Q6：能改模型吗？接自己的 API？
 

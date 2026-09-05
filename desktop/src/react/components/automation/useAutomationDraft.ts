@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { inferSchedulePreset, parseCronDays, parseCronTime, type SchedulePreset } from './cron-utils';
+import { inferSchedulePreset, isSimpleSchedule, parseCronDays, parseCronTime, type SchedulePreset } from './cron-utils';
 import { resolveJobModelValue } from './job-utils';
 import { TEMPLATES, type TemplateDefinition } from './templates';
 import type { CronJob, ModelOption } from './types';
@@ -20,6 +20,7 @@ export function useAutomationDraft({
   availableModels: ModelOption[];
 }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectionVersion, setSelectionVersion] = useState(0);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -31,6 +32,11 @@ export function useAutomationDraft({
   const [weeklyDay, setWeeklyDay] = useState(1);
   const [customDays, setCustomDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [showTemplatePrompt, setShowTemplatePrompt] = useState(false);
+  const [originalSchedule, setOriginalSchedule] = useState<CronJob | null>(null);
+  const [originalEditorSchedule, setOriginalEditorSchedule] = useState('');
+  const scheduleSignature = JSON.stringify([schedulePreset, hour, minute, weeklyDay, customDays]);
+  const scheduleLocked = Boolean(originalSchedule && !isSimpleSchedule(originalSchedule.schedule, originalSchedule.type));
+  const preserveSchedule = Boolean(editingJobId && (scheduleLocked || scheduleSignature === originalEditorSchedule));
 
   const currentTemplate = useMemo(
     () => selectedTemplateId ? TEMPLATES.find((template) => template.id === selectedTemplateId) || null : null,
@@ -39,6 +45,7 @@ export function useAutomationDraft({
   const templateMode = Boolean(currentTemplate) && !editingJobId;
 
   const reset = useCallback(() => {
+    setOriginalSchedule(null);
     setSelectedTemplateId(null);
     setEditingJobId(null);
     setShowTemplatePrompt(false);
@@ -58,6 +65,8 @@ export function useAutomationDraft({
   }, [project, projectOptions]);
 
   const startFromTemplate = useCallback((template: TemplateDefinition) => {
+    setSelectionVersion((value) => value + 1);
+    setOriginalSchedule(null);
     setSelectedTemplateId(template.id);
     setEditingJobId(null);
     setShowTemplatePrompt(false);
@@ -73,6 +82,8 @@ export function useAutomationDraft({
   }, [isZh, projectOptions]);
 
   const startCustom = useCallback(() => {
+    setSelectionVersion((value) => value + 1);
+    setOriginalSchedule(null);
     setSelectedTemplateId('custom');
     setEditingJobId(null);
     setShowTemplatePrompt(true);
@@ -88,8 +99,15 @@ export function useAutomationDraft({
   }, [isZh, projectOptions]);
 
   const editJob = useCallback((job: CronJob) => {
+    setSelectionVersion((value) => value + 1);
     const cronTime = parseCronTime(job.schedule) || { hour: '09', minute: '00' };
     const cronDays = parseCronDays(job.schedule);
+    setOriginalSchedule(job);
+    setOriginalEditorSchedule(JSON.stringify([
+      inferSchedulePreset(job.schedule), cronTime.hour, cronTime.minute,
+      cronDays.find((day) => day >= 0 && day <= 6) ?? 1,
+      cronDays.length > 0 ? cronDays : [1, 2, 3, 4, 5],
+    ]));
     setSelectedTemplateId(null);
     setEditingJobId(job.id);
     setShowTemplatePrompt(true);
@@ -105,6 +123,7 @@ export function useAutomationDraft({
   }, [availableModels, projectOptions]);
 
   return {
+    selectionVersion,
     selectedTemplateId,
     editingJobId,
     name,
@@ -119,6 +138,10 @@ export function useAutomationDraft({
     showTemplatePrompt,
     currentTemplate,
     templateMode,
+    originalSchedule,
+    scheduleLocked,
+    preserveSchedule,
+    acceptSavedJob: (job: CronJob) => setEditingJobId(job.id),
     setName,
     setPrompt,
     setProject,

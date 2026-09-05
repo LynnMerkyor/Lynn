@@ -1,0 +1,44 @@
+name: UI Regression
+
+on:
+  push:
+    branches: [main, 'codex/release-*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      candidate:
+        description: 'Capture candidate baselines for manual review (not a visual regression pass)'
+        type: boolean
+        default: false
+
+jobs:
+  windows-ui:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dpr: [1, 1.25, 1.5]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:main
+      - run: npm run build:renderer
+      - name: Run native Windows interaction and screenshot gates
+        run: npm run test:release:ui
+        env:
+          LYNN_UI_NO_FRONT: '1'
+          LYNN_UI_DPR: ${{ matrix.dpr }}
+          LYNN_UPDATE_VISUAL_BASELINES: ${{ (inputs.candidate || (startsWith(github.ref, 'refs/heads/codex/release-') && hashFiles(format('desktop/__tests__/visual-baselines/automation-win32-{0}/*.png', matrix.dpr)) == '')) && '1' || '0' }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-ui-${{ matrix.dpr }}
+          path: |
+            output/ui-smoke-*/
+            desktop/__tests__/visual-baselines/automation-win32-${{ matrix.dpr }}/
+          if-no-files-found: error

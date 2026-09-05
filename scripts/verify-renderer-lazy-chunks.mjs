@@ -57,6 +57,19 @@ if (forbiddenReachable.length > 0) {
 }
 
 const assets = fs.readdirSync(assetsDir).filter((name) => name.endsWith('.js'));
+const editorCore = assets.find((name) => name.startsWith('codemirror-vendor-'));
+if (!editorCore || fs.statSync(path.join(assetsDir, editorCore)).size > 400_000) {
+  fail('CodeMirror core exceeds 400KB or is missing; keep optional languages on demand');
+}
+if (editorCore && visited.has(editorCore)) fail('CodeMirror core must not be in the main entry static graph');
+const editorEntry = assets.find((name) => name.startsWith('editor-window-'));
+if (!editorEntry) fail('editor window entry is missing');
+else {
+  const editorGraph = collectStaticGraph(editorEntry);
+  const bytes = [...editorGraph].reduce((sum, name) => sum + fs.statSync(path.join(assetsDir, name)).size, 0);
+  if (bytes > 800_000) fail(`editor initial static graph exceeds 800KB: ${bytes} bytes`);
+  console.log(`[renderer-lazy-chunks] editor initial graph: ${bytes} bytes (${editorGraph.size} chunks)`);
+}
 for (const required of ['mermaid.core', 'wardley', 'katex-vendor', 'markdown-vendor', 'sanitize-vendor']) {
   if (!assets.some((name) => name.includes(required))) fail(`expected lazy chunk not found: ${required}`);
 }

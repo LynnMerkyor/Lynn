@@ -70,6 +70,17 @@ describe('hanaFetch', () => {
     expect(opts.headers.Authorization).toBe('Bearer test-token-123');
   });
 
+  it('honors caller cancellation instead of replacing it with the timeout', async () => {
+    const caller = new AbortController();
+    mockFetch.mockImplementation((_url, opts) => new Promise((_resolve, reject) => {
+      opts.signal.addEventListener('abort', () => reject(opts.signal.reason), { once: true });
+    }));
+    const request = hanaFetch('/api/sessions/switch', { signal: caller.signal });
+    const failure = expect(request).rejects.toMatchObject({ name: 'AbortError' });
+    caller.abort();
+    await failure;
+  });
+
   it('serverPort 未就绪时不发起 fetch', async () => {
     mockStoreState.serverPort = null;
 

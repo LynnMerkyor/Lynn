@@ -104,7 +104,8 @@ export default defineConfig({
             return 'state-vendor';
           }
 
-          if (id.includes('@codemirror') || id.includes('@lezer')) {
+          // Keep optional language parsers in their natural dynamic chunks.
+          if (/node_modules\/(?:@codemirror\/(?:state|view|commands|language)\/|@lezer\/(?:common|highlight|lr)\/)/.test(id)) {
             return 'codemirror-vendor';
           }
 

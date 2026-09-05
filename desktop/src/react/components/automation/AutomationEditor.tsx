@@ -12,6 +12,7 @@ export function AutomationEditor({
   defaultModelLabel,
   isZh,
   saving,
+  testFailure,
   onSave,
 }: {
   rootRef?: Ref<HTMLDivElement>;
@@ -21,6 +22,7 @@ export function AutomationEditor({
   defaultModelLabel: string;
   isZh: boolean;
   saving: boolean;
+  testFailure?: string;
   onSave: (runNow: boolean) => void;
 }) {
   const canSave = Boolean((draft.name.trim() || draft.currentTemplate) && (draft.prompt.trim() || draft.currentTemplate));
@@ -51,6 +53,7 @@ export function AutomationEditor({
         <label className={styles.automationField}>
           <span className={styles.automationFieldLabel}>{isZh ? '项目' : 'Project'}</span>
           <select className={styles.automationFieldSelect} value={draft.project} onChange={(event) => draft.setProject(event.target.value)}>
+            {draft.project && !projectOptions.some((option) => option.value === draft.project) && <option value={draft.project}>{draft.project}</option>}
             {projectOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label && option.label !== option.meta ? `${option.label} · ${option.meta}` : option.meta}
@@ -58,7 +61,7 @@ export function AutomationEditor({
             ))}
           </select>
         </label>
-        <label className={styles.automationField}>
+        {!draft.scheduleLocked && <label className={styles.automationField}>
           <span className={styles.automationFieldLabel}>{isZh ? '频率' : 'Schedule'}</span>
           <select className={styles.automationFieldSelect} value={draft.schedulePreset} onChange={(event) => draft.setSchedulePreset(event.target.value as typeof draft.schedulePreset)}>
             <option value="daily">{isZh ? '每天' : 'Daily'}</option>
@@ -66,7 +69,7 @@ export function AutomationEditor({
             <option value="weekly">{isZh ? '每周' : 'Weekly'}</option>
             <option value="custom">{isZh ? '定制' : 'Custom'}</option>
           </select>
-        </label>
+        </label>}
         <label className={styles.automationField}>
           <span className={styles.automationFieldLabel}>{isZh ? '模型' : 'Model'}</span>
           <select className={styles.automationFieldSelect} value={draft.model} onChange={(event) => draft.setModel(event.target.value)}>
@@ -74,14 +77,20 @@ export function AutomationEditor({
             {availableModels.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
-        <div className={styles.automationField}>
+        {!draft.scheduleLocked && <div className={styles.automationField}>
           <span className={styles.automationFieldLabel}>{isZh ? '时间' : 'Time'}</span>
           <TimePicker hour={draft.hour} minute={draft.minute} onChange={(hour, minute) => {
             draft.setHour(hour);
             draft.setMinute(minute);
           }} />
-        </div>
+        </div>}
       </div>
+
+      {draft.scheduleLocked && <div className={styles.automationPanelNotice} role="note">
+        <strong>{isZh ? '保留原有执行计划' : 'Original schedule preserved'}</strong>
+        <p><code>{String(draft.originalSchedule?.schedule)}</code> ({draft.originalSchedule?.type || 'cron'})</p>
+        <p>{isZh ? '此计划不能用简单时间选项完整表达。修改名称、内容、项目或模型不会改变执行时间。' : 'This rule cannot be represented by the simple controls. Editing other fields will not change its schedule.'}</p>
+      </div>}
 
       {draft.templateMode && draft.currentTemplate && (
         <div className={styles.automationPanelNotice} style={{ marginBottom: 16 }}>
@@ -93,7 +102,7 @@ export function AutomationEditor({
         </div>
       )}
 
-      {(draft.schedulePreset === 'weekly' || draft.schedulePreset === 'custom') && (
+      {!draft.scheduleLocked && (draft.schedulePreset === 'weekly' || draft.schedulePreset === 'custom') && (
         <div className={styles.automationComposerDays}>
           <div className={styles.automationFieldLabel}>{draft.schedulePreset === 'weekly' ? (isZh ? '每周哪天' : 'Day of week') : (isZh ? '定制日期' : 'Custom days')}</div>
           <DaySelector
@@ -115,6 +124,9 @@ export function AutomationEditor({
         </label>
       )}
 
+      {testFailure && <div className={styles.automationPanelNotice} role="alert">
+        {isZh ? `任务已保存，但测试未启动：${testFailure}。再次保存并测试不会重复创建。` : `Task saved, but the test did not start: ${testFailure}. Retrying will not create a duplicate.`}
+      </div>}
       <div className={styles.automationComposerActions}>
         <button type="button" className={styles.automationGhostBtn} onClick={draft.reset}>{isZh ? '清空' : 'Clear'}</button>
         <button type="button" className={styles.automationGhostBtn} disabled={saving || !canSave} onClick={() => onSave(true)}>

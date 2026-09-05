@@ -11,6 +11,7 @@ import { hanaFetch, hanaUrl } from '../hooks/use-hana-fetch';
 import { useI18n } from '../hooks/use-i18n';
 import { formatSessionDate } from '../utils/format';
 import { switchSession, archiveSession, renameSession, branchSession } from '../stores/session-actions';
+import { openBridgeSession } from '../stores/bridge-actions';
 import type { Session, Agent } from '../types';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
 import { lookupKnownModel } from '../utils/known-models';
@@ -73,22 +74,6 @@ function useBridgeSessions() {
 
   return bridgeSessions;
 }
-
-async function openBridgeSession(sessionKey: string) {
-  const store = useStore.getState();
-  store.setActiveBridgeSessionKey(sessionKey);
-  // Load messages
-  try {
-    const res = await hanaFetch(`/api/bridge/sessions/${encodeURIComponent(sessionKey)}/messages`);
-    const data = await res.json();
-    store.setActiveBridgeMessages(data.messages || []);
-  } catch {
-    store.setActiveBridgeMessages([]);
-  }
-  // Hide welcome, show chat area
-  useStore.setState({ welcomeVisible: false });
-}
-
 
 // ── 主组件 ──
 
@@ -163,7 +148,7 @@ function SessionListInner() {
       .catch(err => console.warn('[sessions] fetch browser sessions failed:', err));
   }, [sessions, browserRunning]);
 
-  if (sessions.length === 0) {
+  if (sessions.length === 0 && bridgeSessions.length === 0) {
     return (
       <div className={styles.sessionEmpty}>
         <p className={styles.sessionEmptyText}>{t('sidebar.empty')}</p>

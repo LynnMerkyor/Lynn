@@ -95,12 +95,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.4.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.5.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.86.4
+Lynn --version  # should print 0.86.5
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -126,7 +126,21 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 ## 🆕 Recent Updates
 
 <details open>
-<summary><strong>Lynn v0.86.4</strong> · 2026-09-01 · Automation UI and on-demand rendering <em>(latest)</em></summary>
+<summary><strong>Lynn v0.86.5</strong> · 2026-09-05 · Reliable automation and long-conversation performance <em>(latest)</em></summary>
+
+- **Lossless automation edits** preserve monthly, range, step, one-shot, and interval schedules. Assigned models can be reset to the default.
+- **Saving and testing have separate outcomes**: a failed test keeps the saved job ID and a persistent explanation; retries cannot create duplicate jobs.
+- **Isolated IM history** prevents delayed responses or errors from a previous conversation from replacing the active one.
+- **Long conversations** start with the latest 80 messages and load older pages on demand. Rich history is windowed, and long responses use size-aware rendering intervals.
+- **On-demand editor languages** separate CodeMirror core from optional parsers, backed by an editor-entry size budget.
+- **Clearer boundaries and UI gates** separate created tasks from templates, settings CSS by domain, review policy from execution, and CLI persistence from presentation. Screenshots initialize real translations and cover editing, complex schedules, and retry states.
+
+[Full Release Notes →](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.5)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.86.4</strong> · 2026-09-01 · Automation UI and on-demand rendering</summary>
 
 **v0.86.4 Automation experience and frontend engineering update**:
 - **Readable Automation UI in dark mode**: templates, job cards, forms, status pills, and actions use theme-semantic colors instead of light-only surfaces and low-contrast text.
@@ -1124,7 +1138,7 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-> **Windows SmartScreen notice:** The v0.86.4 installer is code-signed. Windows Defender SmartScreen may still show a first-run reputation prompt while the new release builds reputation.
+> **Windows SmartScreen notice:** The v0.86.5 release keeps the existing NSIS installation method and does not include a publicly trusted Authenticode code signature. Windows may show an unknown-publisher or SmartScreen prompt. Download only from the official channels above and verify the published SHA-256.
 
 Linux builds are planned.
 

@@ -1,0 +1,880 @@
+/* Subsection（API 分组内的子标题） */
+.settings-subsection {
+    margin-bottom: var(--space-lg);
+}
+
+.settings-subsection-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-light);
+    margin-bottom: var(--space-sm);
+}
+
+.settings-subsection-header {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+}
+
+.settings-subsection-header .settings-subsection-title {
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+.settings-subsection-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+/* Field */
+.settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: var(--space-md);
+}
+
+.settings-field-label {
+    font-size: 0.82rem;
+    color: var(--text-light);
+    font-weight: 600;
+}
+
+/* toggle + label inline row */
+.settings-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.settings-field-hint {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* 两列布局 */
+.settings-row {
+    display: flex;
+    gap: var(--space-md);
+}
+
+.settings-row-2col {
+    display: flex;
+    gap: var(--space-lg);
+}
+
+.settings-row-2col > .settings-field {
+    flex: 1;
+    min-width: 0;
+}
+
+.settings-field-half {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Text input */
+.settings-input {
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--text);
+    background: var(--bg-card);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 0.45rem 0.65rem;
+    outline: none;
+    box-shadow: 0 1px 3px var(--shadow);
+    transition: box-shadow var(--duration) var(--ease-out);
+    width: 100%;
+}
+
+.settings-input:focus {
+    box-shadow: 0 1px 3px var(--shadow), 0 0 0 2px rgba(var(--accent-rgb), 0.12);
+}
+
+.settings-input::placeholder {
+    color: var(--text-muted);
+}
+
+.settings-input[type="number"] {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+}
+
+.settings-input.small {
+    width: 80px;
+}
+
+.settings-input-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.settings-input-unit {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.settings-desc {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: var(--space-xs);
+    line-height: 1.5;
+}
+
+.settings-desc-compact {
+    margin-top: 0;
+    margin-bottom: var(--space-sm);
+}
+
+/* 巡检开关 */
+:global(.hana-toggle-label) {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    transition: color 0.15s;
+}
+
+:global(.hana-toggle.on) + :global(.hana-toggle-label),
+:global(.hana-toggle.on) ~ :global(.hana-toggle-label) {
+    color: var(--accent);
+}
+
+/* Skills 分栏 */
+.skills-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.skills-add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border: 1px solid var(--overlay-medium);
+    border-radius: var(--radius-md);
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all var(--duration) var(--ease-out);
+}
+
+.skills-add-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.skills-add-icon {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.skills-system-details {
+    margin-top: var(--space-lg);
+    border-top: 1px solid var(--overlay-light);
+    padding-top: var(--space-md);
+}
+
+.skills-system-summary {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: var(--space-xs) 0;
+    user-select: none;
+    list-style: none;
+}
+
+.skills-system-summary::before {
+    content: "▸ ";
+    display: inline;
+    transition: transform var(--duration);
+}
+
+.skills-system-details[open] > .skills-system-summary::before {
+    content: "▾ ";
+}
+
+.skills-empty {
+    padding: var(--space-lg) 0;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+/* Skills 拖拽导入区 */
+.skills-dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: var(--space-md);
+    padding: var(--space-lg) var(--space-md);
+    min-height: 5rem;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+    user-select: none;
+}
+
+.skills-dropzone:hover,
+.skills-dropzone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-bg, color-mix(in srgb, var(--accent) 8%, transparent));
+    color: var(--accent);
+}
+
+/* ── 工具权限框架（Agent tab → 工具权限 section） ── */
+.tool-caps-group {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.tool-caps-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: 0.65rem var(--space-md);
+    background: var(--bg-card);
+}
+
+.tool-caps-item + .tool-caps-item {
+    border-top: 1px solid var(--border);
+}
+
+/* 缩进子项（如 allow_github_fetch） */
+.tool-caps-sub {
+    padding-left: calc(var(--space-md) + 1rem);
+    background: var(--bg-hover, color-mix(in srgb, var(--bg-card) 90%, transparent));
+}
+
+.tool-caps-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.tool-caps-name {
+    font-size: 0.82rem;
+    color: var(--text);
+}
+
+.tool-caps-desc {
+    font-size: 0.71rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.tool-caps-desc.warn {
+    color: var(--error, #e05c5c);
+}
+
+
+.work-review-persona {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+}
+
+.work-reviewer-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem var(--space-md);
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+}
+
+.work-review-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 1px 3px var(--shadow);
+    flex-shrink: 0;
+}
+
+.work-review-persona-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.work-review-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.work-review-actions .sdw {
+    min-width: 160px;
+    max-width: 280px;
+    flex: 1;
+}
+
+.work-review-actions :global(button) {
+    min-width: 0;
+}
+
+.work-review-link {
+    padding: 0.45rem 0.7rem;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(var(--accent-rgb), 0.2);
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+    color: var(--accent);
+    font-size: 0.74rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    white-space: nowrap;
+}
+
+.work-review-link:hover {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    transform: translateY(-1px);
+}
+
+
+.work-review-unbound {
+    font-size: 0.71rem;
+    color: var(--error, #e05c5c);
+    line-height: 1.4;
+}
+
+@media (max-width: 720px) {
+    .work-review-actions {
+        width: 100%;
+        min-width: 0;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .work-review-link {
+        width: 100%;
+    }
+}
+
+/* Skills 列表块 */
+.skills-list-block {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.skills-list-block-spaced {
+    margin-bottom: var(--space-md);
+}
+
+.skills-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: 0.65rem var(--space-md);
+    background: var(--bg-card);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.skills-list-item + .skills-list-item {
+    border-top: 1px solid var(--border);
+}
+
+.skills-list-item:hover {
+    background: var(--bg-hover, color-mix(in srgb, var(--bg-card) 90%, transparent));
+}
+
+.skills-list-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.skills-list-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.skills-list-name-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 6px;
+    opacity: 0.6;
+}
+
+.skills-list-desc {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.skills-list-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.skill-card-delete {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    opacity: 0;
+    transition: all 0.15s;
+}
+
+.skills-list-item:hover .skill-card-delete {
+    opacity: 1;
+}
+
+.skill-card-delete:hover {
+    color: var(--danger);
+    background: var(--overlay-light);
+}
+
+/* 来源标记 */
+.skills-source-badge {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    opacity: 0.7;
+    white-space: nowrap;
+    margin-right: 6px;
+}
+
+/* 兼容技能路径管理 */
+.compat-paths-group {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin-top: 0.4rem;
+    box-shadow: 0 1px 4px var(--shadow);
+    background: var(--bg-card, var(--bg));
+}
+
+.compat-path-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.65rem;
+    gap: 8px;
+}
+
+.compat-path-item + .compat-path-item {
+    border-top: 1px solid var(--border);
+}
+
+.compat-path-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.compat-path-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.compat-path-value {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.compat-path-badge {
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    opacity: 0.6;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.compat-path-badge.muted {
+    opacity: 0.35;
+}
+
+.compat-path-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    opacity: 0;
+    padding: 2px;
+    border-radius: 3px;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+
+.compat-path-item:hover .compat-path-remove {
+    opacity: 1;
+}
+
+.compat-path-remove:hover {
+    color: var(--danger);
+    background: var(--overlay-light);
+}
+
+/* 兼容技能抽屉 */
+.compat-drawer + .compat-drawer {
+    border-top: 1px solid var(--border);
+}
+
+.compat-drawer-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 0.65rem var(--space-md);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s;
+}
+
+.compat-drawer-header:hover:not(.disabled) {
+    background: var(--overlay-light);
+}
+
+.compat-drawer-header.disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.compat-drawer-chevron {
+    flex-shrink: 0;
+    transition: transform 0.2s;
+}
+
+.compat-drawer-chevron.open {
+    transform: rotate(90deg);
+}
+
+.compat-drawer-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.compat-drawer-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.compat-drawer-path {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.compat-drawer-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.compat-drawer-skills {
+    padding: 0 0.65rem 0.5rem 1.8rem;
+    overflow: hidden;
+    animation: compat-expand 0.2s ease-out;
+}
+
+@keyframes compat-expand {
+    from { max-height: 0; opacity: 0; }
+    to { max-height: 800px; opacity: 1; }
+}
+
+.compat-drawer-skills .skills-list-item {
+    border-top: none;
+    padding: 0.3rem 0;
+}
+
+.compat-drawer-skills .skills-list-item + .skills-list-item {
+    border-top: 1px solid var(--border);
+}
+
+.compat-add-path {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 0.45rem;
+    border: none;
+    border-top: 1px dashed var(--overlay-light);
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.compat-add-path:hover {
+    color: var(--accent);
+    background: var(--overlay-light);
+}
+
+/* 书桌技能快捷区 */
+.desk-skills-section {
+    padding: 0.4rem 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--overlay-light);
+}
+
+.desk-skills-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 500;
+}
+
+.desk-skills-header:hover {
+    color: var(--text);
+}
+
+.desk-skills-count {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    background: var(--overlay-light);
+    padding: 0 5px;
+    border-radius: 8px;
+    line-height: 1.5;
+}
+
+.desk-skills-chevron {
+    margin-left: auto;
+    transition: transform 0.2s;
+}
+
+.desk-skills-chevron.open {
+    transform: rotate(90deg);
+}
+
+.desk-skills-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: 0.35rem;
+}
+
+.desk-skill-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    font-size: 0.72rem;
+}
+
+.desk-skill-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+}
+
+.desk-skill-source {
+    font-size: 0.58rem;
+    color: var(--text-muted);
+    opacity: 0.5;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* 缩小版 toggle */
+:global(.hana-toggle.mini) {
+    width: 28px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+:global(.hana-toggle.mini)::after {
+    width: 10px;
+    height: 10px;
+    top: 3px;
+    left: 3px;
+}
+
+:global(.hana-toggle.mini.on)::after {
+    left: 15px;
+}
+
+/* 文件夹选择器 */
+.settings-folder-picker {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.settings-folder-input {
+    flex: 1;
+    font-size: 0.78rem !important;
+    cursor: pointer;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.settings-folder-input::placeholder {
+    font-style: italic;
+    opacity: 0.6;
+}
+
+.settings-folder-browse,
+.settings-folder-clear {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.settings-folder-browse:hover,
+.settings-folder-clear:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+
+.settings-folder-clear:hover {
+    color: var(--danger, #e74c3c);
+}
+
+/* Textarea（ishiki 人格编辑等） */
+.settings-textarea {
+    font-family: inherit;
+    font-size: 0.82rem;
+    color: var(--text);
+    background: var(--bg-card);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 0.55rem 0.65rem;
+    outline: none;
+    resize: vertical;
+    width: 100%;
+    min-height: 120px;
+    max-height: 400px;
+    line-height: 1.65;
+    box-shadow: 0 1px 3px var(--shadow);
+    transition: box-shadow var(--duration) var(--ease-out);
+}
+
+.settings-textarea:focus {
+    box-shadow: 0 1px 3px var(--shadow), 0 0 0 2px rgba(var(--accent-rgb), 0.12);
+}
+
+.settings-textarea::placeholder {
+    color: var(--text-muted);
+}
+
+/* API key input */
+.settings-key-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.settings-key-input {
+    padding-right: 3.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+}
+
+.settings-key-toggle {
+    position: absolute;
+    right: 0.5rem;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.7rem;
+    padding: 0.15rem 0.3rem;
+    border-radius: 3px;
+    transition: color 0.2s, background 0.2s;
+}
+
+.settings-key-toggle:hover {
+    color: var(--accent);
+    background: var(--accent-light);
+}
+
+/* Select */
+.settings-select {
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--text);
+    background: var(--bg-card);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 0.45rem 2rem 0.45rem 0.65rem;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    background-image: var(--select-arrow);
+    background-repeat: no-repeat;
+    background-position: right 0.65rem center;
+    box-shadow: 0 1px 3px var(--shadow);
+    transition: box-shadow var(--duration) var(--ease-out);
+    width: 100%;
+    max-width: 200px;
+}
+
+.settings-select:focus {
+    box-shadow: 0 1px 3px var(--shadow), 0 0 0 2px rgba(var(--accent-rgb), 0.12);
+}

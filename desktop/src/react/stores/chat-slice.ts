@@ -8,8 +8,8 @@ export interface ChatSlice {
   chatSessions: Record<string, SessionMessages>;
   scrollPositions: Record<string, number>;
 
-  initSession: (path: string, items: ChatListItem[], hasMore: boolean) => void;
-  prependItems: (path: string, items: ChatListItem[], hasMore: boolean) => void;
+  initSession: (path: string, items: ChatListItem[], hasMore: boolean, cursor?: string) => void;
+  prependItems: (path: string, items: ChatListItem[], hasMore: boolean, cursor?: string) => void;
   appendItem: (path: string, item: ChatListItem) => void;
   updateLastMessage: (path: string, updater: (msg: ChatMessage) => ChatMessage) => void;
 
@@ -27,9 +27,9 @@ export const createChatSlice = (
   chatSessions: {},
   scrollPositions: {},
 
-  initSession: (path, items, hasMore) => set((s) => {
+  initSession: (path, items, hasMore, cursor) => set((s) => {
     const sessions = { ...s.chatSessions };
-    sessions[path] = { items, hasMore, loadingMore: false, oldestId: items[0]?.type === 'message' ? items[0].data.id : undefined };
+    sessions[path] = { items, hasMore, loadingMore: false, oldestId: cursor ?? (items[0]?.type === 'message' ? items[0].data.id : undefined) };
     // LRU 淘汰
     const keys = Object.keys(sessions);
     if (keys.length > MAX_CACHED_SESSIONS) {
@@ -39,7 +39,7 @@ export const createChatSlice = (
     return { chatSessions: sessions };
   }),
 
-  prependItems: (path, items, hasMore) => set((s) => {
+  prependItems: (path, items, hasMore, cursor) => set((s) => {
     const session = s.chatSessions[path];
     if (!session) return {};
     const merged = [...items, ...session.items];
@@ -51,7 +51,7 @@ export const createChatSlice = (
           items: merged,
           hasMore,
           loadingMore: false,
-          oldestId: items[0]?.type === 'message' ? items[0].data.id : session.oldestId,
+          oldestId: cursor ?? (items[0]?.type === 'message' ? items[0].data.id : session.oldestId),
         },
       },
     };

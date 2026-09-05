@@ -292,8 +292,12 @@ async function main(): Promise<void> {
 
   const outputDir = path.join(DEFAULT_OUTPUT_ROOT, `ui-smoke-${nowStamp()}`);
   await fs.mkdir(outputDir, { recursive: true });
-  const baselineDir = path.join(ROOT, "desktop", "__tests__", "visual-baselines", "automation");
+  const deviceScaleFactor = Number(process.env.LYNN_UI_DPR || 1);
+  if (![1, 1.25, 1.5].includes(deviceScaleFactor)) throw new Error('Unsupported UI DPR');
+  const baselineName = process.platform === 'darwin' && deviceScaleFactor === 1 ? 'automation' : `automation-${process.platform}-${deviceScaleFactor}`;
+  const baselineDir = process.env.LYNN_VISUAL_BASELINE_DIR || path.join(ROOT, "desktop", "__tests__", "visual-baselines", baselineName);
   const updateBaselines = process.env.LYNN_UPDATE_VISUAL_BASELINES === "1";
+  if (updateBaselines) console.log('[ui-smoke] CANDIDATE CAPTURE: interaction assertions only; screenshots require review and a separate baseline-comparison run.');
   const visualOnly = process.argv.includes("--automation-visual-only");
   if (updateBaselines) await fs.mkdir(baselineDir, { recursive: true });
 
@@ -330,13 +334,15 @@ async function main(): Promise<void> {
     await cdp.open();
     await cdp.call("Runtime.enable");
     await cdp.call("Page.enable");
+    await cdp.call("Emulation.setEmulatedMedia", { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    await cdp.call("Emulation.setTimezoneOverride", { timezoneId: 'Asia/Shanghai' });
     if (process.env.LYNN_UI_NO_FRONT !== "1") {
       await cdp.call("Page.bringToFront");
     }
     await cdp.call("Emulation.setDeviceMetricsOverride", {
       width: 1280,
       height: 900,
-      deviceScaleFactor: 1,
+      deviceScaleFactor,
       mobile: false,
     });
 
@@ -346,6 +352,7 @@ async function main(): Promise<void> {
       await cdp.evaluate(`window.__lynnSetUiSmokeScenario(${JSON.stringify(scenario.id)})`);
       await waitForExpression(cdp, `document.body.dataset.uiSmokeScenario === ${JSON.stringify(scenario.id)}`);
       await wait(350);
+      await cdp.evaluate(`window.__lynnPrepareUiSmokeCapture?.()`);
       const snapshot = await cdp.evaluate(`(() => {
         const root = document.documentElement;
         const body = document.body;
@@ -359,6 +366,7 @@ async function main(): Promise<void> {
         };
       })()`) as Snapshot;
       const failures = assertScenario(scenario.id, snapshot, scenario.expect);
+      if (/\b(?:sidebar|welcome|input|automation|cron)\.[A-Za-z][\w.]+/.test(snapshot.visibleText || '')) failures.push('untranslated locale key in visible UI');
       const screenshot = await cdp.call("Page.captureScreenshot", {
         format: "png",
         captureBeyondViewport: false,
@@ -375,22 +383,57 @@ async function main(): Promise<void> {
       for (const failure of failures) console.log(`  - ${failure}`);
     }
 
+    const historyMetrics: unknown[] = [];
+    for (const count of visualOnly ? [] : [100, 500, 2000]) {
+      await cdp.evaluate(`window.__lynnSetUiSmokeScenario('home')`);
+      await wait(50);
+      const started = Date.now();
+      await cdp.evaluate(`window.__lynnSetUiSmokeScenario('history-${count}')`);
+      await waitForExpression(cdp, `document.querySelector('[role="log"][aria-hidden="false"]')?.innerText.includes('HISTORY_${count - 1}')`);
+      const firstPaintMs = Date.now() - started;
+      await wait(400);
+      const metric = await cdp.evaluate(`(() => {
+        const panel = document.querySelector('[role="log"][aria-hidden="false"]');
+        const mounted = [...panel.querySelectorAll('[data-history-page]')].reduce((sum, page) => sum + page.childElementCount, 0);
+        return { count: ${count}, firstPaintMs: ${firstPaintMs}, mounted, scrollHeight: panel.scrollHeight,
+          atBottom: panel.scrollHeight - panel.clientHeight - panel.scrollTop < 50,
+          heapBytes: performance.memory?.usedJSHeapSize || null };
+      })()`) as { count: number; firstPaintMs: number; mounted: number; atBottom: boolean };
+      const failures: string[] = [];
+      if (metric.mounted > 160) failures.push(`unbounded rich history DOM: ${metric.mounted}`);
+      if (!metric.atBottom) failures.push('initial history does not settle at latest message');
+      if (firstPaintMs > 10000) failures.push(`history first paint too slow: ${firstPaintMs}ms`);
+      await cdp.evaluate(`document.querySelector('[role="log"][aria-hidden="false"]').scrollTop = 0`);
+      await waitForExpression(cdp, `document.querySelector('[role="log"][aria-hidden="false"]')?.innerText.includes('HISTORY_0:')`);
+      await wait(400);
+      const top = await cdp.evaluate(`document.querySelector('[role="log"][aria-hidden="false"]').scrollTop`) as number;
+      if (top > 50) failures.push(`history top anchor drifted: ${top}px`);
+      historyMetrics.push({ ...metric, topScroll: top });
+      results.push({ id: `history-${count}`, ok: !failures.length, failures, screenshot: '' });
+      console.log(`[ui-smoke] history-${count}: ${failures.length ? 'FAIL' : 'PASS'} (${firstPaintMs}ms, ${metric.mounted} mounted)`, failures.join('; '));
+    }
+    if (historyMetrics.length) await fs.writeFile(path.join(outputDir, 'history-performance.json'), JSON.stringify(historyMetrics, null, 2));
+
     for (const visualCase of AUTOMATION_VISUAL_CASES) {
       const id = `automation-${visualCase.theme}-${visualCase.width}x${visualCase.height}`;
       await cdp.call("Emulation.setDeviceMetricsOverride", {
         width: visualCase.width,
         height: visualCase.height,
-        deviceScaleFactor: 1,
+        deviceScaleFactor,
         mobile: false,
       });
       await cdp.evaluate(`window.applyTheme(${JSON.stringify(visualCase.theme)})`);
       await waitForExpression(cdp, `document.documentElement.dataset.theme === ${JSON.stringify(visualCase.theme)}`);
+      await cdp.evaluate(`window.__lynnSetUiSmokeScenario("home")`);
+      await wait(50);
       await cdp.evaluate(`window.__lynnSetUiSmokeScenario("automation")`);
       await waitForExpression(cdp, `document.body.dataset.uiSmokeScenario === "automation"`);
       await waitForExpression(cdp, `document.body.innerText.includes("定时工作小结") && !!document.querySelector('[class*="automationDialog"]')`);
       await wait(500);
+      await cdp.evaluate(`document.fonts.ready`);
       await cdp.evaluate(`window.__lynnPrepareUiSmokeCapture?.()`);
-      await wait(50);
+      await cdp.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 });
+      await wait(250);
 
       const snapshot = await cdp.evaluate(`(() => {
         const root = document.documentElement;
@@ -411,6 +454,7 @@ async function main(): Promise<void> {
       for (const text of ["自动任务", "定时工作小结", "文件自动归纳", "新建自定义任务"]) {
         if (!String(snapshot.visibleText || "").includes(text)) failures.push(`missing visible text: ${text}`);
       }
+      if (/\b(?:sidebar|welcome|input|automation|cron)\.[A-Za-z][\w.]+/.test(snapshot.visibleText || '')) failures.push('untranslated locale key in automation');
 
       const screenshot = await cdp.call("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }) as { data?: string };
       const actual = Buffer.from(String(screenshot.data || ""), "base64");
@@ -434,6 +478,80 @@ async function main(): Promise<void> {
       results.push({ id, ok: failures.length === 0, failures, screenshot: path.relative(ROOT, screenshotPath) });
       console.log(`[ui-smoke] ${id}: ${failures.length === 0 ? "PASS" : "FAIL"}`);
       for (const failure of failures) console.log(`  - ${failure}`);
+
+      const clickText = async (text: string) => {
+        await cdp!.evaluate(`(() => {
+          const button = [...document.querySelectorAll('[role="dialog"] button')].find(node => node.textContent.trim() === ${JSON.stringify(text)});
+          if (!button || button.disabled) throw new Error('Button unavailable: ' + ${JSON.stringify(text)});
+          button.click();
+        })()`);
+        await wait(150);
+      };
+      const captureState = async (state: string, expected: string[], assertion = 'true') => {
+        await wait(250);
+        await cdp!.evaluate(`window.__lynnPrepareUiSmokeCapture?.()`);
+        await cdp!.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 });
+        await wait(250);
+        const stateId = `${id}-${state}`;
+        const errors: string[] = [];
+        const result = await cdp!.evaluate(`(() => {
+          const dialog = document.querySelector('[role="dialog"]');
+          const rect = dialog.getBoundingClientRect();
+          return { text: dialog.innerText, valid: (${assertion}), overflow: dialog.scrollWidth - dialog.clientWidth,
+            inside: rect.left >= -1 && rect.top >= -1 && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1 };
+        })()`) as { text: string; valid: boolean; overflow: number; inside: boolean };
+        for (const text of expected) if (!result.text.includes(text)) errors.push(`missing state text: ${text}`);
+        if (!result.valid) errors.push('state/request assertion failed');
+        if (result.overflow > 2 || !result.inside) errors.push('state layout overflows');
+        if (/\b(?:sidebar|welcome|input|automation|cron)\.[A-Za-z][\w.]+/.test(result.text)) errors.push('untranslated state');
+        const shot = await cdp!.call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }) as { data: string };
+        const bytes = Buffer.from(shot.data, 'base64');
+        const shotPath = path.join(outputDir, `${stateId}.png`);
+        const basePath = path.join(baselineDir, `${stateId}.png`);
+        await fs.writeFile(shotPath, bytes);
+        if (updateBaselines) await fs.writeFile(basePath, bytes);
+        else {
+          try {
+            const comparison = comparePng(bytes, await fs.readFile(basePath));
+            if (comparison.changedRatio > 0.005) {
+              errors.push(`visual difference ${(comparison.changedRatio * 100).toFixed(3)}% exceeds 0.500%`);
+              await fs.writeFile(path.join(outputDir, `${stateId}-diff.png`), comparison.diff);
+            }
+          } catch (error) { errors.push(`visual baseline unavailable: ${String(error)}`); }
+        }
+        results.push({ id: stateId, ok: !errors.length, failures: errors, screenshot: path.relative(ROOT, shotPath) });
+        console.log(`[ui-smoke] ${stateId}: ${errors.length ? 'FAIL' : 'PASS'}`, errors.join('; '));
+      };
+      await clickText('新建任务 / 模板');
+      await captureState('templates', ['日报 / 周报', '文件整理', '提醒跟进']);
+      await cdp.evaluate(`document.querySelector('[class*="automationTemplateCard"]').click()`);
+      await waitForExpression(cdp, `document.body.innerText.includes('使用模板：')`);
+      await clickText('查看模板内容');
+      await captureState('editor', ['任务内容', '创建并测试']);
+      await cdp.evaluate(`window.__lynnAutomationFailNextRun = true`);
+      await clickText('创建并测试');
+      await waitForExpression(cdp, `document.body.innerText.includes('任务已保存，但测试未启动')`);
+      await captureState('saved-test-failed', ['任务已保存，但测试未启动', '保存并测试'], `window.__lynnAutomationSmokeData.jobs.length === 3 && window.__lynnAutomationRequests.filter(r => r.action === 'add').length === 1`);
+      await clickText('保存并测试');
+      await waitForExpression(cdp, `!document.querySelector('[class*="automationComposer"]')`);
+      await captureState('retry-saved', ['已创建任务'], `window.__lynnAutomationSmokeData.jobs.length === 3 && window.__lynnAutomationRequests.filter(r => r.action === 'add').length === 1 && window.__lynnAutomationRequests.filter(r => r.action === 'update').length === 1`);
+
+      await cdp.evaluate(`(() => {
+        const job = window.__lynnAutomationSmokeData.jobs[0];
+        job.type = 'cron'; job.schedule = '0 9 1 * *';
+        job.model = 'brain/step-3.7-flash';
+      })()`);
+      await clickText('编辑');
+      await waitForExpression(cdp, `document.body.innerText.includes('保留原有执行计划')`);
+      await captureState('complex-schedule', ['保留原有执行计划', '0 9 1 * *', '保存修改']);
+      await cdp.evaluate(`(() => {
+        const label = [...document.querySelectorAll('[class*="automationComposer"] label')].find(node => node.querySelector('span')?.textContent === '模型');
+        const select = label.querySelector('select');
+        select.value = ''; select.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await clickText('保存修改');
+      await clickText('编辑');
+      await captureState('default-model', ['保留原有执行计划'], `window.__lynnAutomationSmokeData.jobs[0].schedule === '0 9 1 * *' && window.__lynnAutomationSmokeData.jobs[0].model === '' && !Object.hasOwn(window.__lynnAutomationRequests.filter(r => r.action === 'update').at(-1), 'schedule')`);
     }
   } finally {
     cdp?.close();
@@ -442,7 +560,7 @@ async function main(): Promise<void> {
   }
 
   const failed = results.filter((item) => !item.ok);
-  await fs.writeFile(path.join(outputDir, "results.json"), JSON.stringify({ results }, null, 2) + "\n");
+  await fs.writeFile(path.join(outputDir, "results.json"), JSON.stringify({ mode: updateBaselines ? 'candidate' : 'regression', platform: process.platform, deviceScaleFactor, results }, null, 2) + "\n");
   console.log(`Report: ${path.relative(ROOT, outputDir)}`);
   if (failed.length > 0) {
     process.exitCode = 1;

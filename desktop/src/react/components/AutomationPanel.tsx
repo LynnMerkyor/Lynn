@@ -57,8 +57,10 @@ export function AutomationPanel() {
       weeklyDay: draft.weeklyDay,
       customDays: draft.customDays,
       runNow,
+      preserveSchedule: draft.preserveSchedule,
+      onSaved: draft.acceptSavedJob,
     });
-    if (saved) draft.reset();
+    if (saved.saved && !saved.testError) draft.reset();
   }, [data, draft, isZh]);
 
   if (!isOpen) return null;
@@ -96,6 +98,7 @@ export function AutomationPanel() {
           loading={data.loading}
           loadError={data.loadError}
           selectedTemplateId={draft.selectedTemplateId}
+          selectionVersion={draft.selectionVersion}
           editingJobId={draft.editingJobId}
           defaultModelLabel={defaultModelLabel}
           isZh={isZh}
@@ -114,6 +117,7 @@ export function AutomationPanel() {
               defaultModelLabel={defaultModelLabel}
               isZh={isZh}
               saving={data.saving}
+              testFailure={data.testFailure?.id === draft.editingJobId ? data.testFailure.message : undefined}
               onSave={(runNow) => void saveDraft(runNow)}
             />
           )}

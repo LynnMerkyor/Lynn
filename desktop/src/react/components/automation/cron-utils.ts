@@ -2,6 +2,18 @@ export type SchedulePreset = 'daily' | 'weekdays' | 'weekly' | 'custom';
 
 const WEEKDAY_SET = '1,2,3,4,5';
 
+/** The simple editor must never approximate a rule it cannot represent. */
+export function isSimpleSchedule(schedule: string | number, type = 'cron'): boolean {
+  if (type !== 'cron' || typeof schedule !== 'string') return false;
+  const parts = schedule.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+  const [minute, hour, day, month, dow] = parts;
+  return /^\d+$/.test(minute) && Number(minute) < 60
+    && /^\d+$/.test(hour) && Number(hour) < 24
+    && day === '*' && month === '*'
+    && (dow === '*' || dow === '1-5' || /^[0-6](?:,[0-6])*$/.test(dow));
+}
+
 export function formatAutomationDateTime(
   ts?: string | number | null,
   locale = String(window.i18n?.locale || 'zh-CN'),

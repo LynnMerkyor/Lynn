@@ -1,4 +1,5 @@
 import path from "node:path";
+import { persistCodeTask } from '../code-task-persistence.js';
 import { stdin as input, stdout as output, stderr as errorOutput } from "node:process";
 import { randomUUID } from "node:crypto";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
@@ -754,55 +755,15 @@ async function runCodeTask(
     ? await runCodexHarnessLoop(loopInput)
     : await runCodeAgentLoop(loopInput);
   if (saveSession) {
-    if (liveSessionPath && final.text.trim()) {
-      const existingLines = await readSessionLines(liveSessionPath).catch(() => []);
-      const lastMessage = [...existingLines].reverse().find((line) => line.type === "assistant" || line.type === "user");
-      if (!(lastMessage?.type === "assistant" && lastMessage.content === final.text)) {
-        liveSessionPath = await appendSessionLine({
-          dataDir,
-          sessionPath: liveSessionPath,
-          cwd: context.cwd,
-          title,
-          line: { type: "assistant", content: final.text },
-          modelProvider: cliProvider?.profile.provider || "brain",
-          modelId: cliProvider?.profile.model || "lynn-brain-router",
-        });
-        if (json) writeJsonLine({ type: "session.checkpoint", ts: nowIso(), path: liveSessionPath, line: "assistant" });
-        options.onEvent?.({ type: "session.checkpoint", path: liveSessionPath, line: "assistant" });
-      }
-    }
-    savedSessionPath = liveSessionPath || await appendSessionTurn({
-      dataDir,
-      sessionPath,
-      cwd: context.cwd,
-      title,
-      prompt: taskText,
-      assistant: final.text,
-      modelProvider: cliProvider?.profile.provider || "brain",
-      modelId: cliProvider?.profile.model || "lynn-brain-router",
-    });
-    if (rewindBeforeLine !== null && rewindSnapshots.length) {
-      const uniqueSnapshots = [...new Map(rewindSnapshots.map((snapshot) => [snapshot.ref, snapshot])).values()];
-      for (const snapshot of uniqueSnapshots) {
-        await appendSessionMetadata({
-          dataDir,
-          sessionPath: savedSessionPath,
-          data: {
-            kind: "code_rewind_checkpoint",
-            snapshotRef: snapshot.ref,
-            restoreCommand: snapshot.restoreCommand,
-            cwd: context.cwd,
-            task: taskText,
-            beforeLine: rewindBeforeLine,
-            createdAt: new Date().toISOString(),
-          },
-        });
-      }
-    }
-    await appendSessionMetadata({
-      dataDir,
-      sessionPath: savedSessionPath,
-      data: {
+    savedSessionPath = await persistCodeTask({
+      dataDir, liveSessionPath, sessionPath, cwd: context.cwd, title, task: taskText, text: final.text,
+      modelProvider: cliProvider?.profile.provider || 'brain', modelId: cliProvider?.profile.model || 'lynn-brain-router',
+      rewindBeforeLine, snapshots: rewindSnapshots,
+      onAssistantCheckpoint: (savedPath) => {
+        if (json) writeJsonLine({ type: 'session.checkpoint', ts: nowIso(), path: savedPath, line: 'assistant' });
+        options.onEvent?.({ type: 'session.checkpoint', path: savedPath, line: 'assistant' });
+      },
+      metadata: {
         kind: "code_task",
         cwd: context.cwd,
         images: mediaPaths,

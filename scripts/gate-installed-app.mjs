@@ -132,6 +132,11 @@ async function stopInstalledAppProcesses(reason, { initialWaitMs = 0, throwOnFai
 }
 
 async function quitExistingLynn() {
+  // A candidate app gate must never quit the user's separate installed app.
+  if (APP_PATH !== DEFAULT_APP) {
+    await stopInstalledAppProcesses("candidate cleanup", { throwOnFailure: true });
+    return;
+  }
   await new Promise((resolve) => {
     const child = spawn("osascript", ["-e", 'tell application "Lynn" to quit'], {
       stdio: ["ignore", "ignore", "ignore"],

@@ -4,6 +4,7 @@ import type { CliProviderProfile } from "./provider-profile.js";
 import { t } from "./i18n.js";
 import { registerRemoteBrainDevice, signedBrainHeaders } from "./brain-auth.js";
 import { brainEndpointUrl } from "./brain-url.js";
+import { createRequestDeadline } from '../../shared/request-deadline.js';
 
 export interface BrainChatRequest {
   brainUrl: string;
@@ -428,14 +429,8 @@ async function fetchBrainResponseWithRetry(request: BrainChatRequest, body: Reco
 
 async function fetchBrainResponseOnce(request: BrainChatRequest, body: Record<string, unknown>): Promise<Response> {
   let response: Response;
-  const timeoutAbort = new AbortController();
-  const timer = setTimeout(
-    () => timeoutAbort.abort(new Error("Brain response headers timed out")),
-    brainRequestTimeoutMs(!!request.fallbackProvider),
-  );
-  const signal = request.signal
-    ? AbortSignal.any([request.signal, timeoutAbort.signal])
-    : timeoutAbort.signal;
+  const deadline = createRequestDeadline(brainRequestTimeoutMs(!!request.fallbackProvider), request.signal, new Error("Brain response headers timed out"));
+  const signal = deadline.signal;
   try {
     response = await fetch(brainEndpointUrl(request.brainUrl, "/v1/chat/completions"), {
       method: "POST",
@@ -460,7 +455,7 @@ async function fetchBrainResponseOnce(request: BrainChatRequest, body: Record<st
   } finally {
     // This timeout protects connection/header establishment only. Once fetch()
     // resolves, an SSE response may legitimately stream for several minutes.
-    clearTimeout(timer);
+    deadline.dispose();
   }
   return response;
 }

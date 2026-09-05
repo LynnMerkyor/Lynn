@@ -19,6 +19,8 @@ export interface BridgeSlice {
   bridgeSessions: BridgeSession[];
   /** Currently active bridge session key (null = viewing normal session) */
   activeBridgeSessionKey: string | null;
+  bridgeHistoryLoading: boolean;
+  bridgeHistoryError: string | null;
   /** Messages for the active bridge session */
   activeBridgeMessages: Array<{ role: string; content: string; ts: string | null }>;
   /** 写入一条 bridge 消息 */
@@ -40,6 +42,8 @@ export const createBridgeSlice = (
   bridgeStatusTrigger: 0,
   bridgeSessions: [],
   activeBridgeSessionKey: null,
+  bridgeHistoryLoading: false,
+  bridgeHistoryError: null,
   activeBridgeMessages: [],
   addBridgeMessage: (msg) => set({ bridgeLatestMessage: msg }),
   triggerBridgeReload: () =>
