@@ -56,15 +56,16 @@ describe('hardware-adaptive EfficientThink installation', () => {
       expect(file.sources[0].url).toBe(`${catalog.modelCardUrl}/resolve/${catalog.revision}/${file.fileName}`);
       expect(file.expectedSha256).toMatch(/^[a-f0-9]{64}$/);
     }
-    const launch = buildLlamacppArgsForAlias(tier.modelId, `/models/${tier.fileName}`);
+    const modelsRoot = path.join(os.tmpdir(), '模型 空间');
+    const launch = buildLlamacppArgsForAlias(tier.modelId, path.join(modelsRoot, tier.fileName));
     expect(launch.alias).toBe(tier.modelId);
     const value = flag => launch.args[launch.args.indexOf(flag) + 1];
     expect(value('--ctx-size')).toBe(String(tier.contextSize));
     expect(value('--parallel')).toBe('1');
     expect(value('--spec-type')).toBe('draft-dflash');
-    expect(value('--model-draft')).toBe(`/models/${tier.directory}/${catalog.draft.fileName}`);
+    expect(value('--model-draft')).toBe(path.join(modelsRoot, tier.directory, catalog.draft.fileName));
     expect(launch.args).not.toContain('draft-mtp');
-    expect(runtimeUsesProfile({ modelPath: value('--model-draft') }, '/models', profile)).toBe(false);
+    expect(runtimeUsesProfile({ modelPath: value('--model-draft') }, modelsRoot, profile)).toBe(false);
   });
   it('does not relabel legacy Q4 as the new Q3', () => {
     const id = 'qwen36-27b-dsv4pro-coding-q4-mtp';
