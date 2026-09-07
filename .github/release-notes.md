@@ -2,7 +2,9 @@
 
 > 2026-09-07 · 显存分档本地模型安装与对话式部署助手
 
-## 下载 / Downloads
+## 国内镜像站下载（推荐） / Downloads
+
+国内用户请优先使用以下镜像站地址；GitHub Assets 作为备用下载。
 
 - [国内下载页](https://download.merkyorlynn.com/download.html)
 - [macOS Apple Silicon](https://download.merkyorlynn.com/downloads/Lynn-0.86.7-macOS-arm64.dmg)
@@ -27,6 +29,8 @@ Lynn --version
 - Windows 沿用未签名 NSIS 与内置基础 CPU llama.cpp；GPU 方案按需安装兼容运行时，不增加付费签名或自动安装显卡驱动。
 - CLI 与桌面版本同步，本次 GUI 安装改造不改变原有 CLI Agent LOOP。
 
+本次 Q2/Q3 + DFlash2 的真实加载与生成已在 DGX Spark GB10（CUDA）验证。macOS/Windows 原生运行时与界面另行验证；Spark 的统一内存测试不代表每张 16GB/24GB 独立显卡的容量保证。
+
 ## English highlights
 
 - Recommend Qwen3.8-27B EfficientThink Q3 for 24GB+ dedicated VRAM, or Q2 for 16GB, each with a separate Q4 DFlash2 draft—not MTP or a standalone main model.
@@ -39,6 +43,8 @@ Lynn --version
 - Link the model card, mark this as a text-model setup, and preserve existing models, manual imports and cloud Agent/harness behavior.
 - Keep the unsigned Windows NSIS package and bundled basic CPU runtime. Prepare GPU support on demand without paid signing or automatic GPU-driver installation.
 - Align CLI and desktop versions without changing the existing CLI Agent LOOP.
+
+Real Q2/Q3 + DFlash2 loading and generation were verified on DGX Spark GB10 (CUDA). Native macOS/Windows runtime and UI checks are separate; Spark unified-memory results do not guarantee fit on every 16GB/24GB discrete GPU.
 
 ## Repositories
 
