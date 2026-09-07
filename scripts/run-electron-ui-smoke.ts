@@ -310,6 +310,9 @@ async function main(): Promise<void> {
   const child = spawn(electronBin, [
     `--remote-debugging-port=${debugPort}`,
     ROOT,
+    // Process-local NSArgumentDomain override: attached mice can otherwise change
+    // macOS scrollbar gutters without any source change. Never write global defaults.
+    ...(process.platform === 'darwin' ? ['-AppleShowScrollBars', 'WhenScrolling'] : []),
   ], {
     cwd: ROOT,
     env: {
