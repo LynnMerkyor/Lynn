@@ -1,4 +1,6 @@
-const { app, BrowserWindow, WebContentsView, globalShortcut, ipcMain, dialog, session, shell, nativeTheme, Tray, Menu, nativeImage, systemPreferences, Notification, powerSaveBlocker } = require("electron");
+const { createUiTestIsolation } = require('./ui-test-isolation.cjs');
+const uiTestIsolation = createUiTestIsolation(require('electron'));
+const { app, BrowserWindow, WebContentsView, globalShortcut, ipcMain, dialog, session, shell, nativeTheme, Tray, Menu, nativeImage, systemPreferences, Notification, powerSaveBlocker } = uiTestIsolation;
 const os = require("os");
 const path = require("path");
 const { spawn, execFileSync } = require("child_process");
@@ -337,6 +339,7 @@ function getPreferredPrimaryWindow() {
 }
 
 function showPrimaryWindow() {
+  if (uiTestIsolation.enabled) return;
   if (process.platform === "darwin") app.dock.show();
   const win = getPreferredPrimaryWindow();
   if (win && !win.isDestroyed()) { win.show(); win.focus(); }
@@ -741,6 +744,10 @@ const localModelController = createLocalModelController({
 
 // ── App 生命周期 ──
 app.whenReady().then(async () => {
+  if (uiTestIsolation.enabled && process.platform === 'darwin') {
+    app.setActivationPolicy('accessory');
+    app.dock.hide();
+  }
   installMediaPermissionHandlers({ session, isTrustedAppWebContents });
   installAppMenu({ Menu, app });
 
@@ -761,7 +768,7 @@ app.whenReady().then(async () => {
     serverController.monitor();
     serverController.startHeartbeat();
     browserAgent?.setupCommands();
-    trayController.create();
+    if (!uiTestIsolation.enabled) trayController.create();
 
     // 2b. 2026-05-01 — 启动 voice tunnel manager(跨平台 ssh 隧道守护)
     //     macOS 已有 launchd watchdog 时自动 standby + 仅监控;Win/Linux 接管 spawn。
@@ -800,7 +807,7 @@ app.whenReady().then(async () => {
     }
 
     // 5. 注册全局快捷键唤醒 Jarvis Runtime overlay
-    globalSummonController.register();
+    if (!uiTestIsolation.enabled) globalSummonController.register();
 
     // 6. 后台检查更新（不阻塞启动）
     // 从 preferences.json 同步更新通道
