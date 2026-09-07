@@ -1038,7 +1038,7 @@ try {
   const results = [];
   for (const item of selectedPrompts) {
     const { index, category, prompt } = item;
-    console.log(`[${index}/${PROMPTS.length}] ${category}: ${prompt}`);
+    console.log(`[${results.length + 1}/${selectedPrompts.length}] case=${index} ${category}: ${prompt}`);
     let result = await runPromptWithFreshWs(config, index, category, prompt, args.timeoutMs);
     if (isEmptyTransportTimeout(result)) {
       const firstAttempt = result;
