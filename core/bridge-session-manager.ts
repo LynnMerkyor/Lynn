@@ -59,6 +59,8 @@ const LOCAL_QWEN35_PROVIDER_IDS = new Set([
   "local-qwen35-9b-q4km-imatrix",
 ]);
 const LOCAL_QWEN35_MODEL_IDS = new Set([
+  "qwen38-27b-efficientthink-q3-lynnstyle",
+  "qwen38-27b-efficientthink-q2-lynnstyle",
   "qwen35-4b-q4km",
   "qwen3-4b-thinking-2507-q4km-imatrix",
   "qwen35-9b-q4km-imatrix",

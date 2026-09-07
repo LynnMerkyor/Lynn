@@ -25,6 +25,8 @@ import { promisify } from "util";
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { fromRoot } from "../../shared/lynn-root.js";
+import localHardware from '../../shared/local-model-hardware.cjs';
+const localCatalog = localHardware.catalog;
 
 const execFileAsync = promisify(execFile);
 const PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
@@ -534,7 +536,7 @@ async function _computeRuntimeDetails(): Promise<RuntimeDetails> {
     .filter((id): id is string => typeof id === "string" && id.length > 0);
   const health = healthStatus.ok ? healthStatus.json : null;
   const rawEndpointRunning = healthStatus.ok === true;
-  const servesDefaultModel = modelIds.includes(MODEL_ID);
+  const servesDefaultModel = modelIds.some(id => localCatalog.tiers.some(tier => tier.modelId === id));
   const endpointOccupied = rawEndpointRunning && !servesDefaultModel;
   const defaultProcessAlive = isPidAlive(pidFromFile) || commandPids.some((candidate) => isPidAlive(candidate));
   const endpointRunning = rawEndpointRunning && servesDefaultModel;
@@ -587,24 +589,28 @@ function _invalidateRuntimeCache() {
   _runtimeCache = { at: 0, value: null, inflight: null };
 }
 
-function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): JsonRecord {
+async function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): Promise<JsonRecord> {
   const state = defaultState();
+  const detected = await localHardware.detectLocalModelHardware();
+  const selected = localCatalog.tiers.find(tier => runtime.model_ids?.includes(tier.modelId))
+    || localCatalog.tiers.find(tier => tier.modelId === detected.recommended_model_id) || localCatalog.tiers[0];
   const totalMemoryGib = os.totalmem() / (1024 ** 3);
   const isMac = process.platform === "darwin";
   const chip = isMac ? os.cpus()?.[0]?.model || "Apple Silicon" : os.cpus()?.[0]?.model || null;
-  // 2026-07-07 默认改为 27B Coding Q4 imatrix MTP。24GB+ 推荐;低配下沉到 9B / 4B。
-  const comfortable = totalMemoryGib >= 24;
-  const usable = totalMemoryGib >= 24;
-  const ctxSize = comfortable ? 32768 : 16384;
+  // Hardware recommendation and the currently served tier are deliberately separate.
+  const usable = detected.can_enable;
+  const ctxSize = selected.contextSize;
   const parallel = 1;
-  const modelPath = installedModelPath(state);
+  const oldModelPath = installedModelPath(state);
+  const selectedPath = path.join(process.env.LYNN_HOME || path.join(os.homedir(), '.lynn'), 'models', selected.fileName);
+  const modelPath = fs.existsSync(selectedPath) ? selectedPath : null;
   return {
     ok: true,
     provider_id: PROVIDER_ID,
-    model: MODEL_ID,
-    display_name: MODEL_DISPLAY_NAME,
-    expected_file_name: MODEL_FILE_NAME,
-    expected_model_path: expectedModelPath(state),
+    model: selected.modelId,
+    display_name: selected.label,
+    expected_file_name: selected.fileName,
+    expected_model_path: selectedPath,
     setup_backend: "desktop_llamacpp_manager",
     python_bootstrap_required: false,
     local_model_downloader_available: true,
@@ -618,6 +624,7 @@ function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): JsonRecor
         endpoint_occupied: runtime.endpoint_occupied === true,
         served_model_ids: runtime.model_ids || [],
         gguf: modelPath,
+        legacy_gguf: oldModelPath !== modelPath ? oldModelPath : null,
         llama_server: (runtime.endpoint_running || runtime.endpoint_loading || runtime.process_alive) ? "llama-server" : null,
         homebrew_available: null,
       },
@@ -626,22 +633,16 @@ function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): JsonRecor
         recommendation: usable ? "recommended" : "not_recommended",
         chip,
         total_memory_gib: totalMemoryGib,
-        gpus: [],
+        ...detected,
         recommended_runtime: {
-          name: comfortable ? "local_qwen27b_q4_mtp_32k" : "local_qwen27b_q4_mtp_blocked",
-          label: comfortable ? "Qwen3.6-27B Q4 imatrix MTP 默认推荐档" : "本机低于 24GB,建议改用 9B/4B 降级档",
+          name: selected.modelId,
+          model_id: detected.recommended_model_id,
+          label: usable ? selected.label : '未确认满足显存要求，请手动选择或让 Lynn 协助',
           ctx_size: ctxSize,
           parallel,
-          gpu_layers: isMac ? 999 : 0,
+          gpu_layers: 999,
         },
-        warnings: [
-          ...(runtime.endpoint_occupied
-            ? [`检测到 ${runtime.base_url} 当前运行的是 ${runtime.model_ids?.join(", ") || "非默认模型"} 端点,不会作为默认 27B 使用;停止该端点后可启动默认 Qwen3.6-27B Q4 imatrix MTP。`]
-            : []),
-          ...(comfortable ? [] : [
-            "当前内存低于 24GB,不建议默认安装 27B;可继续使用云端模型或在模型页手动选择 9B / 4B 降级档。",
-          ]),
-        ],
+        warnings: detected.warnings,
         blockers: [],
         // 三档全部 surface:默认 27B,低配 9B / 4B downgrade,32GB+ 35B。
         upgrade_options: [
@@ -650,12 +651,12 @@ function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): JsonRecor
             label: "Qwen3.5-9B Q4_K_M imatrix MTP (低配降级)",
             profile: "16~24GB 设备可选 · 比 27B 更轻",
             metrics: ["5.78GB / 5.38GiB", "32K 上下文", "MTP 加速", "低配降级"],
-            reason: "给跑不动 27B Q4 的设备保留;质量不再作为 Lynn 本地首推。",
+            reason: "为无法运行 27B 的设备保留的旧版兼容选项，不是当前默认推荐。",
             modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP",
             download_label: "下载到本机",
             file_name: "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
             requires_memory_gib: 16,
-            can_run: totalMemoryGib >= 16,
+            can_run: (detected.accelerator_memory_gib || 0) >= 16,
           },
           // 4B 低配降级档
           {
@@ -668,7 +669,7 @@ function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): JsonRecor
             download_label: "下载到本机",
             file_name: "Qwen3.5-4B-Q4_K_M-imatrix.gguf",
             requires_memory_gib: 8,
-            can_run: totalMemoryGib >= 8,
+            can_run: (detected.accelerator_memory_gib || 0) >= 8,
           },
           // 35B 高端编排器档 (32GB+ 可选) — 2026-06-27 切到 DS-V4-Pro thinking distill Q5_K_M MTP。
           {
@@ -676,12 +677,12 @@ function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): JsonRecor
             label: "Qwen3.6-35B-A3B DSV4Pro Thinking Distill MTP Q5_K_M imatrix",
             profile: "32GB 显存/统一内存+ 可选 · 更高配本地编排器",
             metrics: ["25.3 GB Q5_K_M imatrix", "MTP 原生头", "GPQA-Diamond 80.3%", "端到端编排 26.6s"],
-            reason: "32GB+ 机器可选 35B-A3B Q5_K_M;MoE + MTP 单流速度更好,但文件和 KV cache 都更重。默认仍首推 27B Q4。",
+            reason: "35B-A3B Q5_K_M 是手动可选的旧版模型，文件和缓存占用更大。默认推荐 Qwen3.8-27B Q3/Q2 + Q4 DFlash2。",
             modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF",
             download_label: "下载到本机",
             file_name: "Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf",
             requires_memory_gib: 32,
-            can_run: totalMemoryGib >= 32,
+            can_run: (detected.accelerator_memory_gib || 0) >= 32,
           },
         ],
       },
@@ -871,22 +872,25 @@ async function plan(variant = "imatrix"): Promise<JsonRecord> {
 
 async function registerProvider(engine: LocalQwen35RouteEngine, options: RegisterProviderOptions = {}): Promise<boolean> {
   const state = defaultState();
+  const actual = await runtimeDetails({ force: true });
+  const tier = localCatalog.tiers.find(item => actual.model_ids?.includes(item.modelId));
+  if (!tier || !actual.endpoint_running) return false;
   engine.providerRegistry.saveProvider(PROVIDER_ID, {
-    display_name: "本地 Qwen3.6-27B Coding",
+    display_name: "本地 Qwen3.8-27B EfficientThink",
     base_url: `http://${state.host}:${state.port}/v1`,
     api: "openai-completions",
     auth_type: "none",
     models: [{
-      id: MODEL_ID,
-      name: MODEL_DISPLAY_NAME,
-      context: 32768,
-      maxOutput: 32768,
+      id: tier.modelId,
+      name: tier.label,
+      context: tier.contextSize,
+      maxOutput: tier.contextSize,
     }],
   });
   await engine.syncModelsAndRefresh?.();
   await engine.refreshAvailableModels?.();
   if (options.activate) {
-    await engine.setPendingModel?.(MODEL_ID, PROVIDER_ID);
+    await engine.setPendingModel?.(tier.modelId, PROVIDER_ID);
   }
   return true;
 }
@@ -901,7 +905,7 @@ function isReadyPlan(planData: unknown): boolean {
 function isProviderRegistered(engine: LocalQwen35RouteEngine): boolean {
   const raw = engine.providerRegistry?.getAllProvidersRaw?.() || {};
   const entry = raw[PROVIDER_ID];
-  return !!entry?.models?.some?.((m) => (typeof m === "object" && m !== null ? m.id : m) === MODEL_ID);
+  return !!entry?.models?.some?.((m) => localCatalog.tiers.some(tier => tier.modelId === (typeof m === "object" && m !== null ? m.id : m)));
 }
 
 export function deriveLocalQwen35ProviderState({ runtime, status, registered, job }: DeriveProviderStateInput = {}) {
@@ -990,7 +994,7 @@ export function createLocalQwen35Route(engine: LocalQwen35RouteEngine): Hono {
 
   route.get("/local-qwen35-9b/status", async (c) => {
     const runtime = await runtimeDetails();
-    const status = fastReadyPlan(runtime);
+    const status = await fastReadyPlan(runtime);
     const registered = isProviderRegistered(engine);
     const decoratedJob = decorateJob(job);
     const providerState = deriveLocalQwen35ProviderState({
@@ -1122,10 +1126,8 @@ export function createLocalQwen35Route(engine: LocalQwen35RouteEngine): Hono {
 
   route.post("/local-qwen35-9b/register", async (c) => {
     const runtime = await runtimeDetails({ force: true });
-    const status = (runtime.endpoint_running || runtime.endpoint_loading || runtime.process_alive)
-      ? fastReadyPlan(runtime)
-      : await plan();
-    if (!isReadyPlan(status)) {
+    const status = await fastReadyPlan(runtime);
+    if (!runtime.endpoint_running || !runtime.serves_default_model) {
       return c.json({
         ok: false,
         error: "endpoint_not_ready",
@@ -1133,8 +1135,9 @@ export function createLocalQwen35Route(engine: LocalQwen35RouteEngine): Hono {
         status,
       }, 409);
     }
-    await registerProvider(engine, { activate: true });
-    return c.json({ ok: true, provider_id: PROVIDER_ID, model: MODEL_ID });
+    const registered = await registerProvider(engine, { activate: true });
+    if (!registered) return c.json({ ok: false, error: 'endpoint_changed_during_registration' }, 409);
+    return c.json({ ok: true, provider_id: PROVIDER_ID, model: runtime.model_ids?.find(id => localCatalog.tiers.some(tier => tier.modelId === id)) });
   });
 
   route.post("/local-qwen35-9b/stop", async (c) => {

@@ -1,4 +1,5 @@
 import { useStore } from './stores';
+import { showLocalModelSmoke, closeLocalModelSmoke } from './local-model-smoke';
 import { renderMarkdown } from './utils/markdown';
 import type { ChatListItem, ChatMessage, ContentBlock } from './stores/chat-types';
 
@@ -7,6 +8,7 @@ type SmokeScenario = 'home' | 'short' | 'tools' | 'image-tool-empty' | 'long-cod
 declare global {
   interface Window {
     __lynnUiSmokeReady?: boolean;
+    __lynnShowLocalModelSmoke?: (unknown?: boolean) => void;
     __lynnUiSmokeScenario?: SmokeScenario;
     __lynnSetUiSmokeScenario?: (scenario: SmokeScenario) => boolean;
     __lynnPrepareUiSmokeCapture?: (preserveFocus?: boolean) => boolean;
@@ -197,6 +199,7 @@ function itemsForScenario(scenario: SmokeScenario): ChatListItem[] {
 }
 
 function applyScenario(scenario: SmokeScenario): void {
+  closeLocalModelSmoke();
   const sessionPath = `/tmp/lynn-ui-smoke-${scenario}.jsonl`;
   const now = new Date().toISOString();
   const isHome = scenario === 'home';
@@ -306,6 +309,7 @@ function applyScenario(scenario: SmokeScenario): void {
 }
 
 export async function installUiSmokeFixture(initialScenario: SmokeScenario = 'home'): Promise<void> {
+  window.__lynnShowLocalModelSmoke = showLocalModelSmoke;
   await window.i18n?.load('zh');
   if (window.t?.('cron.dailyAt', { hour: '9', min: '00' }) === 'cron.dailyAt') throw new Error('UI smoke locale was not initialized');
   window.__lynnSetUiSmokeScenario = (scenario: SmokeScenario) => {

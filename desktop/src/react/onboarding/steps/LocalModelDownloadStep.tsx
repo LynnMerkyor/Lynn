@@ -2,9 +2,8 @@
  * LocalModelDownloadStep.tsx — Lynn default local model setup.
  *
  * This step keeps the legacy local provider id for routing compatibility, but
- * the real setup path is Electron main's llama.cpp downloader. The old
- * /api/local-qwen35-9b/setup Python bootstrap remains a non-desktop fallback
- * only; clean installs must not require python3.
+ * setup uses Electron main's llama.cpp downloader exclusively. The current
+ * Q3/Q2 + DFlash2 installer never falls back to the legacy Python model setup.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -14,6 +13,7 @@ import { StepContainer, Multiline } from '../onboarding-ui';
 import { useOnboardingI18n } from '../use-onboarding-i18n';
 import { QUICK_LOCAL_PROVIDER } from '../constants';
 import { useLlamacppState } from '../../hooks/use-llamacpp-state';
+import { LocalModelSetupChoice, getLocalModelTier, localModelCatalog, requestLocalModelHelp } from '../../components/input/LocalModelSetupChoice';
 import {
   BRAIN_PROVIDER_ID,
   BRAIN_PROVIDER_BASE_URL,
@@ -40,6 +40,7 @@ type LocalSetupStatus = {
     endpoint_loading?: boolean;
     process_alive?: boolean;
     base_url?: string;
+    model_ids?: string[];
   };
   plan?: {
     base_url?: string;
@@ -51,6 +52,8 @@ type LocalSetupStatus = {
     };
     hardware?: {
       can_enable?: boolean;
+      recommended_model_id?: string | null;
+      accelerator_memory_gib?: number | null;
       warnings?: string[];
       blockers?: string[];
       recommended_runtime?: {
@@ -117,7 +120,8 @@ function formatDuration(seconds: number | null | undefined): string | null {
 function localModelErrorText(reason: string | null | undefined): string {
   const code = String(reason || '').trim();
   if (!code) return '本地模型准备失败，请重试。';
-  if (code.includes('insufficient-disk-space')) return '磁盘空间不足，请释放至少 22GB 后重试。';
+  if (code.includes('desktop-installer-required')) return '此方案需要 Lynn 桌面端的下载器，请打开桌面版或让 Lynn 协助部署。';
+  if (code.includes('insufficient-disk-space')) return '磁盘空间不足，请按所选方案的空间提示释放磁盘后重试。';
   if (code.includes('binary-not-found') || code.includes('needs-binary')) return '没有找到本地推理运行时，请在设置里重新安装。';
   if (code.includes('port-in-use')) return '本地模型端口正被其他程序占用，请关闭对应程序后重试。';
   if (code.includes('checksum')) return '模型文件校验失败，Lynn 会在重试时重新下载损坏部分。';
@@ -138,6 +142,16 @@ export function LocalModelDownloadStep({
   const [savingProvider, setSavingProvider] = useState(false);
   const [providerSaved, setProviderSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [manualTierId, setManualTierId] = useState<string | null>(null);
+  const runningTierId = localModelCatalog.tiers.find(tier => status?.runtime?.model_ids?.includes(tier.modelId))?.modelId;
+  const selectedTier = getLocalModelTier(manualTierId || runningTierId || status?.plan?.hardware?.recommended_model_id);
+  const selectedModelId = selectedTier.modelId;
+  useEffect(() => {
+    if (!manualTierId && localModelCatalog.tiers.some(tier => tier.modelId === llamaState.download.modelId)
+      && ['downloading', 'verifying', 'paused'].includes(llamaState.download.state)) {
+      setManualTierId(llamaState.download.modelId!);
+    }
+  }, [manualTierId, llamaState.download.modelId, llamaState.download.state]);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -156,7 +170,8 @@ export function LocalModelDownloadStep({
     void refreshStatus();
   }, [refreshStatus]);
 
-  const ready = endpointReady(status) || llamaState.healthy || llamaState.status === 'ready';
+  const ready = (status?.runtime?.model_ids?.includes(selectedModelId) && endpointReady(status))
+    || (llamaState.modelId === selectedModelId && (llamaState.healthy || llamaState.status === 'ready'));
   const downloadActive = llamaState.download.state === 'downloading'
     || llamaState.download.state === 'verifying';
   const downloadCanPause = llamaState.download.state === 'downloading';
@@ -169,7 +184,7 @@ export function LocalModelDownloadStep({
   // #21: keep warnings and blockers visually separate
   const softWarnings: string[] = status?.plan?.hardware?.warnings || [];
   const hardBlockers: string[] = status?.plan?.hardware?.blockers || [];
-  const canEnableDefault = status?.plan?.hardware?.can_enable === true;
+  const canEnableDefault = !!manualTierId || status?.plan?.hardware?.can_enable === true;
   const hardwareBlocked = status?.plan?.hardware?.can_enable === false;
   const canStart = !busy && !downloadPaused && !ready && canEnableDefault;
   const progressPercent = ready
@@ -202,7 +217,7 @@ export function LocalModelDownloadStep({
         providerUrl: QUICK_LOCAL_PROVIDER.providerUrl,
         apiKey: '',
         providerApi: QUICK_LOCAL_PROVIDER.providerApi,
-        defaultModelId: QUICK_LOCAL_PROVIDER.defaultModelId,
+        defaultModelId: selectedModelId,
       });
       onProviderReady(QUICK_LOCAL_PROVIDER.providerName, QUICK_LOCAL_PROVIDER.providerUrl, QUICK_LOCAL_PROVIDER.providerApi, '');
       setProviderSaved(true);
@@ -214,7 +229,7 @@ export function LocalModelDownloadStep({
     } finally {
       setSavingProvider(false);
     }
-  }, [goToStep, nextStep, onProviderReady, onboardingFetch, preview, providerSaved, savingProvider, showError, t]);
+  }, [goToStep, nextStep, onProviderReady, onboardingFetch, preview, providerSaved, savingProvider, showError, t, selectedModelId]);
 
   useEffect(() => {
     if (preview) return;
@@ -233,7 +248,7 @@ export function LocalModelDownloadStep({
     setError(null);
     try {
       const managerStart = await llamaState.startDownload({
-        modelId: QUICK_LOCAL_PROVIDER.defaultModelId,
+        modelId: selectedModelId,
         startAfterDownload: true,
       });
       if (managerStart) {
@@ -255,7 +270,7 @@ export function LocalModelDownloadStep({
               phase: managerStart.alreadyRunning ? '本地模型已在准备中' : '正在下载并启动本地模型',
               percent: null,
               message: managerStart.fileCount && managerStart.fileCount > 1
-                ? `正在准备 ${managerStart.fileCount} 个 GGUF 分片`
+                ? `正在准备主模型与 DFlash2（${managerStart.fileCount} 个文件）`
                 : '正在准备 GGUF 文件',
             },
           },
@@ -263,17 +278,7 @@ export function LocalModelDownloadStep({
         window.setTimeout(() => void refreshStatus(), 900);
         return;
       }
-      const res = await onboardingFetch('/api/local-qwen35-9b/setup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ authorized: true, variant: 'imatrix', start: true }),
-      });
-      const data = await res.json();
-      if (!res.ok || data?.ok === false) {
-        throw new Error(data?.message || data?.error || 'setup_failed');
-      }
-      setStatus((prev) => ({ ...(prev || {}), job: data.job }));
-      window.setTimeout(() => void refreshStatus(), 900);
+      throw new Error('desktop-installer-required');
     } catch (err) {
       const msg = localModelErrorText(err instanceof Error ? err.message : String(err));
       setError(msg);
@@ -281,7 +286,7 @@ export function LocalModelDownloadStep({
     } finally {
       setLoading(false);
     }
-  }, [goToStep, llamaState, nextStep, onboardingFetch, preview, refreshStatus, showError]);
+  }, [goToStep, llamaState, nextStep, onboardingFetch, preview, refreshStatus, showError, selectedModelId]);
 
   const fallbackToBrain = useCallback(async () => {
     if (preview) { goToStep(nextStep); return; }
@@ -330,6 +335,10 @@ export function LocalModelDownloadStep({
       <h1 className="onboarding-title">{t('onboarding.localModel.title')}</h1>
       <Multiline className="onboarding-subtitle" text={t('onboarding.localModel.subtitle')} />
       <p className="ob-step-note">{t('onboarding.localModel.specsLine')}</p>
+      <LocalModelSetupChoice value={selectedModelId} recommendedId={status?.plan?.hardware?.recommended_model_id}
+        onChange={setManualTierId} disabled={busy || loading || downloadPaused}
+        onHelp={() => { void requestLocalModelHelp(selectedModelId, status?.plan?.hardware, error || llamaState.download.lastError)
+          .catch(err => showError(String(err.message))); }} />
 
       <div className="local-model-progress" role="status" aria-live="polite">
         <div className="local-model-progress-bar">

@@ -1,0 +1,24 @@
+.choice {
+  padding: 16px;
+  margin-block: 12px 20px;
+  border: 1px solid var(--border, #7b8794);
+  border-radius: 12px;
+  color: var(--text, inherit);
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.choice label { display: grid; gap: 8px; font-weight: 600; }
+.choice select {
+  width: 100%; min-width: 0; padding: 10px 12px;
+  background: var(--bg-card, Canvas); color: var(--text, CanvasText);
+  border: 1px solid var(--border, #7b8794); border-radius: 8px;
+  font: inherit;
+}
+.choice p { margin-block: 10px; }
+.choice a, .choice button { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.choice button { background: transparent; border: 0; padding: 4px; font: inherit; cursor: pointer; }
+.choice :focus-visible { outline: 2px solid var(--accent, #478acf); outline-offset: 3px; }
+.choice select:disabled { opacity: .65; }
+.choice option { background: var(--bg-card, Canvas); color: var(--text, CanvasText); }

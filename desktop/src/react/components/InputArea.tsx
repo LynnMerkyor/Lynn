@@ -154,6 +154,25 @@ function InputAreaInner() {
   const [atResults, setAtResults] = useState<Array<{ name: string; path: string; rel: string; isDir: boolean }>>([]);
   const gitContext = useGitContext({ deskBasePath, deskCurrentPath, pendingNewSession, selectedFolder });
   const [inputValue, setInputValue] = useState(composerText);
+  useEffect(() => {
+    const helpPlatform = window.platform as typeof window.platform & {
+      consumeLocalModelHelp?: () => Promise<{ prompt?: string | null }>;
+      onLocalModelHelp?: (callback: () => void) => (() => void);
+    };
+    const receive = async () => {
+      const result = await helpPlatform?.consumeLocalModelHelp?.();
+      if (!result?.prompt) return;
+      const current = useStore.getState().composerText;
+      const next = current ? `${current}\n\n${result.prompt}` : result.prompt;
+      setComposerText(next);
+      setInputValue(next);
+      setInlineNotice('部署诊断已填入输入框，尚未发送。请检查内容；本地模型未就绪时可选云端模型求助。');
+    };
+    const consume = () => { void receive().catch(() => setInlineNotice('部署助手暂时未连接，可返回模型页重试。')); };
+    const unsubscribe = helpPlatform?.onLocalModelHelp?.(consume);
+    consume();
+    return unsubscribe;
+  }, [setComposerText, setInlineNotice]);
   const [deepResearchOpen, setDeepResearchOpen] = useState(false);
   const [deepResearchBusy, setDeepResearchBusy] = useState(false);
   const [showAtDiscovery, setShowAtDiscovery] = useState(() => {

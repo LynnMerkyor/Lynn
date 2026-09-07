@@ -24,14 +24,15 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('selectGgufModel');
   });
 
-  it('advertises the local ladder (27B default → 9B/4B downgrade → 35B high-end) with objective metrics', () => {
+  it('uses hardware-adaptive Q3/Q2 defaults and keeps legacy tiers separate', () => {
     const source = read('server/routes/local-qwen35.ts');
     expect(source).not.toContain('qwen36-27b-q4km-imatrix');
-    // 27B Coding Q4 MTP is the default local onboarding model.
+    // Existing Q4 identifiers remain readable; they are not the new default.
     expect(source).toContain('local-qwen35-9b-q4km-imatrix');
     expect(source).toContain('qwen36-27b-dsv4pro-coding-q4-mtp');
     expect(source).toContain('Q4-imatrix-MTP-00001-of-00004.gguf');
-    expect(source).toContain('24GB+ 推荐');
+    expect(source).toContain('detectLocalModelHardware');
+    expect(source).toContain('detected.recommended_model_id');
     expect(source).toContain('can_enable: usable');
     // 9B remains visible only as a low-config downgrade.
     expect(source).toContain('qwen35-9b-q4km-imatrix');
@@ -46,7 +47,8 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('GPQA-Diamond 80.3%');
     expect(source).toContain('端到端编排 26.6s');
     expect(source).toContain('32GB 显存/统一内存+ 可选');
-    expect(source).toContain('默认仍首推 27B Q4');
+    expect(source).toContain('默认推荐 Qwen3.8-27B Q3/Q2 + Q4 DFlash2');
+    expect(source).not.toContain('默认仍首推 27B Q4');
     expect(source).not.toContain('Spark/远端兜底');
     expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF');
     expect(source).toContain('下载到本机');
@@ -63,10 +65,11 @@ describe('Local Qwen provider UX guards', () => {
     const source = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
     const helper = read('desktop/src/react/settings/tabs/providers/ProviderDetail.helpers.ts');
     const renderedSource = `${source}\n${helper}`;
-    expect(source).toContain('Coding100 82/100');
-    expect(source).toContain('LBC100 71/100');
+    expect(source).not.toContain('Coding100 82/100');
+    expect(source).toContain('评测详见模型卡');
+    expect(source).not.toContain('LBC100 71/100');
     expect(source).toContain('GUI 交互优先');
-    expect(source).toContain('本地 A3B 单槽');
+    expect(source).toContain('本地单并发');
     expect(source).toContain('忙时 CLI 转 StepFun');
     expect(source).toContain('QoS 单槽:本地忙时跳过 Spark');
     expect(source).not.toContain('MMLU 100 81.00%');
@@ -102,7 +105,7 @@ describe('Local Qwen provider UX guards', () => {
     expect(localModelController).toContain('binaryPath = new LlamaCppManager({ lynnHome }).resolveBinaryPath()');
     expect(localModelController).toContain('LYNN_LOCAL_MODEL_AUTO_START === "1"');
     expect(localModelController).toContain('parsedPayload.startAfterDownload || profile.autoStart');
-    expect(profiles).toContain('[DEFAULT_MODEL_ID]:');
+    expect(profiles).toContain('...QWEN38_PROFILES');
     expect(profiles).toContain('autoStart: false');
     expect(controller).toContain('startAfterDownload: true');
     expect(detail).toContain('startAfterDownload: true');
@@ -118,7 +121,7 @@ describe('Local Qwen provider UX guards', () => {
     expect(profiles).toContain('qwen36-27b-dsv4pro-coding-q4-mtp');
     expect(profiles).toContain('19_575_379_360');
     expect(profiles).toContain('49d0384e09242c3ea301e09ce79566cf085abbbef3f8ea83f7a6335fb473cab6');
-    expect(downloader).toContain('Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF');
+    expect(downloader).toContain('defaultCatalog.modelCardUrl');
     expect(profiles).toContain('DEFAULT_CODING_27B_Q4_FILES');
     // 2026-06-27: canonical 35B high-end = DS-V4-Pro thinking distilled Q5_K_M MTP;old 35B ids remain backward-compatible aliases.
     expect(profiles).toContain('qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix');
@@ -140,14 +143,15 @@ describe('Local Qwen provider UX guards', () => {
     const onboardingStep = read('desktop/src/react/onboarding/steps/LocalModelDownloadStep.tsx');
     const badge = read('desktop/src/react/components/ProviderStatusBadge.tsx');
     expect(constants).toContain("providerName: 'local-qwen35-9b-q4km-imatrix'");
-    expect(constants).toContain("defaultModelId: 'qwen36-27b-dsv4pro-coding-q4-mtp'");
+    expect(constants).toContain("defaultModelId: 'qwen38-27b-efficientthink-q3-lynnstyle'");
     expect(onboardingStep).toContain('/api/local-qwen35-9b/status');
     expect(onboardingStep).toContain('llamaState.startDownload');
-    expect(onboardingStep).toContain('/api/local-qwen35-9b/setup');
+    expect(onboardingStep).not.toContain('/api/local-qwen35-9b/setup');
+    expect(onboardingStep).toContain('desktop-installer-required');
     expect(onboardingStep).toContain('canEnableDefault');
     expect(onboardingStep).toContain('hardwareNotRecommended');
     expect(badge).toContain('/api/local-qwen35-9b/status');
-    expect(badge).toContain('/api/local-qwen35-9b/setup');
+    expect(badge).not.toContain('/api/local-qwen35-9b/setup');
     expect(badge).not.toContain("LLAMACPP_PROVIDER_ID = 'llamacpp'");
     expect(onboardingStep).toContain('useLlamacppState');
   });
@@ -157,7 +161,7 @@ describe('Local Qwen provider UX guards', () => {
     expect(route).toContain('setup_backend: "desktop_llamacpp_manager"');
     expect(route).toContain('python_bootstrap_required: false');
     expect(route).toContain('local_model_downloader_available: true');
-    expect(route).toContain('const status = fastReadyPlan(runtime);');
+    expect(route).toContain('const status = await fastReadyPlan(runtime);');
     expect(route).toContain('LYNN_LOCAL_QWEN35_USE_BOOTSTRAP');
     expect(route).toContain('error: "desktop_downloader_required"');
     expect(route).toContain('旧版 Python bootstrap 不可用');
@@ -268,11 +272,11 @@ describe('Local Qwen provider UX guards', () => {
     const panel = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
     const bootstrap = read('scripts/local_qwen35_9b_client_bootstrap.py');
     const setup = read('scripts/local_qwen35_9b_setup.sh');
-    expect(panel).toContain('isDefaultQwen35MtpFileName');
+    expect(panel).toContain("modelFileName === selectedTier.fileName.split('/').pop()");
     expect(panel).toContain('needs_model_upgrade');
-    expect(panel).toContain('升级到 27B Q4 MTP (19.6 GB)');
+    expect(panel).toContain('安装 ${selectedTier.quantization} + Q4 DFlash2');
     expect(panel).toContain('旧版 9B');
-    expect(panel).toContain('新版 27B Q4 MTP 待下载');
+    expect(panel).toContain('新版 27B Q3/Q2 + Q4 DFlash2 待下载');
     expect(panel).toContain('llamacppStartDownload');
     expect(bootstrap).toContain('LEGACY_MODEL_FILE_NAMES');
     expect(setup).toContain('find_legacy_gguf');
@@ -305,7 +309,7 @@ describe('Local Qwen provider UX guards', () => {
     expect(thinkingBlock).not.toContain('马上给出结果');
     expect(localQwenController).toContain('本地端点已就绪，正在生成首个回答');
     expect(localQwenStack).toContain('首次暖机提示');
-    expect(localQwenStack).toContain('本地 Qwen3.6-27B 刚启动时要加载权重和预热上下文');
+    expect(localQwenStack).toContain('本地 Qwen3.8-27B 刚启动时要加载权重和预热上下文');
     expect(localStatus).toContain('服务累计处理');
     expect(read('desktop/src/react/components/StatusBar.tsx')).toContain('status.model.totalTokens');
     expect(read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx')).toContain('服务累计处理');

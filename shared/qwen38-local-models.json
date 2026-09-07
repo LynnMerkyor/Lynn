@@ -1,0 +1,35 @@
+{
+  "modelCardUrl": "https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF",
+  "revision": "389bb2636a2c6b52d8f118a105e313de5b58576f",
+  "defaultModelId": "qwen38-27b-efficientthink-q3-lynnstyle",
+  "q2ModelId": "qwen38-27b-efficientthink-q2-lynnstyle",
+  "draft": {
+    "fileName": "dflash2-qwen38-27b-Q4_K_M.gguf",
+    "expectedSize": 1143006720,
+    "expectedSha256": "e83676f81b6604331d02e004a50689eded7fa905c7e83468e5a376cc27abcad4"
+  },
+  "tiers": [
+    {
+      "modelId": "qwen38-27b-efficientthink-q3-lynnstyle",
+      "label": "Qwen3.8-27B EfficientThink Q3 + Q4 DFlash2",
+      "quantization": "Q3",
+      "memoryGib": 24,
+      "contextSize": 8192,
+      "directory": "Q3-LynnStyle",
+      "fileName": "Q3-LynnStyle/Qwen3.8-27B-EfficientThink-SimPO-Q3-LynnStyle.gguf",
+      "expectedSize": 17032184960,
+      "expectedSha256": "89bb7b2ef82dd758f001f2c7d58e035f9188d2c0ccb35ef42fb56f51870f6e48"
+    },
+    {
+      "modelId": "qwen38-27b-efficientthink-q2-lynnstyle",
+      "label": "Qwen3.8-27B EfficientThink Q2 + Q4 DFlash2",
+      "quantization": "Q2",
+      "memoryGib": 16,
+      "contextSize": 4096,
+      "directory": "Q2-LynnStyle",
+      "fileName": "Q2-LynnStyle/Qwen3.8-27B-EfficientThink-SimPO-Q2-LynnStyle.gguf",
+      "expectedSize": 12999977600,
+      "expectedSha256": "8a84f7ef93b01c6376a19fc80fd9df849d23d5785e5953bd3e4fc278d5d21922"
+    }
+  ]
+}

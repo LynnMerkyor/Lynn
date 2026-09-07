@@ -719,6 +719,17 @@ wrapIpcHandler("app-ready", () => {
 
 const localModelController = createLocalModelController({
   BrowserWindow,
+  getMainWindow: () => mainWindow || createMainWindow(),
+  onModelReady: async () => {
+    const port = serverController.getPort();
+    const token = serverController.getToken();
+    if (!port || !token) throw new Error('model-ready-registration-unavailable');
+    const response = await fetch(`http://127.0.0.1:${port}/api/local-qwen35-9b/register`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15000),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error('model-ready-registration-failed: 模型已启动，可在设置中重新注册端点');
+  },
   shell,
   wrapIpcHandler,
   lynnHome,

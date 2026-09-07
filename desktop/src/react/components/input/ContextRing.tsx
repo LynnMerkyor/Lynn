@@ -7,7 +7,7 @@ import styles from './InputArea.module.css';
 const AUTO_COMPACT_THRESHOLD = 92;
 const WARNING_THRESHOLD = 70;
 const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN35_MODEL_ID = 'qwen36-27b-dsv4pro-coding-q4-mtp';
+const LOCAL_QWEN35_MODEL_ID = 'qwen38-27b-efficientthink-q3-lynnstyle';
 
 export function ContextRing() {
   const { t } = useI18n();
@@ -29,7 +29,7 @@ export function ContextRing() {
   const currentModel = useStore(s => s.currentModel);
   const isLocalQwen35 =
     currentModel?.provider === LOCAL_QWEN35_PROVIDER_ID &&
-    currentModel?.id === LOCAL_QWEN35_MODEL_ID;
+    (currentModel?.id === LOCAL_QWEN35_MODEL_ID || currentModel?.id === 'qwen38-27b-efficientthink-q2-lynnstyle');
 
   useEffect(() => {
     if (storeContextTokens != null) {

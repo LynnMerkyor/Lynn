@@ -42,20 +42,16 @@ const { EventEmitter } = require("events");
 // 默认配置
 // ─────────────────────────────────────────────────────────────
 
-const DEFAULT_FILE_NAME = "Q4-imatrix-MTP-00001-of-00004.gguf";
-const DEFAULT_EXPECTED_SIZE = 5_368_709_120;
-const DEFAULT_EXPECTED_SHA256 = "49d0384e09242c3ea301e09ce79566cf085abbbef3f8ea83f7a6335fb473cab6";
+const defaultCatalog = require('../shared/qwen38-local-models.json');
+const DEFAULT_FILE_NAME = path.basename(defaultCatalog.tiers[0].fileName);
+const DEFAULT_EXPECTED_SIZE = defaultCatalog.tiers[0].expectedSize;
+const DEFAULT_EXPECTED_SHA256 = defaultCatalog.tiers[0].expectedSha256;
 
 const DEFAULT_SOURCES = Object.freeze([
   {
     id: "modelscope",
     label: "ModelScope (国内主源)",
-    url: "https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF/resolve/master/Q4_LynnStyle/Q4-imatrix-MTP-00001-of-00004.gguf",
-  },
-  {
-    id: "hf-mirror",
-    label: "hf-mirror.com (国内 HF 镜像)",
-    url: "https://hf-mirror.com/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF/resolve/main/Q4_LynnStyle/Q4-imatrix-MTP-00001-of-00004.gguf",
+    url: `${defaultCatalog.modelCardUrl}/resolve/${defaultCatalog.revision}/${defaultCatalog.tiers[0].fileName}`,
   },
 ]);
 

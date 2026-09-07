@@ -26,7 +26,7 @@ interface SelectorModel {
 }
 
 const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN35_MODEL_ID = 'qwen36-27b-dsv4pro-coding-q4-mtp';
+const LOCAL_QWEN35_MODEL_ID = 'qwen38-27b-efficientthink-q3-lynnstyle';
 
 function formatProviderLabel(provider?: string): string {
   if (!provider) return '';
@@ -38,11 +38,11 @@ function formatProviderLabel(provider?: string): string {
 }
 
 function isLocalQwen35(model?: SelectorModel | null): boolean {
-  return model?.provider === LOCAL_QWEN35_PROVIDER_ID && model?.id === LOCAL_QWEN35_MODEL_ID;
+  return model?.provider === LOCAL_QWEN35_PROVIDER_ID && (model?.id === LOCAL_QWEN35_MODEL_ID || model?.id === 'qwen38-27b-efficientthink-q2-lynnstyle');
 }
 
 function compactPillModelName(model?: SelectorModel | null, role?: string | null): string {
-  if (isLocalQwen35(model)) return 'Qwen3.6-27B';
+  if (isLocalQwen35(model)) return 'Qwen3.8-27B';
   return normalizeDisplayModelName(model, { role, purpose: 'chat' });
 }
 
@@ -167,10 +167,10 @@ export function ModelSelector({
       ? styles['model-pill-status-dot-loading']
       : styles['model-pill-status-dot-offline'];
   const localQwenTitle = localQwenRunning
-    ? '本地 Qwen3.6-27B 正在运行 · Q4 imatrix MTP'
+    ? '本地 Qwen3.8-27B 正在运行 · Q4 imatrix MTP'
     : localQwenLoading
-      ? '本地 Qwen3.6-27B 正在启动 · Q4 imatrix MTP'
-      : '本地 Qwen3.6-27B 已选择，尚未启动';
+      ? '本地 Qwen3.8-27B 正在启动 · Q4 imatrix MTP'
+      : '本地 Qwen3.8-27B 已选择，尚未启动';
   const localQwenInlineState = localQwenRunning
     ? null
     : localQwenLoading

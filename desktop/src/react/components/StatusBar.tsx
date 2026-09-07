@@ -11,7 +11,7 @@ import { useI18n } from '../hooks/use-i18n';
 declare function t(key: string, vars?: Record<string, string | number>): string;
 
 const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN_MODEL_ID = 'qwen36-27b-dsv4pro-coding-q4-mtp';
+const LOCAL_QWEN_MODEL_ID = 'qwen38-27b-efficientthink-q3-lynnstyle';
 
 type LocalQwenStatus = {
   runtime?: {
@@ -34,7 +34,7 @@ type LocalQwenStatus = {
 };
 
 function isLocalQwenModel(model: { id: string; provider: string } | null): boolean {
-  return model?.provider === LOCAL_QWEN_PROVIDER_ID && model.id === LOCAL_QWEN_MODEL_ID;
+  return model?.provider === LOCAL_QWEN_PROVIDER_ID && (model.id === LOCAL_QWEN_MODEL_ID || model.id === 'qwen38-27b-efficientthink-q2-lynnstyle');
 }
 
 function formatTps(value: number | null | undefined): string | null {

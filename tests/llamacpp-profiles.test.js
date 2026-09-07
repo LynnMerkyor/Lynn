@@ -42,6 +42,8 @@ describe("llama.cpp model profile boundary", () => {
   it("exposes one option per canonical downloadable model", () => {
     const ids = listLlamacppDownloadProfiles().map((profile) => profile.modelId);
     expect(ids).toEqual([
+      "qwen38-27b-efficientthink-q3-lynnstyle",
+      "qwen38-27b-efficientthink-q2-lynnstyle",
       "qwen35-4b-q4km",
       "qwen35-9b-q4km-imatrix",
       "qwen36-27b-dsv4pro-coding-q4-mtp",
@@ -79,7 +81,7 @@ describe("llama.cpp model profile boundary", () => {
       lastError: "network-error",
       reason: "retrying",
       modelId: DEFAULT_MODEL_ID,
-      fileName: "Q4_LynnStyle/Q4-imatrix-MTP-00001-of-00004.gguf",
+      fileName: "Q3-LynnStyle/Qwen3.8-27B-EfficientThink-SimPO-Q3-LynnStyle.gguf",
     });
     expect(decorated).not.toHaveProperty("injected");
     expect(decorateDownloadState(profile, { state: "surprise" })).toMatchObject({ state: "idle" });

@@ -64,14 +64,14 @@ export function LocalQwenStatusStack(props: LocalQwenStatusStackProps) {
           {!props.endpointOccupied && (props.coldStartLikely || (props.active && !props.running)) && (
             <div className={styles['local-model-warmup-note']} role="status" aria-live="polite">
               <strong>首次暖机提示</strong>
-              <span>本地 Qwen3.6-27B 刚启动时要加载权重和预热上下文，第一问可能更慢；暖好后同一会话会明显更快。</span>
+              <span>本地 Qwen3.8-27B 刚启动时要加载权重和预热上下文，第一问可能更慢；后续速度取决于设备和上下文长度。</span>
             </div>
           )}
           {props.panelOpen && (
             <div className={styles['local-model-status-panel']} role="status" aria-live="polite">
               <div className={styles['local-model-status-panel-head']}>
                 <div>
-                  <strong>本地 Qwen3.6-27B</strong>
+                  <strong>本地 Qwen3.8-27B</strong>
                   <span>{props.endpointOccupied
                     ? '当前端口由降级/兼容端点占用，默认 27B 尚未启动'
                     : 'Q4 imatrix · MTP 加速 · 端侧默认推荐'}</span>
@@ -105,7 +105,7 @@ export function LocalQwenStatusStack(props: LocalQwenStatusStackProps) {
           onClick={props.onRestore}
         >
           <span className={styles['local-model-status-dot']} aria-hidden="true" />
-          <strong>{props.endpointOccupied ? '降级端点正在运行' : (props.running ? '本地 Qwen3.6-27B 正在运行' : '本地 Qwen3.6-27B 正在加载')}</strong>
+          <strong>{props.endpointOccupied ? '其他模型端点正在运行' : (props.running ? '本地 Qwen3.8-27B 正在运行' : '本地 Qwen3.8-27B 正在加载')}</strong>
           <span>显示状态</span>
         </button>
       )}
@@ -114,7 +114,7 @@ export function LocalQwenStatusStack(props: LocalQwenStatusStackProps) {
           <div className={styles['local-model-status-left']}>
             <span className={styles['local-model-status-dot-muted']} aria-hidden="true" />
             <div className={styles['local-model-status-copy']}>
-              <strong>{props.current ? '当前本地 Qwen3.6-27B 未启动' : '本地 Qwen3.6-27B 未运行'}</strong>
+              <strong>{props.current ? '当前本地 Qwen3.8-27B 未启动' : '本地 Qwen3.8-27B 未运行'}</strong>
               <span>
                 {props.current
                   ? '你已选择本地模型。点击启动后，Lynn 会拉起 llama.cpp 并继续使用当前模型。'
@@ -134,11 +134,11 @@ export function LocalQwenStatusStack(props: LocalQwenStatusStackProps) {
           <div className={styles['local-model-status-left']}>
             <span className={styles['local-model-status-dot']} aria-hidden="true" />
             <div className={styles['local-model-status-copy']}>
-              <strong>可安装本地 Qwen3.6-27B</strong>
+              <strong>可安装本地 Qwen3.8-27B</strong>
               <span>
                 {props.hasModel && props.hasRuntime
                   ? '模型和 llama.cpp 已就绪，点击后启动本地离线端点。'
-                  : 'Qwen3.6-27B Q4 imatrix MTP · 19.6GB · 32K 上下文；点击后准备并启动，当前模型保留。'}
+                  : '24GB+ 显存推荐 Q3，16GB 显存推荐 Q2，均搭配 Q4 DFlash2；点击后准备并启动，当前模型保留。'}
               </span>
             </div>
           </div>

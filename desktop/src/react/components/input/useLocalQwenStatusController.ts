@@ -7,6 +7,7 @@ import {
   deriveLocalQwenRuntimeState,
   LOCAL_QWEN35_ENDPOINT,
   LOCAL_QWEN35_MODEL_ID,
+  isRecommendedLocalModelId,
   LOCAL_QWEN35_PROVIDER_ID,
   LOCAL_QWEN_DISPLAY_NAME,
   LOCAL_QWEN_SHORT_NAME,
@@ -65,11 +66,13 @@ export function useLocalQwenStatusController({
   });
 
   const model = useMemo(
-    () => models.find(m => m.id === LOCAL_QWEN35_MODEL_ID && m.provider === LOCAL_QWEN35_PROVIDER_ID),
+    () => models.find(m => isRecommendedLocalModelId(m.id) && m.provider === LOCAL_QWEN35_PROVIDER_ID),
     [models],
   );
   const runtime = deriveLocalQwenRuntimeState(status, optimisticStarting, currentModelInfo);
   const servedModelIds = runtime.servedModelIds;
+  const activeOrRecommendedId = servedModelIds.find(isRecommendedLocalModelId)
+    || status?.plan?.hardware?.recommended_model_id || LOCAL_QWEN35_MODEL_ID;
   const endpointOccupied = runtime.endpointOccupied;
   const running = runtime.running;
   const loading = runtime.loading;
@@ -97,7 +100,7 @@ export function useLocalQwenStatusController({
         ? `${LOCAL_QWEN_DISPLAY_NAME} 正在加载`
         : `${LOCAL_QWEN_DISPLAY_NAME} 正在连接`;
   const warmupCopy = endpointOccupied
-    ? '9B/4B 只作为低配降级/兼容模型，不再作为默认引导；停止该端点后可启动默认 27B Q4 MTP。'
+    ? '旧版模型继续保留为兼容选项；停止该端点后可安装或启动 Qwen3.8-27B Q3/Q2 + Q4 DFlash2。'
     : running
     ? current
       ? (coldStartLikely
@@ -314,7 +317,7 @@ export function useLocalQwenStatusController({
       await hanaFetch('/api/models/set', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelId: LOCAL_QWEN35_MODEL_ID, provider: LOCAL_QWEN35_PROVIDER_ID }),
+        body: JSON.stringify({ modelId: activeOrRecommendedId, provider: LOCAL_QWEN35_PROVIDER_ID }),
       });
       await loadModels();
       showSidebarToast(`已切换到${LOCAL_QWEN_DISPLAY_NAME}。`, 4000, 'success');
@@ -322,7 +325,7 @@ export function useLocalQwenStatusController({
       const msg = err instanceof Error ? err.message : String(err);
       showSidebarToast(`切换${LOCAL_QWEN_DISPLAY_NAME}失败：` + msg, 5000, 'error');
     }
-  }, []);
+  }, [activeOrRecommendedId]);
 
   const stop = useCallback(async () => {
     try {
@@ -366,44 +369,27 @@ export function useLocalQwenStatusController({
       markLoading();
       scheduleRefreshBurst();
       const managerStart = await window.platform?.llamacppStartDownload?.({
-        modelId: LOCAL_QWEN35_MODEL_ID,
+        modelId: activeOrRecommendedId,
         startAfterDownload: true,
       });
       if (managerStart) {
         if (managerStart.ok === false) {
           throw new Error(managerStart.reason || 'llamacpp_manager_start_failed');
         }
-        await hanaFetch('/api/models/set', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ modelId: LOCAL_QWEN35_MODEL_ID, provider: LOCAL_QWEN35_PROVIDER_ID }),
-        }).catch(() => null);
         showSidebarToast(`${LOCAL_QWEN_DISPLAY_NAME} 正在启动，Lynn 会自动切换到本地模型。`, 4500, 'info');
         await loadModels();
         await refresh();
         scheduleRefreshBurst();
         return;
       }
-      const res = await hanaFetch('/api/local-qwen35-9b/setup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ authorized: true, variant: 'imatrix', start: true }),
-        timeout: 30_000,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.ok === false) {
-        throw new Error(data?.error || 'start_failed');
-      }
-      showSidebarToast(`${LOCAL_QWEN_DISPLAY_NAME} 正在启动，Lynn 会自动切换到本地模型。`, 4500, 'info');
-      await refresh();
-      scheduleRefreshBurst();
+      throw new Error('此方案需要 Lynn 桌面端下载器，请在设置中使用部署助手。');
     } catch (err) {
       setOptimisticStarting(false);
       const msg = err instanceof Error ? err.message : String(err);
       showSidebarToast(`启动${LOCAL_QWEN_DISPLAY_NAME}失败：` + msg, 5000, 'error');
       openSettings();
     }
-  }, [markLoading, openSettings, refresh, scheduleRefreshBurst]);
+  }, [markLoading, openSettings, refresh, scheduleRefreshBurst, activeOrRecommendedId]);
 
   const openDashboard = useCallback(() => {
     setPanelOpen((open) => !open);

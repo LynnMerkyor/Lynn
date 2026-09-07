@@ -9,7 +9,19 @@ const path = require("path");
 const { DEFAULT_CONFIG: LLAMACPP_DEFAULT_CONFIG } = require("./llamacpp-manager.cjs");
 const { DEFAULT_SOURCES: MODEL_DOWNLOADER_SOURCES } = require("./model-downloader.cjs");
 
-const DEFAULT_MODEL_ID = "qwen36-27b-dsv4pro-coding-q4-mtp";
+const catalog = require('../shared/qwen38-local-models.json');
+const DEFAULT_MODEL_ID = catalog.defaultModelId;
+const LEGACY_CODING_MODEL_ID = "qwen36-27b-dsv4pro-coding-q4-mtp";
+const QWEN38_PROFILES = Object.fromEntries(catalog.tiers.map(tier => {
+  const files = [
+    { fileName: tier.fileName, expectedSize: tier.expectedSize, expectedSha256: tier.expectedSha256, role: 'main' },
+    { ...catalog.draft, fileName: `${tier.directory}/${catalog.draft.fileName}`, role: 'draft' },
+  ].map(file => ({ ...file, sources: [{ id: 'modelscope', label: 'ModelScope', url: `${catalog.modelCardUrl}/resolve/${catalog.revision}/${file.fileName}` }] }));
+  return [tier.modelId, { ...tier, revision: catalog.revision, files, draftFileName: files[1].fileName,
+    expectedSize: files.reduce((sum, file) => sum + file.expectedSize, 0),
+    sources: files[0].sources, modelCardUrl: catalog.modelCardUrl, requiresDflash: true,
+    parallelSegments: 2, autoStart: false }];
+}));
 const LOCAL_9B_DOWNGRADE_MODEL_ID = "qwen35-9b-q4km-imatrix";
 const DISTILLED_35B_MODEL_ID = "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix";
 const LEGACY_27B_DISTILL_MODEL_ID = "qwen36-27b-dsv4pro-distill-q5km-imatrix";
@@ -63,6 +75,7 @@ const LOCAL_9B_DOWNGRADE_SOURCES = Object.freeze([
 // Canonical key is always the GGUF model id. Historical local-* aliases map
 // back to these entries for older client builds and stored configs.
 const LLAMACPP_BASE_PROFILES = Object.freeze({
+  ...QWEN38_PROFILES,
   // Low-config downgrade. 4B thinking-on can return empty visible answers after
   // long reasoning, so it remains explicit opt-in.
   "qwen35-4b-q4km": {
@@ -98,8 +111,8 @@ const LLAMACPP_BASE_PROFILES = Object.freeze({
   // Product default. This is the public 27B Coding SFT/RL GGUF Q4 split. The
   // four main shards are downloaded together; llama.cpp is launched with shard
   // 00001 and loads the rest from the same directory.
-  [DEFAULT_MODEL_ID]: {
-    modelId: DEFAULT_MODEL_ID,
+  [LEGACY_CODING_MODEL_ID]: {
+    modelId: LEGACY_CODING_MODEL_ID,
     revision: "2026-07-07-dsv4pro-glm52-sft-gpt55-rl-coding-q4-mtp",
     label: "Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL Coding Q4 imatrix MTP",
     fileName: DEFAULT_CODING_27B_Q4_FILE_NAME,
@@ -144,8 +157,8 @@ const LLAMACPP_ALIAS_MAP = Object.freeze({
   "local-qwen35-4b-q4km": "qwen35-4b-q4km",
   "local-qwen35-9b-q4km-imatrix": DEFAULT_MODEL_ID,
   "qwen35-9b-q4km-imatrix": LOCAL_9B_DOWNGRADE_MODEL_ID,
-  [LEGACY_27B_DISTILL_MODEL_ID]: DEFAULT_MODEL_ID,
-  "local-qwen36-27b-dsv4pro-distill-q5km-imatrix": DEFAULT_MODEL_ID,
+  [LEGACY_27B_DISTILL_MODEL_ID]: LEGACY_CODING_MODEL_ID,
+  "local-qwen36-27b-dsv4pro-distill-q5km-imatrix": LEGACY_CODING_MODEL_ID,
   "local-a3b-distill": DISTILLED_35B_MODEL_ID,
   "qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix": DISTILLED_35B_MODEL_ID,
   "qwen36-35b-a3b-q4km-imatrix": DISTILLED_35B_MODEL_ID,
@@ -258,6 +271,25 @@ function removeArgsWithValues(args, flags) {
 function buildLlamacppArgsForAlias(modelAlias, modelPath = "") {
   let args = [...(LLAMACPP_DEFAULT_CONFIG.serverArgs || [])];
   const fileName = path.basename(String(modelPath || ""));
+  const modern = Object.values(QWEN38_PROFILES).find(profile => profile.modelId === modelAlias || path.basename(profile.fileName) === fileName);
+  if (modern) {
+    args = removeArgsWithValues(args, ['--spec-type', '--spec-draft-n-max', '--spec-draft-n-min', '--model-draft']);
+    replaceArgValue(args, '-a', modern.modelId);
+    replaceArgValue(args, '--ctx-size', String(modern.contextSize));
+    replaceArgValue(args, '--parallel', '1');
+    replaceArgValue(args, '--batch-size', '256');
+    replaceArgValue(args, '--ubatch-size', '128');
+    // DFlash is a separate draft model, never the main model's old MTP head.
+    if (modelPath) {
+      replaceArgValue(args, '--model-draft', path.join(path.dirname(modelPath), catalog.draft.fileName));
+      replaceArgValue(args, '--spec-type', 'draft-dflash');
+      replaceArgValue(args, '--gpu-layers-draft', 'all');
+      replaceArgValue(args, '--spec-draft-n-max', '7');
+      replaceArgValue(args, '--spec-draft-n-min', '0');
+    }
+    return { alias: modern.modelId, args };
+  }
+  replaceArgValue(args, '--ctx-size', '32768');
   const haystack = `${modelAlias} ${fileName}`;
   const is27bCoding = /qwen36-27b-dsv4pro-coding|GLM52-SFT-GPT55-RL-Coding|Q4-imatrix-MTP/i.test(haystack);
   const is27bDistill = /qwen36-27b-dsv4pro-distill|27B-DSV4Pro-Distill-MTP|qwen36-27b-dsv4pro-distill-q5km-imatrix/i.test(haystack);
@@ -267,7 +299,7 @@ function buildLlamacppArgsForAlias(modelAlias, modelPath = "") {
   const is35b = is35bDistill || is35bImatrix || is35bApexMtp;
   const is9bMtp = /9B.*(?:imatrix.*mtp|mtp)|qwen35-9b-q4km-imatrix/i.test(haystack);
   const launchAlias = is27bCoding || is27bDistill
-    ? DEFAULT_MODEL_ID
+    ? LEGACY_CODING_MODEL_ID
     : is35bDistill
     ? DISTILLED_35B_MODEL_ID
     : is35bImatrix
@@ -293,6 +325,8 @@ function buildLlamacppArgsForAlias(modelAlias, modelPath = "") {
 
 module.exports = {
   DEFAULT_MODEL_ID,
+  LEGACY_CODING_MODEL_ID,
+  QWEN38_PROFILES,
   DEFAULT_CODING_27B_Q4_FILE_NAME,
   DEFAULT_CODING_27B_Q4_FILES,
   DEFAULT_CODING_27B_Q4_EXPECTED_SIZE,

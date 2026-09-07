@@ -384,6 +384,63 @@ async function main(): Promise<void> {
       for (const failure of failures) console.log(`  - ${failure}`);
     }
 
+    // Real shared setup component: native Electron rendering without model downloads.
+    // New screenshots are evidence, not silently promoted pixel baselines.
+    for (const theme of visualOnly || historyOnly ? [] : ['warm-paper', 'midnight']) {
+      for (const width of [1024, 520]) {
+        await cdp.call('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor, mobile: false });
+        await cdp.evaluate(`window.__lynnSetUiSmokeScenario('home'); window.applyTheme(${JSON.stringify(theme)}); window.__lynnShowLocalModelSmoke()`);
+        await waitForExpression(cdp, `!!document.querySelector('[data-local-model-smoke] select')`);
+        for (const state of ['q3', 'q2', 'unknown']) {
+          if (state === 'q2') await cdp.evaluate(`(() => {
+            const select = document.querySelector('[data-local-model-smoke] select');
+            select.value = select.options[1].value;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+          })()`);
+          if (state === 'unknown') await cdp.evaluate(`window.__lynnShowLocalModelSmoke(true)`);
+          await wait(250);
+          await cdp.evaluate('document.fonts.ready');
+          const snapshot = await cdp.evaluate(`(() => {
+            const panel = document.querySelector('[data-local-model-smoke]');
+            const select = panel.querySelector('select');
+            const style = getComputedStyle(select);
+            const lum = color => {
+              const rgb = color.match(/[\\d.]+/g)?.slice(0, 3).map(Number);
+              if (!rgb || rgb.length !== 3) return null;
+              const c = rgb.map(v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
+              return c[0] * .2126 + c[1] * .7152 + c[2] * .0722;
+            };
+            const fg = lum(style.color), bg = lum(style.backgroundColor);
+            const rect = panel.getBoundingClientRect();
+            const help = [...panel.querySelectorAll('button')].find(b => b.textContent.includes('让 Lynn'));
+            help.click();
+            return { text: panel.innerText, value: select.value,
+              contrast: fg === null || bg === null ? 0 : (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05),
+              overflow: panel.scrollWidth - panel.clientWidth,
+              inside: rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight,
+              card: panel.querySelector('a')?.href };
+          })()`) as { text: string; value: string; contrast: number; overflow: number; inside: boolean; card: string };
+          await waitForExpression(cdp, `document.querySelector('[data-local-model-smoke]').dataset.helpClicked === 'true'`);
+          const failures: string[] = [];
+          const expected = state === 'q2' ? ['14.14 GB', '4K'] : ['18.18 GB', '8K'];
+          if (state === 'unknown') expected.push('已了解显存要求，手动选择此方案');
+          for (const text of expected) if (!snapshot.text.includes(text)) failures.push(`missing setup text: ${text}`);
+          if (!snapshot.value.includes(state === 'q2' ? '-q2-' : '-q3-')) failures.push('selected tier mismatch');
+          if (snapshot.contrast < 4.5) failures.push(`select contrast ${snapshot.contrast.toFixed(2)} below 4.5`);
+          if (snapshot.overflow > 2 || !snapshot.inside) failures.push('setup layout overflows viewport');
+          if (!snapshot.card?.startsWith('https://modelscope.cn/models/Merkyor/Qwen3.8-27B-')) failures.push('model card link mismatch');
+          await cdp.evaluate('window.__lynnPrepareUiSmokeCapture?.()');
+          const id = `local-model-${theme}-${width}-${state}`;
+          const shot = await cdp.call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }) as { data: string };
+          const screenshotPath = path.join(outputDir, `${id}.png`);
+          await fs.writeFile(screenshotPath, Buffer.from(shot.data, 'base64'));
+          results.push({ id, ok: !failures.length, failures, screenshot: path.relative(ROOT, screenshotPath) });
+          console.log(`[ui-smoke] ${id}: ${failures.length ? 'FAIL' : 'PASS'}`, failures.join('; '));
+        }
+      }
+    }
+    if (!visualOnly && !historyOnly) await cdp.call('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor, mobile: false });
+
     const historyMetrics: unknown[] = [];
     for (const count of visualOnly ? [] : [100, 500, 2000]) {
       await cdp.evaluate(`window.__lynnSetUiSmokeScenario('home')`);

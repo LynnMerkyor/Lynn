@@ -11,12 +11,12 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.86.6-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.86.6-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.86.7-brightgreen" alt="App Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.86.7-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
-  <a href="https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF"><img src="https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d" alt="HuggingFace Models"></a>
-  <a href="https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF"><img src="https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff" alt="ModelScope Models"></a>
+  <a href="https://huggingface.co/nerkyor"><img src="https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d" alt="HuggingFace Models"></a>
+  <a href="https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF"><img src="https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff" alt="ModelScope Models"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript" alt="TypeScript"></a>
   <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-38-47848f?logo=electron" alt="Electron"></a>
 </p>
@@ -27,7 +27,7 @@
 
 - **源码与应用**: [GitHub 主仓 · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn) · [GitHub 镜像仓 · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases) · [国内下载镜像](https://download.merkyorlynn.com/download.html)
 - **模型与 GGUF 镜像**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
-- **端侧推荐模型**: [ModelScope 27B Coding Q4 MTP GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF) · [HuggingFace 27B Coding Q4 MTP GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
+- **端侧推荐模型**：[Qwen3.8-27B EfficientThink Q3 / Q2 + Q4 DFlash2](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF)
 
 ---
 
@@ -52,7 +52,7 @@ v0.85 的 GUI / CLI 默认对话与任务执行统一走 **StepFun 3.7 Flash**:�
 
 关键:蒸馏与原版**单流 TPS 相同**(R6000 ~224 tok/s),但端到端编排**快一倍**——**蒸的是「思维方式」,红利是更少 token 到结论**。难题仍以 **harness 客观验证** 为准,不把模型自报完成当作验收。
 
-📦 **端侧默认模型**:[`Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF`](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)；**HuggingFace 镜像**:[nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
+📦 **当前端侧默认模型**：[Qwen3.8-27B EfficientThink SimPO](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF)，按显存选择 Q3 或 Q2，并搭配独立 Q4 DFlash2。上面的旧编排器对照数据不代表这一模型。
 > 与早期 `Lynn-V4-Pro-Distill` 区分:这一版蒸的是 **thinking-on 的思维方式**,目标「学会怎么想」,直接服务 Agent 编排。
 
 ### ② 引擎路线:端侧选最快的 llama.cpp,并回馈上游
@@ -112,12 +112,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.6.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.7.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI; 输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.86.6
+Lynn --version  # should print 0.86.7
 Lynn agents     # copyable headless worker commands for other agents
 ```
 
@@ -162,8 +162,21 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 
 ## 🆕 近期更新
 
+
 <details open>
-<summary><strong>Lynn v0.86.6</strong> · 2026-09-05 · 自动任务可靠性与长会话性能 <em>(最新)</em></summary>
+<summary><strong>Lynn v0.86.7</strong> · 2026-09-07 · 显存分档安装与部署助手 <em>(最新)</em></summary>
+
+- **Q3 / Q2 按显存推荐**：Qwen3.8-27B EfficientThink SimPO：24GB 及以上独立显存推荐 Q3 + Q4 DFlash2（模型合计 18.18GB），16GB 独立显存推荐 Q2 + Q4 DFlash2（14.14GB）。Q3 以 8K、Q2 以 4K 上下文和单并发启动；还需预留 KV 缓存、运行缓冲及系统空间。Apple 统一内存单独判断，16GB 不自动等同于 16GB 独立显存。
+- **配齐运行组件**：检查或安装兼容的 llama.cpp，主模型与独立 Q4 DFlash2 分别按固定字节数和 SHA-256 校验，健康检查通过后才切换模型；已有文件保留。
+- **遇到问题能继续处理**：模型卡入口、手动档位、暂停续传，以及“让 Lynn 帮我部署”。系统信息、选择和错误整理为对话草稿，不自动发送。
+- **区分组件角色**：DFlash2 使用 draft-dflash，不是 draft-mtp。Windows 沿用未签名 NSIS 与内置基础 CPU 运行时；新 GPU 运行时在明确授权后准备。
+
+[模型卡与完整要求](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.86.6</strong> · 2026-09-05 · 自动任务可靠性与长会话性能 </summary>
 
 - **Harness 快速终态不再丢失**：修复启动响应与完成/失败通知同批到达时持续等待的问题；子进程提前退出也会立即结束等待。包含 v0.86.5 的全部 UI/架构修复。
 - **长回答不再被小于号截断**：修复“耗时 < 5 分钟”等比较表达式误触发标签清理的问题，并增加完整答案的分块重放回归。
@@ -1195,18 +1208,19 @@ MCP 服务器仍支持按需接入,但入口收进了 **设置 → MCP**。日�
 
 ---
 
-## 本地模型,三档硬件分级
+## 本地模型：按显存选择，按需安装
 
-Lynn 本地模型按硬件分档。当前默认推荐端侧模型已切到 **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding Q4 imatrix MTP**：约 19.6GB,面向 24GB+ 显存/统一内存机器。低配机器不会主动弹端侧模型引导，只在设置页保留 9B / 4B 降级入口；35B-A3B 保留为 legacy 可选。V0.80 起本地 GGUF **不再随应用启动自动拉起**，需要本地离线推理时在设置里显式启用即可:
+Qwen3.8-27B EfficientThink SimPO：24GB 及以上独立显存推荐 Q3 + Q4 DFlash2（模型合计 18.18GB），16GB 独立显存推荐 Q2 + Q4 DFlash2（14.14GB）。Q3 以 8K、Q2 以 4K 上下文和单并发启动；还需预留 KV 缓存、运行缓冲及系统空间。Apple 统一内存单独判断，16GB 不自动等同于 16GB 独立显存。 本地模型仅在明确点击安装/启动后启用；已有模型和手动导入入口保留。
 
 | 档位 | 模型 | 体积 | 推荐硬件 | 上下文 | 能力信号 |
 |------|------|:----:|---------|:------:|----------|
-| **推荐本地** | **Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding Q4 imatrix MTP** | 19.6 GB | **24GB 显存/统一内存+** | 32K | **默认推荐档** · Coding100 82/100 · LBC100 71/100 · 四分片 GGUF · MTP 启动 |
+| **24GB+** | **Qwen3.8-27B EfficientThink Q3 + Q4 DFlash2** | 18.18 GB | 独立显存 24GB+ | 8K | 主模型 + 独立草稿，单并发 |
+| **16GB** | **Qwen3.8-27B EfficientThink Q2 + Q4 DFlash2** | 14.14 GB | 独立显存 16GB | 4K | 内存余量较紧，仍需运行缓冲 |
 | 降级 | Qwen3.5-9B Q4_K_M imatrix MTP | 5.38 GB | 16~24GB 可选 | 32K | 低配显式降级 · 工具调用 14/15 · MTP 加速 |
 | 低配降级 | Qwen3.5-4B Q4_K_M imatrix (Lynn) | 2.6 GB | 8~16GB 可选 | 32K | **Q4_K_M imatrix** · MMLU thinking-off 73.00% · GPQA thinking-off 16.67% · thinking-on 可能长思考后无正文 |
 | Legacy 可选 | Qwen3.6-35B-A3B DSV4Pro Distill Q5_K_M imatrix MTP | 25.3 GB | 32GB 显存/统一内存+ | 32K | 旧 35B 编排器路线，保留给已有用户和对照测试 |
 
-> 当前默认推荐切到 **Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF** 的 Q4 imatrix MTP 档位。9B / 4B 只作为低配置降级；35B-A3B 保留为 legacy 可选。
+> [完整模型卡](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF)。文件大小不等于实际显存占用；旧版模型继续保留，不静默删除或改名。
 
 | 通用 | 说明 |
 |---|---|
@@ -1216,17 +1230,18 @@ Lynn 本地模型按硬件分档。当前默认推荐端侧模型已切到 **Qwe
 
 ### 下载与镜像
 
-**推荐本地 27B Q4 MTP**:
-- 🇨🇳 **ModelScope GGUF 镜像**: [Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
-- 🤗 **HuggingFace GGUF 镜像**: [nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
-- 默认下载文件: `Q4_LynnStyle/Q4-imatrix-MTP-00001-of-00004.gguf` 到 `00004`,总量约 **19.6 GB**。
+**推荐 Qwen3.8-27B EfficientThink**：
+
+- [模型卡与 GGUF 文件](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF)
+- Q3-LynnStyle 或 Q2-LynnStyle 主模型，配同目录的 dflash2-qwen38-27b-Q4_K_M.gguf。
+- 主模型、草稿分别校验字节数和 SHA-256；本次安装不含视觉组件。
 
 **低配 9B / 4B 与高端 35B**(按硬件显式选择):
 - 9B: [Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.5-9B-GGUF-imatrix) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`,**5.38 GB**) — 低配降级
 - 4B: [Merkyor/Qwen3.5-4B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix) (`Qwen3.5-4B-Q4_K_M-imatrix.gguf`,**2.6 GB**) — 更低配置降级,建议 thinking-off
 - 35B legacy: [Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) (`Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf`,**25.3 GB**) — 旧编排器路线，保留给已有用户和对照测试
 
-应用内路径:**设置 → 模型 → 本地 Qwen3.6-27B → 授权安装并启用**。下载、校验、启动和模型注册都由 Lynn 后台完成；新默认推荐会指向公开 27B Coding Q4 MTP GGUF 四分片。你可以随时在输入框旁看到本地模型状态，也可以停止以释放内存。硬件不足时不会主动弹 27B 安装引导，模型页仍支持手动选择 9B / 4B 降级、35B legacy，或导入你自己下载的任意 llama.cpp 可用 GGUF。
+应用内路径：**设置 → 模型 → 本地 Qwen3.8-27B → 选择方案 → 安装并启动**。Lynn 检测硬件、准备运行时、分别校验主模型与 Q4 DFlash2，端点健康后再注册与切换。不懂或失败时点击 **让 Lynn 帮我部署**，诊断信息会填入对话草稿。旧模型与手动 GGUF 导入入口保留。
 
 ---
 
@@ -1247,7 +1262,7 @@ T5  智谱 GLM / Kimi / MiniMax（供应商备用链路）
 多级降级自动切换：429、配额、供应商错误或能力不匹配 → 自动下一档，对话不中断。**默认模型有工具调用能力**（Plan C 透传，可以直接跑 `write` / `edit` / `read` / `bash`），不只是聊天。链式工具锚定、tool result reinforcement、tool-storm guard 和 pre-search 会在 router 层帮模型稳住多步工具结果。
 
 **隐私三条承诺**：不训练、不落盘、日志最小化。想要绝对隐私？三种逃生路径：
-- Lynn 本地 Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding LynnStyle Dense / 9B、4B 低配降级 / 35B-A3B legacy(按硬件显式启用,本地离线使用且不消耗云端额度)
+- Lynn 本地 Qwen3.8-27B EfficientThink Q3 / Q2 + Q4 DFlash2；9B、4B 和 35B 保留为手动兼容选项。
 - 全程 Ollama 本地模型（无任何数据出门）
 - 自备 OpenAI / Anthropic / Moonshot 等 API Key（走你自己的账号）
 - 敏感工作区路径隔离（`.lynn/private/*` 不进记忆）
@@ -1387,12 +1402,12 @@ Lynn 能读文件、跑命令、操作本地环境，所以安全不是附加功
 
 如果你有 GPU（或者能租到 vGPU），Lynn 支持把主力模型私有化。端侧默认走 llama.cpp，服务侧研究线保留 vLLM / NVFP4：
 
-- **推荐端侧配置**：Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL-Coding Q4 imatrix MTP GGUF + llama.cpp（约 19.6GB,24GB+ 显存/统一内存推荐）
+- **推荐端侧配置**：Qwen3.8-27B EfficientThink SimPO：24GB 及以上独立显存推荐 Q3 + Q4 DFlash2（模型合计 18.18GB），16GB 独立显存推荐 Q2 + Q4 DFlash2（14.14GB）。Q3 以 8K、Q2 以 4K 上下文和单并发启动；还需预留 KV 缓存、运行缓冲及系统空间。Apple 统一内存单独判断，16GB 不自动等同于 16GB 独立显存。
 - **Legacy 可选配置**：Qwen3.6-35B-A3B DSV4Pro Distill Q5_K_M GGUF + llama.cpp + MTP n=3（旧 35B 编排器路线）
 - **服务侧研究线**：35B-A3B BF16 / FP8 / NVFP4 可接 vLLM，用于并发吞吐和长上下文实验，不作为普通用户默认下载
 - **工具调用**：OpenAI-compat 原生支持，Plan C 客户端工具透传无损
 - **智能过滤**：118 个工具按用户意图自动过滤到 ~30 个（避免撑爆 GPU 上下文）
-- **成本**：消费级 GPU ≈ 私有高级模型的日常体验，24GB+ 机器优先跑 27B Coding Q4 MTP
+- **成本**：本地推理不消耗云端模型额度；实际速度和可用上下文取决于硬件及任务。
 
 搭配你的 OpenAI / Anthropic API Key 做降级兜底，就是**真正私有 + 有备援**的 Agent 基础设施。
 
@@ -1432,14 +1447,14 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 **Windows**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.exe`，直接运行；版本记录见 [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)。
 
-> **Windows SmartScreen 提示：** V0.86.6 沿用现有 NSIS 安装方式，未包含公开信任的 Authenticode 代码签名。Windows 可能提示未知发布者或 SmartScreen 确认；请仅从上述正式渠道下载，并核对发布的 SHA-256。
+> **Windows SmartScreen 提示：** V0.86.7 沿用现有 NSIS 安装方式，未包含公开信任的 Authenticode 代码签名。Windows 可能提示未知发布者或 SmartScreen 确认；请仅从上述正式渠道下载，并核对发布的 SHA-256。
 
 Linux 版本计划中。
 
 ### 首次运行
 
 - **Quick Start**：输入名字 → 授权 → 进入主界面。默认模型池开箱即用，无需 API Key。
-- **本地模型**：设置 → 模型 → 本地 Qwen3.6-27B。默认推荐切到 27B Coding Q4 imatrix MTP GGUF 四分片，约 19.6GB，24GB+ 显存/统一内存推荐；低配可手动选 9B / 4B 降级，35B-A3B 保留为 legacy。硬件不足时不会主动弹端侧模型引导；所有本地 GGUF 都只在你明确点击启用后下载/启动。
+- **本地模型**：设置 → 模型 → 本地 Qwen3.8-27B。Qwen3.8-27B EfficientThink SimPO：24GB 及以上独立显存推荐 Q3 + Q4 DFlash2（模型合计 18.18GB），16GB 独立显存推荐 Q2 + Q4 DFlash2（14.14GB）。Q3 以 8K、Q2 以 4K 上下文和单并发启动；还需预留 KV 缓存、运行缓冲及系统空间。Apple 统一内存单独判断，16GB 不自动等同于 16GB 独立显存。 需要帮助时可转入 Lynn 对话协助部署。
 - **Advanced Setup**：输入名字 → 连接自己的供应商 → 选对话/工具模型 → 设权限 → 进入。
 
 所有模型配置后续都可在设置调整。

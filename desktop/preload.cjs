@@ -34,6 +34,13 @@ const lynnBridge = {
   consumeRendererRecovery: () => ipcRenderer.invoke("consume-renderer-recovery"),
   // llama.cpp local 推理 (Lynn V0.79 默认本地模型)
   llamacppGetState: () => ipcRenderer.invoke("llamacpp:state"),
+  requestLocalModelHelp: (payload) => ipcRenderer.invoke('local-model:request-help', payload),
+  consumeLocalModelHelp: () => ipcRenderer.invoke('local-model:consume-help'),
+  onLocalModelHelp: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('local-model:help-ready', listener);
+    return () => ipcRenderer.removeListener('local-model:help-ready', listener);
+  },
   cliEnvStatus: () => ipcRenderer.invoke("cli:status"),
   llamacppStartDownload: (payload) => ipcRenderer.invoke("llamacpp:start-download", payload || {}),
   llamacppStop: () => ipcRenderer.invoke("llamacpp:stop"),

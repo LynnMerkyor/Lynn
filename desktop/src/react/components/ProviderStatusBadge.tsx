@@ -1,10 +1,10 @@
 /**
  * ProviderStatusBadge.tsx — Compact model-route chip for the welcome screen.
  *
- * Local Qwen3.6-27B state is sourced from the server-side /api/local-qwen35-9b/*
+ * Local Qwen3.8-27B state is sourced from the server-side /api/local-qwen35-9b/*
  * route (legacy endpoint name kept for backward compat) so this chip,
  * Settings, onboarding, and chat routing share the same provider id and
- * setup lifecycle. 2026-07-07: default model is 27B Q4 MTP; 9B/4B are downgrade-only.
+ * setup lifecycle. Default setup is hardware-adaptive Qwen3.8 Q3/Q2 with Q4 DFlash2.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -15,7 +15,7 @@ import { loadModels } from '../utils/ui-helpers';
 import { BRAIN_PROVIDER_ID, BRAIN_DEFAULT_MODEL_ID } from '../../../../shared/brain-provider.js';
 
 const LOCAL_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_MODEL_ID = 'qwen36-27b-dsv4pro-coding-q4-mtp';
+const LOCAL_MODEL_ID = 'qwen38-27b-efficientthink-q3-lynnstyle';
 
 type LocalStatus = {
   ok?: boolean;
@@ -40,6 +40,7 @@ type LocalStatus = {
   plan?: {
     hardware?: {
       can_enable?: boolean;
+      recommended_model_id?: string | null;
     };
     observed?: {
       endpoint_running?: boolean;
@@ -66,7 +67,7 @@ function localProviderState(status: LocalStatus | null): string {
 function providerDisplayLabel(provider: string | null, isZh: boolean): string {
   if (!provider) return isZh ? '未配置' : 'No model';
   if (provider === BRAIN_PROVIDER_ID) return isZh ? '默认模型' : 'Default model';
-  if (provider === LOCAL_PROVIDER_ID) return isZh ? '本地 Qwen3.6-27B' : 'Local Qwen3.6-27B';
+  if (provider === LOCAL_PROVIDER_ID) return isZh ? '本地 Qwen3.8-27B' : 'Local Qwen3.8-27B';
   return provider;
 }
 
@@ -174,12 +175,13 @@ export function ProviderStatusBadge() {
     return { statusText: isZh ? '可启动' : 'Ready to start', tone: 'standby' };
   }, [activeProvider, isLocalActive, isZh, localAssets, localBusy, localCannotSetup, localOccupied, localReady, localStatus?.job?.progress?.percent]);
 
-  const switchToProvider = useCallback(async (targetProvider: typeof BRAIN_PROVIDER_ID | typeof LOCAL_PROVIDER_ID) => {
+  const switchToProvider = useCallback(async (targetProvider: typeof BRAIN_PROVIDER_ID | typeof LOCAL_PROVIDER_ID, localModelId?: string) => {
     if (switching) return;
     setSwitching(true);
     setMenuOpen(false);
     try {
-      const modelId = targetProvider === BRAIN_PROVIDER_ID ? BRAIN_DEFAULT_MODEL_ID : LOCAL_MODEL_ID;
+      const modelId = targetProvider === BRAIN_PROVIDER_ID ? BRAIN_DEFAULT_MODEL_ID
+        : localModelId || localStatus?.runtime?.model_ids?.find(id => /^qwen38-27b-efficientthink-q[23]-lynnstyle$/.test(id)) || LOCAL_MODEL_ID;
       await hanaFetch('/api/models/set', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -191,7 +193,7 @@ export function ProviderStatusBadge() {
     } finally {
       setSwitching(false);
     }
-  }, [switching]);
+  }, [switching, localStatus]);
 
   const prepareAndSwitchLocal = useCallback(async () => {
     if (preparing || switching) return;
@@ -204,7 +206,7 @@ export function ProviderStatusBadge() {
       }
       if (!isLocalReady(latest)) {
         const managerStart = await window.platform?.llamacppStartDownload?.({
-          modelId: LOCAL_MODEL_ID,
+          modelId: latest?.plan?.hardware?.recommended_model_id || LOCAL_MODEL_ID,
           startAfterDownload: true,
         });
         if (managerStart) {
@@ -220,24 +222,18 @@ export function ProviderStatusBadge() {
                 phase: managerStart.alreadyRunning ? '本地模型已在准备中' : '正在准备本地模型',
                 percent: null,
                 message: managerStart.fileCount && managerStart.fileCount > 1
-                  ? `正在准备 ${managerStart.fileCount} 个 GGUF 分片`
+                  ? `正在准备主模型与 DFlash2（${managerStart.fileCount} 个文件）`
                   : '正在准备 GGUF 文件',
               },
             },
           }));
         } else {
-          const res = await hanaFetch('/api/local-qwen35-9b/setup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ authorized: true, variant: 'imatrix', start: true }),
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok || data?.ok === false) throw new Error(data?.message || data?.error || 'setup_failed');
-          setLocalStatus((prev) => ({ ...(prev || {}), job: data.job }));
+          throw new Error('此方案需要 Lynn 桌面端下载器，请在设置中使用部署助手。');
         }
       }
       window.setTimeout(() => void refreshLocal(), 1000);
-      await switchToProvider(LOCAL_PROVIDER_ID);
+      if (isLocalReady(latest)) await switchToProvider(LOCAL_PROVIDER_ID,
+        latest?.runtime?.model_ids?.find(id => /^qwen38-27b-efficientthink-q[23]-lynnstyle$/.test(id)));
     } catch (err) {
       console.warn('[ProviderStatusBadge] local setup failed:', err);
     } finally {
@@ -292,12 +288,12 @@ export function ProviderStatusBadge() {
             <span className="provider-status-menu-dot tone-local" aria-hidden />
             <span>
               {localReady
-                ? (isZh ? '本地 Qwen3.6-27B' : 'Local Qwen3.6-27B')
+                ? (isZh ? '本地 Qwen3.8-27B' : 'Local Qwen3.8-27B')
                 : localBusy
-                  ? (isZh ? '本地 Qwen3.6-27B 准备中' : 'Local Qwen3.6-27B preparing')
+                  ? (isZh ? '本地 Qwen3.8-27B 准备中' : 'Local Qwen3.8-27B preparing')
                   : localCannotSetup
                     ? (isZh ? '本机不建议启用默认 27B' : '27B not recommended here')
-                    : (isZh ? '准备并切换本地 Qwen3.6-27B' : 'Prepare and switch to Local Qwen3.6-27B')}
+                    : (isZh ? '准备并切换本地 Qwen3.8-27B' : 'Prepare and switch to Local Qwen3.8-27B')}
             </span>
           </button>
           {!localReady && (

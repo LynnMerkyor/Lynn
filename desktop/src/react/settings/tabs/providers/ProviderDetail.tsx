@@ -6,16 +6,14 @@ import { OAuthCredentials } from './OAuthCredentials';
 import { ApiKeyCredentials } from './ApiKeyCredentials';
 import { ProviderModelList } from './ProviderModelList';
 import { useLlamacppState } from '../../../hooks/use-llamacpp-state';
+import { LocalModelSetupChoice, getLocalModelTier, localModelCatalog, requestLocalModelHelp } from '../../../components/input/LocalModelSetupChoice';
 import { BRAIN_PROVIDER_ID, BRAIN_PROVIDER_LABEL } from '../../../../../../shared/brain-provider.js';
 import styles from '../../Settings.module.css';
 import { notifyModelsChanged } from './model-change-events';
 import {
   LOCAL_QWEN_PROVIDER_LABEL,
-  LOCAL_QWEN_DEFAULT_MODEL_ID,
   LOCAL_QWEN_DEFAULT_MODEL_FILE,
-  LOCAL_QWEN_DEFAULT_EXPECTED_SIZE,
   isLocalQwenProviderId,
-  isDefaultQwen35MtpFileName,
   formatLocalTps,
   normalizeLocalUpgradeOptions,
   localEndpointRoot,
@@ -133,6 +131,8 @@ type LocalQwen35Status = {
     base_url?: string;
     hardware?: {
       can_enable?: boolean;
+      accelerator_memory_gib?: number | null;
+      recommended_model_id?: string | null;
       recommendation?: string;
       chip?: string | null;
       total_memory_gib?: number | null;
@@ -170,6 +170,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const lastEndpointRefreshKeyRef = useRef<string | null>(null);
   const [status, setStatus] = useState<LocalQwen35Status | null>(null);
   const [loading, setLoading] = useState(false);
+  const [manualTierId, setManualTierId] = useState<string | null>(null);
   const [settingUp, setSettingUp] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -214,11 +215,13 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const plan = status?.plan || {};
   const observed = plan.observed || {};
   const hardware = plan.hardware || {};
+  const servedModelIds = status?.runtime?.model_ids || observed.served_model_ids || [];
+  const runningTierId = localModelCatalog.tiers.find(tier => servedModelIds.includes(tier.modelId))?.modelId;
+  const selectedTier = getLocalModelTier(manualTierId || runningTierId || hardware.recommended_model_id);
+  const selectedModelId = selectedTier.modelId;
   const runtime = hardware.recommended_runtime || {};
   const gpu = hardware.gpus?.[0];
-  const servedModelIds = status?.runtime?.model_ids || observed.served_model_ids || [];
-  const endpointDefaultRunning = status?.runtime?.serves_default_model === true
-    || servedModelIds.includes(LOCAL_QWEN_DEFAULT_MODEL_ID);
+  const endpointDefaultRunning = servedModelIds.includes(selectedModelId);
   const endpointForeign = status?.runtime?.endpoint_occupied === true
     || observed.endpoint_occupied === true
     || ((status?.runtime?.endpoint_running_any === true || status?.runtime?.endpoint_running === true)
@@ -236,21 +239,27 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const modelFileName = modelPath ? (modelPath.split(/[\\/]/).pop() || modelPath) : '';
   const legacyModelPath = typeof observed.legacy_gguf === 'string' ? observed.legacy_gguf : '';
   const legacyModelFileName = legacyModelPath ? (legacyModelPath.split(/[\\/]/).pop() || legacyModelPath) : '';
-  // 默认卡只认当前 27B Q4 MTP artifact。旧 9B GGUF 会显示为可升级,不能挡住新版 27B Q4 MTP 下载。
-  const hasModel = !!observed.gguf && isDefaultQwen35MtpFileName(modelFileName);
+  // 默认卡只认当前 27B Q3/Q2 + Q4 DFlash2 artifact。旧 9B GGUF 会显示为可升级,不能挡住新版 27B Q3/Q2 + Q4 DFlash2 下载。
+  const hasModel = !!observed.gguf && modelFileName === selectedTier.fileName.split('/').pop();
   const needsMtpUpgrade = !hasModel && (observed.needs_model_upgrade === true || !!legacyModelPath);
   const hardwareWarnings = [...new Set([
     ...(endpointForeign
-      ? [`检测到 18099 当前运行的是 ${servedModelIds.join(', ') || '非默认模型端点'}，它不会作为默认 27B 使用；停止后可启动默认 Qwen3.6-27B Q4 imatrix MTP。`]
+      ? [`检测到 18099 当前运行的是 ${servedModelIds.join(', ') || '非默认模型端点'}，它不会作为默认 27B 使用；停止后可启动默认 Qwen3.8-27B Q3/Q2 + Q4 DFlash2。`]
       : []),
     ...(needsMtpUpgrade
-      ? [`检测到旧版 Qwen3.5-9B GGUF：${legacyModelFileName || '旧文件'}。默认档已升级为 27B Q4 MTP；点击升级会下载新版 27B Q4 MTP 文件，旧文件不会被删除。`]
+      ? [`检测到已安装的旧版 GGUF：${legacyModelFileName || '旧文件'}。默认档已升级为 27B Q3/Q2 + Q4 DFlash2；点击升级会下载新版文件，旧文件不会被删除。`]
       : []),
     ...(hardware.warnings || []),
     ...(hardware.blockers || []),
   ])];
   const hasRuntime = !endpointForeign && !!(observed.llama_server || llamaState.binaryPath);
   const defaultDownload = llamaState.download;
+  useEffect(() => {
+    if (!manualTierId && localModelCatalog.tiers.some(tier => tier.modelId === defaultDownload.modelId)
+      && ['downloading', 'verifying', 'paused'].includes(defaultDownload.state)) {
+      setManualTierId(defaultDownload.modelId!);
+    }
+  }, [manualTierId, defaultDownload.modelId, defaultDownload.state]);
   const managerStatus = llamaState.status;
   const managerStarting = managerStatus === 'starting' || managerStatus === 'unhealthy';
   const managerFailed = managerStatus === 'failed' || managerStatus === 'crashed';
@@ -261,8 +270,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       ].filter(Boolean).join('：')
     : '';
   const defaultDownloadState = String(defaultDownload.state || '');
-  const defaultDownloadForDefault = defaultDownload.modelId === LOCAL_QWEN_DEFAULT_MODEL_ID
-    || defaultDownload.fileName === LOCAL_QWEN_DEFAULT_MODEL_FILE;
+  const defaultDownloadForDefault = localModelCatalog.tiers.some(tier => tier.modelId === defaultDownload.modelId);
   const defaultDownloadActive = defaultDownloadForDefault
     && (defaultDownloadState === 'downloading' || defaultDownloadState === 'verifying');
   const defaultDownloadCanPause = defaultDownloadForDefault && defaultDownloadState === 'downloading';
@@ -271,7 +279,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const defaultDownloadError = defaultDownloadForDefault && defaultDownloadState === 'error';
   const defaultDownloadPercent = Math.max(0, Math.min(100, Number(defaultDownload.overallPercent ?? defaultDownload.percent ?? 0)));
   const defaultDownloadTotalBytes = Number(defaultDownload.totalBytes || 0)
-    || (defaultDownloadDone ? LOCAL_QWEN_DEFAULT_EXPECTED_SIZE : 0);
+    || (defaultDownloadDone ? selectedTier.expectedSize + localModelCatalog.draft.expectedSize : 0);
   const defaultDownloadBytesTransferred = Number(defaultDownload.bytesTransferred || 0)
     || (defaultDownloadDone ? defaultDownloadTotalBytes : 0);
   const defaultDownloadSizeText = [
@@ -293,8 +301,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     && !(endpointRunning && jobRawStatus === 'failed');
   const progress = status?.job?.progress || null;
   const upgradeOptions = useMemo(
-    () => normalizeLocalUpgradeOptions(hardware.upgrade_options || [], hardware.total_memory_gib),
-    [hardware.upgrade_options, hardware.total_memory_gib],
+    () => normalizeLocalUpgradeOptions(hardware.upgrade_options || [], hardware.accelerator_memory_gib),
+    [hardware.upgrade_options, hardware.accelerator_memory_gib],
   );
   const progressPercent = typeof progress?.percent === 'number'
     ? Math.max(0, Math.min(100, progress.percent))
@@ -313,7 +321,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     const idle = Math.max(0, slots.total - busy);
     return busy > 0 ? `生成中 ${busy}/${slots.total}` : `可用 ${idle}/${slots.total}`;
   })();
-  const hardwareBlocked = hardware.can_enable === false;
+  const hardwareBlocked = !manualTierId && !endpointRunning && hardware.can_enable !== true;
   const hardwareLabel = runtime.label || (loading || !status ? '正在检查硬件' : '默认使用云端模型');
   const stateLabel = useMemo(() => {
     if (endpointForeign) return '非默认本地端点运行中';
@@ -343,13 +351,9 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   }, [endpointForeign, endpointRunning, loadStatus]);
 
   const authorizeAndSetup = async () => {
-    const profile = runtime.label ? `\n\n推荐配置：${runtime.label}，上下文 ${runtime.ctx_size || 8192}，并发 ${runtime.parallel || 1}` : '';
+    const profile = `\n\n本次方案：${selectedTier.label}，上下文 ${selectedTier.contextSize}，并发 1`;
     const warning = hardwareWarnings.length ? `\n\n注意：${hardwareWarnings.join(' ')}` : '';
-    const setupText = hasModel && hasRuntime
-      ? 'Lynn 将按你的确认启动本地 Qwen3.6-27B Q4 imatrix MTP 模型服务，并切换为本地模型。启动会占用约 24GB 显存/统一内存。'
-      : needsMtpUpgrade
-        ? 'Lynn 将保留旧版 9B 文件，并下载新版 Qwen3.6-27B Q4 imatrix MTP；这是显式启用流程，完成后会启动 MTP 端点。\n\n模型约 19.6GB；旧文件不会被删除，你可以稍后手动清理。启动会占用约 24GB 显存/统一内存。'
-        : 'Lynn 将在本机安装或定位 llama.cpp，下载 Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP，并启动本地模型服务。\n\n模型约 19.6GB；27B Q4 是 Lynn 当前默认推荐端侧模型，原生 MTP 可降低单流等待，coding/agent 回归优于旧 9B。完成后可离线使用，不需要 API Key，不上传对话。启动会占用约 24GB 显存/统一内存。';
+    const setupText = `将安装 ${selectedTier.label} 与兼容的 llama.cpp。两个模型文件合计 ${((selectedTier.expectedSize + localModelCatalog.draft.expectedSize) / 1e9).toFixed(2)} GB。Lynn 会校验文件并尝试启动；实际显存占用还包括缓存与运行缓冲。旧模型不会被删除。`;
     const ok = window.confirm(`${setupText}${profile}${warning}\n\n继续吗？`);
     if (!ok) return;
     if (platform?.llamacppStartDownload) {
@@ -357,14 +361,14 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         setActionStatus({
           kind: 'info',
           text: hasModel
-            ? '正在启动本地 Qwen3.6-27B；如果模型文件已完整，Lynn 会直接校验并拉起本地端点。'
+            ? '正在启动本地 Qwen3.8-27B；如果模型文件已完整，Lynn 会直接校验并拉起本地端点。'
             : needsMtpUpgrade
-              ? '正在升级到本地 Qwen3.6-27B Q4 MTP；旧版文件会保留，新版校验完成后按本次授权启动。'
-              : '正在下载本地 Qwen3.6-27B，进度会留在当前页面；下载完成后按本次授权启动本地端点。',
+              ? '正在升级到本地 Qwen3.8-27B Q3/Q2 + Q4 DFlash2；旧版文件会保留，新版校验完成后按本次授权启动。'
+              : '正在下载本地 Qwen3.8-27B，进度会留在当前页面；下载完成后按本次授权启动本地端点。',
         });
       try {
         const res = await platform.llamacppStartDownload({
-          modelId: LOCAL_QWEN_DEFAULT_MODEL_ID,
+          modelId: selectedModelId,
           startAfterDownload: true,
         });
         if (!res?.ok) throw new Error(localModelActionErrorText(res?.reason, res?.detail));
@@ -372,10 +376,10 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           res.alreadyRunning
             ? '本地 27B 已在下载/启动队列中。'
             : hasModel
-              ? '本地 Qwen3.6-27B 正在启动。'
+              ? '本地 Qwen3.8-27B 正在启动。'
               : needsMtpUpgrade
-                ? '本地 Qwen3.6-27B Q4 MTP 升级已开始。'
-                : '本地 Qwen3.6-27B 已开始下载。',
+                ? '本地 Qwen3.8-27B Q3/Q2 + Q4 DFlash2 升级已开始。'
+                : '本地 Qwen3.8-27B 已开始下载。',
           'info',
         );
         setActionStatus({
@@ -385,7 +389,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
             : hasModel
               ? '启动任务已提交。加载完成后会自动切换为本地模型。'
             : needsMtpUpgrade
-              ? '新版 27B Q4 MTP 下载已启动，校验完成后会自动启动本地端点。'
+              ? '新版 27B Q3/Q2 + Q4 DFlash2 下载已启动，校验完成后会自动启动本地端点。'
                 : '本地 27B 下载已启动，校验完成后会自动启动本地端点。',
         });
         await onRefresh();
@@ -399,38 +403,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       }
       return;
     }
-    setSettingUp(true);
-    setActionStatus({ kind: 'info', text: hasModel && hasRuntime ? '正在启动本地模型服务…' : '已获得授权，正在后台准备 llama.cpp 和模型文件…' });
-    try {
-      const res = await hanaFetch('/api/local-qwen35-9b/setup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ authorized: true, variant: 'imatrix', start: true }),
-        timeout: 30_000,
-      });
-      const data = await res.json();
-      setStatus((prev) => ({ ...(prev || {}), job: data.job }));
-      showToast(
-        hasModel && hasRuntime
-          ? '本地 Qwen3.6-27B 正在启动，加载完成后会自动切换为当前模型。'
-          : '本地 Qwen3.6-27B 正在后台准备，完成后会自动注册并切换为当前模型。',
-        'info',
-      );
-      setActionStatus({
-        kind: 'info',
-        text: hasModel && hasRuntime
-          ? '启动任务已提交。加载完成后会自动切换为本地模型。'
-          : '安装/下载任务已提交。进度会在此处持续刷新。',
-      });
-      await onRefresh();
-      window.setTimeout(loadStatus, 1500);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      showToast('本地 Qwen3.6-27B 启用失败：' + msg, 'error');
-      setActionStatus({ kind: 'error', text: `启用失败：${msg}` });
-    } finally {
-      setSettingUp(false);
-    }
+    setActionStatus({ kind: 'error', text: '此安装方案需要 Lynn 桌面端的下载器。请打开桌面版，或点击“让 Lynn 帮我部署”。' });
   };
 
   const snoozeLocalModel = () => {
@@ -448,8 +421,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     setActionStatus({ kind: 'info', text: '正在重新注册本地 OpenAI 端点，并刷新模型列表…' });
     try {
       await hanaFetch('/api/local-qwen35-9b/register', { method: 'POST', timeout: 10_000 });
-      showToast('本地 Qwen3.6-27B 已注册到模型列表。', 'success');
-      setActionStatus({ kind: 'success', text: '已重新注册本地端点，并切换到本地 Qwen3.6-27B。' });
+      showToast('本地 Qwen3.8-27B 已注册到模型列表。', 'success');
+      setActionStatus({ kind: 'success', text: '已重新注册本地端点，并切换到本地 Qwen3.8-27B。' });
       notifyModelsChanged();
       await onRefresh();
     } catch (err: unknown) {
@@ -606,7 +579,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     try {
       const modelPath = await platform.selectGgufModel();
       if (!modelPath) {
-        setActionStatus({ kind: 'info', text: '未选择模型。默认 Qwen3.6-27B 仍保持可用。' });
+        setActionStatus({ kind: 'info', text: '未选择模型。默认 Qwen3.8-27B 仍保持可用。' });
         return;
       }
       await startGgufPath(modelPath);
@@ -619,12 +592,15 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
 
   return (
     <section className={styles['pv-local-qwen-panel']}>
+      <LocalModelSetupChoice value={selectedModelId} recommendedId={hardware.recommended_model_id}
+        onChange={setManualTierId} disabled={settingUp || defaultDownloadActive || defaultDownloadPaused || managerStarting}
+        onHelp={() => { void requestLocalModelHelp(selectedModelId, hardware, actionStatus?.text || defaultDownload.lastError || managerFailureReason).catch(err => showToast(String(err.message), 'error')); }} />
       <div className={styles['pv-local-qwen-main']}>
         <div>
-          <div className={styles['pv-local-qwen-kicker']}>默认本地 Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP · 24GB+ 推荐</div>
-          <div className={styles['pv-local-qwen-title']}>Qwen3.6-27B DSV4Pro Coding Q4 imatrix MTP</div>
+          <div className={styles['pv-local-qwen-kicker']}>24GB 及以上推荐 Q3 · 16GB 推荐 Q2</div>
+          <div className={styles['pv-local-qwen-title']}>{selectedTier.label}</div>
           <div className={styles['pv-local-qwen-desc']}>
-            19.6GB · 32K 上下文 · Q4 imatrix · 原生 MTP 单流加速 · Coding100 82/100 · LBC100 71/100。
+            Qwen3.8-27B EfficientThink · 独立 Q4 DFlash2 草稿模型加速；实际速度取决于硬件及任务。
             Lynn 会在用户授权后自动准备 llama.cpp、模型文件和本地 OpenAI 端点；完成后可离线使用，
             不需要 API Key，不上传对话。低配设备可在模型页手动选择 9B 或 4B 降级档；Lynn 会提示 4B thinking-on 风险。
           </div>
@@ -649,14 +625,14 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       </div>
 
       <div className={styles['pv-local-qwen-benefits']}>
-        <span>19.6GB</span>
-        <span>32K 上下文</span>
-        <span>MTP 加速</span>
+        <span>{((selectedTier.expectedSize + localModelCatalog.draft.expectedSize) / 1e9).toFixed(2)} GB</span>
+        <span>{selectedTier.contextSize / 1024}K 初始上下文</span>
+        <span>Q4 DFlash2</span>
         <span>Lynn imatrix 校准</span>
-        <span>Coding100 82/100</span>
-        <span>24GB+ 推荐</span>
+        <span>评测详见模型卡</span>
+        <span>{selectedTier.memoryGib}GB 档</span>
         <span>GUI 交互优先</span>
-        <span>本地 A3B 单槽</span>
+        <span>本地单并发</span>
         <span>忙时 CLI 转 StepFun</span>
         <span>DS-V4 Flash 逃生舱</span>
         <span>无 API Key</span>
@@ -664,10 +640,10 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       </div>
 
       <div className={styles['pv-local-qwen-facts']}>
-        <span>模型 {hasModel ? '已就绪' : needsMtpUpgrade ? '可升级到 MTP' : '待下载'}</span>
+        <span>模型 {hasModel ? '已就绪' : needsMtpUpgrade ? '可安装新版本' : '待下载'}</span>
         {modelFileName && <span title={modelPath}>模型文件 {modelFileName}</span>}
         {needsMtpUpgrade && legacyModelFileName && <span title={legacyModelPath}>旧版 9B {legacyModelFileName}</span>}
-        {needsMtpUpgrade && <span>新版 27B Q4 MTP 待下载</span>}
+        {needsMtpUpgrade && <span>新版 27B Q3/Q2 + Q4 DFlash2 待下载</span>}
         <span>llama.cpp {hasRuntime ? '已找到' : '待安装'}</span>
         {endpointForeign && <span>当前端点 {servedModelIds.join(', ') || '非默认 27B'}</span>}
         {(endpointActive || endpointForeign) && runtimeStats?.pid && <span>PID {runtimeStats.pid}</span>}
@@ -715,13 +691,13 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           <div className={styles['pv-local-qwen-upgrade-actions']}>
             {(defaultDownloadCanPause || defaultDownloadPaused) && (
               <button type="button" className={styles['pv-verify-connection-btn']} onClick={() => defaultDownloadPaused
-                ? void llamaState.startDownload({ modelId: LOCAL_QWEN_DEFAULT_MODEL_ID })
+                ? void llamaState.startDownload({ modelId: defaultDownload.modelId || selectedModelId })
                 : void llamaState.pauseDownload()}>
                 {defaultDownloadPaused ? '继续下载' : '暂停下载'}
               </button>
             )}
             {(defaultDownloadPaused || defaultDownloadDone) && (
-              <button type="button" className={styles['pv-verify-connection-btn']} onClick={() => void removeDownloadedModel(LOCAL_QWEN_DEFAULT_MODEL_ID, '默认 27B 模型')}>
+              <button type="button" className={styles['pv-verify-connection-btn']} onClick={() => void removeDownloadedModel(defaultDownload.modelId || selectedModelId, '所选本地模型')}>
                 删除模型
               </button>
             )}
@@ -860,7 +836,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           <div className={styles['pv-local-qwen-advanced-panel']}>
             <div>
               <strong>已有 GGUF / 模型目录</strong>
-              <span>默认使用 Qwen3.6-27B Q4 imatrix MTP。9B、4B 仅作为低配降级；也可以导入已经下载好的 35B 或其他 GGUF。</span>
+              <span>默认使用 Qwen3.8-27B Q3/Q2 + Q4 DFlash2。9B、4B 仅作为低配降级；也可以导入已经下载好的 35B 或其他 GGUF。</span>
               {modelPath && <code className={styles['pv-local-qwen-model-path']}>{modelPath}</code>}
               {needsMtpUpgrade && legacyModelPath && <code className={styles['pv-local-qwen-model-path']}>旧版 9B：{legacyModelPath}</code>}
             </div>
@@ -886,7 +862,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       )}
       {managerFailed && (
         <div className={styles['pv-local-qwen-error']}>
-          本地 Qwen3.6-27B 启动失败：{managerFailureReason || '请重试，或先切回云端模型。'}
+          本地 Qwen3.8-27B 启动失败：{managerFailureReason || '请重试，或先切回云端模型。'}
         </div>
       )}
       {actionStatus && (
@@ -947,9 +923,9 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
                 : hasModel && hasRuntime
                   ? '启动本地模型'
                   : needsMtpUpgrade
-                    ? '升级到 27B Q4 MTP (19.6 GB)'
+                    ? `安装 ${selectedTier.quantization} + Q4 DFlash2`
                   : !hasModel
-                    ? '下载 27B 并启动 (19.6 GB)'
+                    ? `安装 ${selectedTier.quantization} + Q4 DFlash2 并启动`
                     : '授权安装并启用'}
         </button>
         <button className={styles['pv-verify-connection-btn']} onClick={() => loadStatus(false)} disabled={loading}>

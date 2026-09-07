@@ -39,6 +39,7 @@ const fs = require("fs");
 const os = require("os");
 const http = require("http");
 const net = require("net");
+const localCatalog = require('../shared/qwen38-local-models.json');
 
 // ─────────────────────────────────────────────────────────────
 // 默认配置
@@ -47,20 +48,18 @@ const net = require("net");
 const DEFAULT_CONFIG = Object.freeze({
   // 默认 ship 模型 — Qwen3.6-27B DSV4Pro GLM52-SFT-GPT55-RL Coding Q4 imatrix MTP。
   // 降级路径: 9B / 4B 仍可手动选,但不再作为首推。
-  modelId: "qwen36-27b-dsv4pro-coding-q4-mtp",
-  modelFileName: "Q4_LynnStyle/Q4-imatrix-MTP-00001-of-00004.gguf",
-  modelExpectedSize: 19_575_379_360,
+  modelId: localCatalog.defaultModelId,
+  modelFileName: localCatalog.tiers[0].fileName,
+  modelExpectedSize: localCatalog.tiers[0].expectedSize,
   // Product default: one comfortable 32K local slot. llama.cpp splits context
   // across parallel slots, so keep -np/--parallel at 1 for the local-first UX.
   serverArgs: [
-    "--ctx-size", "32768",
+    "--ctx-size", "8192",
     "--threads", "4",
     "--parallel", "1",
     "--n-gpu-layers", "999",
-    "-a", "qwen36-27b-dsv4pro-coding-q4-mtp",
+    "-a", localCatalog.defaultModelId,
     "--jinja",
-    "--spec-type", "draft-mtp",
-    "--spec-draft-n-max", "3",
     "--cache-type-k", "q8_0",
     "--cache-type-v", "q8_0",
     // Keep thinking available for distilled 27B; request policy should use
@@ -530,8 +529,10 @@ class LlamaCppManager {
     while (Date.now() - t0 < this.config.startupTimeoutMs) {
       // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, 1500));
+      if (this.stopped) return;
       // eslint-disable-next-line no-await-in-loop
       const ok = await this.probeHealth(port);
+      if (this.stopped) return;
       if (ok) {
         this.consecutiveCrashes = 0;
         this.lastHealthy = Date.now();

@@ -1,7 +1,10 @@
 export const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-export const LOCAL_QWEN35_MODEL_ID = 'qwen36-27b-dsv4pro-coding-q4-mtp';
-export const LOCAL_QWEN_DISPLAY_NAME = '本地 Qwen3.6-27B';
-export const LOCAL_QWEN_SHORT_NAME = 'Qwen3.6-27B';
+export const LOCAL_QWEN35_MODEL_ID = 'qwen38-27b-efficientthink-q3-lynnstyle';
+export function isRecommendedLocalModelId(id?: string | null) {
+  return id === LOCAL_QWEN35_MODEL_ID || id === 'qwen38-27b-efficientthink-q2-lynnstyle';
+}
+export const LOCAL_QWEN_DISPLAY_NAME = '本地 Qwen3.8-27B';
+export const LOCAL_QWEN_SHORT_NAME = 'Qwen3.8-27B';
 export const LOCAL_QWEN35_ENDPOINT = 'http://127.0.0.1:18099/v1';
 export const LOCAL_QWEN_PROMPT_DISMISS_KEY = 'lynn-local-model-prompt-dismissed-date';
 export const LOCAL_QWEN_PROMPT_SHOWN_KEY = 'lynn-local-model-prompt-shown-date';
@@ -82,6 +85,7 @@ export type LocalQwen35RuntimeStatus = {
     };
     hardware?: {
       can_enable?: boolean;
+      recommended_model_id?: string | null;
       recommended_runtime?: {
         label?: string;
       };
@@ -105,7 +109,7 @@ export function deriveLocalQwenRuntimeState(
     || status?.plan?.plan?.observed?.served_model_ids
     || [];
   const defaultServed = status?.runtime?.serves_default_model === true
-    || servedModelIds.includes(LOCAL_QWEN35_MODEL_ID);
+    || servedModelIds.some(isRecommendedLocalModelId);
   const endpointOccupied = status?.runtime?.endpoint_occupied === true
     || status?.plan?.observed?.endpoint_occupied === true
     || status?.plan?.plan?.observed?.endpoint_occupied === true
@@ -126,7 +130,7 @@ export function deriveLocalQwenRuntimeState(
   const loading = !running && (optimisticStarting || runtimeLoading);
   const starting = !running && optimisticStarting && !runtimeLoading;
   const active = running || loading || endpointOccupied;
-  const current = currentModelInfo?.id === LOCAL_QWEN35_MODEL_ID
+  const current = isRecommendedLocalModelId(currentModelInfo?.id)
     && currentModelInfo?.provider === LOCAL_QWEN35_PROVIDER_ID;
   const endpoint = status?.runtime?.base_url
     || status?.plan?.base_url

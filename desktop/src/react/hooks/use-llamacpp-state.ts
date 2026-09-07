@@ -73,6 +73,7 @@ export interface DownloadState {
 
 export interface LlamaCppStateSnapshot {
   status: string;
+  modelId: string | null;
   healthy: boolean;
   port: number | null;
   binaryPath: string | null;
@@ -107,6 +108,7 @@ const DEFAULT_DOWNLOAD: DownloadState = {
 
 function normaliseManager(raw: ManagerState | null | undefined): {
   status: string; healthy: boolean; port: number | null;
+  modelId: string | null;
   binaryPath: string | null; modelPath: string | null; reason: string | null; error: string | null;
   needsBinary: boolean; needsModel: boolean;
 } {
@@ -114,6 +116,7 @@ function normaliseManager(raw: ManagerState | null | undefined): {
   const port = (typeof raw?.port === 'number' ? raw.port : typeof raw?.activePort === 'number' ? raw.activePort : null);
   return {
     status,
+    modelId: raw?.modelId ?? null,
     healthy: !!raw?.healthy,
     port,
     binaryPath: raw?.binaryPath ?? null,

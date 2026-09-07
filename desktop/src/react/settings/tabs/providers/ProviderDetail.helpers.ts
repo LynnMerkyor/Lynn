@@ -7,10 +7,10 @@
  */
 
 export const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-export const LOCAL_QWEN_PROVIDER_LABEL = '本地 Qwen3.6-27B Coding';
-export const LOCAL_QWEN_DEFAULT_MODEL_ID = 'qwen36-27b-dsv4pro-coding-q4-mtp';
-export const LOCAL_QWEN_DEFAULT_MODEL_FILE = 'Q4-imatrix-MTP-00001-of-00004.gguf';
-export const LOCAL_QWEN_DEFAULT_EXPECTED_SIZE = 19_575_379_360;
+export const LOCAL_QWEN_PROVIDER_LABEL = '本地 Qwen3.8-27B EfficientThink';
+export const LOCAL_QWEN_DEFAULT_MODEL_ID = 'qwen38-27b-efficientthink-q3-lynnstyle';
+export const LOCAL_QWEN_DEFAULT_MODEL_FILE = 'Qwen3.8-27B-EfficientThink-SimPO-Q3-LynnStyle.gguf';
+export const LOCAL_QWEN_DEFAULT_EXPECTED_SIZE = 18_175_191_680;
 export const LOCAL_QWEN_COMPAT_PROVIDER_IDS = new Set([
   LOCAL_QWEN_PROVIDER_ID,
   'local-qwen35-4b-q4km',
@@ -22,8 +22,9 @@ export function isLocalQwenProviderId(id?: string | null) {
 }
 
 export function isDefaultQwen35MtpFileName(fileName: string) {
-  return /^Q4-imatrix-MTP-0000[1-4]-of-00004\.gguf$/i.test(fileName)
-    || /qwen3\.?6-?27b.*dsv4pro.*coding.*q4.*mtp.*\.gguf$/i.test(fileName);
+  // Legacy MTP helper: keep its original contract for existing integrations.
+  return /^Q4-imatrix-MTP-\d{5}-of-00004\.gguf$/i.test(fileName)
+    || /^Qwen3\.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-Q4-MTP\.gguf$/i.test(fileName);
 }
 
 export function formatLocalTps(value: number | null | undefined) {
@@ -63,7 +64,7 @@ export const LOCAL_QWEN35_9B_DOWNGRADE: LocalUpgradeOption = {
   label: 'Qwen3.5-9B Q4_K_M imatrix MTP (低配降级)',
   profile: '16~24GB 显存/统一内存可选 · 比 27B 更轻',
   metrics: ['5.78GB / 5.38GiB', '32K 上下文', 'MTP 加速', '低配降级'],
-  reason: '给跑不动 27B Q4 的设备保留；质量不再作为 Lynn 本地首推。',
+  reason: '为无法运行 27B 的设备保留的旧版兼容选项，不是当前默认推荐。',
   modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP',
   download_label: '下载到本机',
   file_name: 'Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf',
@@ -74,14 +75,14 @@ export const LOCAL_QWEN36_35B_UPGRADE: LocalUpgradeOption = {
   label: 'Qwen3.6-35B-A3B DSV4Pro Thinking Distill MTP Q5_K_M imatrix',
   profile: '32GB 显存/统一内存+ 可选 · 更高配本地编排器',
   metrics: ['25.3 GB Q5_K_M imatrix', 'MTP 原生头', 'GPQA-Diamond 80.3%', '端到端编排 26.6s'],
-  reason: '32GB+ 机器可选 35B-A3B Q5_K_M；MoE + MTP 单流速度更好，但文件和 KV cache 都更重。默认仍首推 27B Q4。',
+  reason: '35B-A3B Q5_K_M 是手动可选的旧版模型，文件和缓存占用更大。默认推荐 Qwen3.8-27B Q3/Q2 + Q4 DFlash2。',
   modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF',
   download_label: '下载到本机',
   file_name: 'Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf',
 };
 
 export function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], memoryGib?: number | null) {
-  // 默认卡即 27B Q4;可选区按硬件分级展示 9B/4B 降级 / 35B 高端档。
+  // Preserve legacy optional tiers separately from the hardware-adaptive default.
   // 2026-06-27: 接 hardware.total_memory_gib 做 memory-adaptive 显示 —
   //   - memoryGib > 32:藏 4B 降级,保留 9B 与 35B
   //   - memoryGib < 24:藏 35B 高端,展示 9B/4B
@@ -142,6 +143,7 @@ export function localModelActionErrorText(reason?: string, detail?: string) {
   if (reason === 'download-boundary-invalid') return detail || '下载源未通过安全校验。Lynn 只允许公开 http/https GGUF 源。';
   if (reason === 'model-path-not-allowed') return '请通过“选择本机 GGUF 启动”重新选择该文件，或把 GGUF 放到本地模型目录后再启动。';
   if (reason === 'not-gguf') return '只能导入 .gguf 模型文件。';
+  if (reason === 'not-main-model') return '这是草稿模型或视觉组件，请选择 Q2/Q3 主模型，或使用一键安装。';
   if (reason === 'model-not-found') return '模型文件不存在或已移动。请重新选择 GGUF。';
   if (reason === 'llamacpp-binary-not-found') return '未找到 llama.cpp。请安装 llama-server 并重新启动 Lynn，或把 llama-server 放到 ~/.lynn/llamacpp/bin。';
   if (reason === 'llamacpp-port-in-use') return '本地端口 18099 已被另一个 llama.cpp 实例占用。请先停止该实例，再启动所选 GGUF。';

@@ -120,7 +120,7 @@ describe("LlamaCppManager path and spawn safety", () => {
     ]);
   });
 
-  it("keeps MTP launch flags for the default 27B profile when the binary supports them", () => {
+  it("defaults to the new Q3 model without injecting a legacy MTP head", () => {
     const manager = new LlamaCppManager({
       binaryPath: "/tmp/llama-server",
       modelPath: "/tmp/model.gguf",
@@ -131,13 +131,13 @@ describe("LlamaCppManager path and spawn safety", () => {
 
     const args = manager.buildServerArgs();
 
-    expect(DEFAULT_CONFIG.modelId).toBe("qwen36-27b-dsv4pro-coding-q4-mtp");
-    expect(DEFAULT_CONFIG.modelFileName).toBe("Q4_LynnStyle/Q4-imatrix-MTP-00001-of-00004.gguf");
+    expect(DEFAULT_CONFIG.modelId).toBe("qwen38-27b-efficientthink-q3-lynnstyle");
+    expect(DEFAULT_CONFIG.modelFileName).toBe("Q3-LynnStyle/Qwen3.8-27B-EfficientThink-SimPO-Q3-LynnStyle.gguf");
     expect(args).toEqual(expect.arrayContaining([
-      "-a", "qwen36-27b-dsv4pro-coding-q4-mtp",
-      "--spec-type", "draft-mtp",
-      "--spec-draft-n-max", "3",
+      "-a", "qwen38-27b-efficientthink-q3-lynnstyle",
+      "--ctx-size", "8192",
     ]));
+    expect(args).not.toContain('draft-mtp');
   });
 
   it("drops unsupported optional llama.cpp flags before spawning older binaries", () => {
