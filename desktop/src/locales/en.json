@@ -1,5 +1,6 @@
 {
   "channel": {
+    "simpleEmpty": "Choose your existing agents to start a shared conversation.",
     "tab": "Channels",
     "chatTab": "Chat",
     "empty": "No channels yet ✿",
@@ -785,8 +786,8 @@
       "autoMode": "System",
       "serifFont": "Serif Font",
       "serifFontHint": "Use serif font for body text",
-      "leavesOverlay": "Tree shadows",
-      "leavesOverlayHint": "Soft moving shadows along the edges of light themes. Pauses in the background; disabled for dark, high-contrast, or reduced-motion settings."
+      "leavesOverlay": "Window-side leaves",
+      "leavesOverlayHint": "Soft window light and a gently swaying canopy on paper. Pauses in the background; stays still with reduced motion; disabled in dark and high-contrast themes."
     },
     "locale": {
       "title": "Language & Region",
@@ -1541,6 +1542,9 @@
     }
   },
   "desk": {
+    "fileFilter": "File filter",
+    "filter": {"all": "All", "images": "Images"},
+    "noImages": "No images in this folder",
     "title": "Desk",
     "workspaceMap": "Session progress",
     "runPatrol": "Refresh progress",

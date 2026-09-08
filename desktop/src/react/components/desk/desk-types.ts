@@ -58,6 +58,10 @@ export function getFileIcon(name: string): string {
   return ICONS.file;
 }
 
+export function filterDeskFiles(files: DeskFile[], filter: 'all' | 'images'): DeskFile[] {
+  return filter === 'all' ? files : files.filter(file => file.isDir || /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i.test(file.name));
+}
+
 export function sortDeskFiles(files: DeskFile[], mode: SortMode): DeskFile[] {
   const filtered = files.filter(f => f.name !== 'jian.md');
   const dirs = filtered.filter(f => f.isDir);

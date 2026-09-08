@@ -86,7 +86,6 @@ describe("auto review policy", () => {
     expect(decision.shouldReview).toBe(true);
     expect(decision.reasons).toEqual(expect.arrayContaining([
       "tool_evidence",
-      "high_risk_tool",
       "time_sensitive_or_market",
     ]));
     expect(decision.context).toContain("中国主要私董会的人数，收费");
@@ -169,6 +168,19 @@ describe("auto review policy", () => {
 
     expect(scheduled).toBe(false);
     expect(ss.autoReviewStarted).toBe(false);
+  });
+
+  it.each(['web_search', 'web_fetch', 'search', 'fetch', 'read', 'write', 'edit', 'bash', 'browser'])("does not review a routine successful %s merely for tool use", (name) => {
+    const decision = decideAutoReviewTurn({ sourceText: '今天已完成文案调整。', ss: makeState({
+      hasOutput: true, lastSuccessfulTools: [{ name, command: '查阅排版资料并调整边距', outputPreview: '完成' }],
+    }) });
+    expect(decision.shouldReview).toBe(false);
+    expect(decision.reasons).toEqual(['tool_evidence']);
+  });
+
+  it('retains review for failed edits and report delivery', () => {
+    expect(decideAutoReviewTurn({ sourceText: '编辑未完成', ss: makeState({ lastFailedTools: ['edit'] }) }).shouldReview).toBe(true);
+    expect(decideAutoReviewTurn({ sourceText: '报告已生成', ss: makeState({ lastSuccessfulTools: [{ name: 'create_report' }] }) }).shouldReview).toBe(true);
   });
 
   it("can be forced for diagnostic runs", () => {

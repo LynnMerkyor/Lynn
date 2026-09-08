@@ -5,7 +5,6 @@ import { SessionCostChip } from './SessionCostChip';
 import { ModelSelector } from './ModelSelector';
 import { SecurityModeSelector } from './SecurityModeSelector';
 import { SendButton } from './SendButton';
-import { TaskModePicker } from './TaskModePicker';
 import { ThinkingLevelButton } from './ThinkingLevelButton';
 import { WritingModeToggle } from './WritingModeToggle';
 import styles from './InputArea.module.css';
@@ -100,7 +99,6 @@ export function SubmitArea({
             <path d="M8 22h8" />
           </svg>
         </button>
-        <TaskModePicker />
         <div ref={moreRef} className={styles['composer-more']}>
           <button
             type="button"

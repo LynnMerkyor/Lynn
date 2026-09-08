@@ -3,47 +3,45 @@
 国内用户请优先使用镜像站；GitHub Assets 作为备用下载。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.8.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.0.tgz"
 Lynn --version
 ```
 
-- [macOS Apple Silicon / ARM64](https://download.merkyorlynn.com/downloads/Lynn-0.86.8-macOS-arm64.dmg)
-- [macOS Intel / x64](https://download.merkyorlynn.com/downloads/Lynn-0.86.8-macOS-x64.dmg)
-- [Windows x64](https://download.merkyorlynn.com/downloads/Lynn-0.86.8-Windows-Setup.exe)
+- [macOS Apple Silicon / ARM64](https://download.merkyorlynn.com/downloads/Lynn-0.87.0-macOS-arm64.dmg)
+- [macOS Intel / x64](https://download.merkyorlynn.com/downloads/Lynn-0.87.0-macOS-x64.dmg)
+- [Windows x64](https://download.merkyorlynn.com/downloads/Lynn-0.87.0-Windows-Setup.exe)
+- [可选专家圆桌插件](https://download.merkyorlynn.com/downloads/lynn-expert-roundtable-0.87.0.zip)
 - [国内下载页](https://download.merkyorlynn.com/download.html)
 
-# Lynn v0.86.8 Release Notes / 发布说明
+# Lynn v0.87.0 Release Notes / 发布说明
 
-2026-09-08 · Kimi 数据源、历史搜索与手机续聊
+2026-09-08 · 窗边树影与更简洁的工作界面
 
 ## 中文重点
 
-- **Kimi Datasource**：设置 → MCP 中扫码登录，授权成功后自动启用数据源。凭据保存在本机 Lynn 数据目录；用户使用自己的 Kimi 账号，也可在高级选项中导入已有官方插件。
-- **MCP OAuth**：支持服务元数据发现、PKCE 登录、授权状态、刷新和取消，HTTP/SSE 连接共用授权；需要 Client ID 的服务可自行填写。
-- **历史正文搜索**：侧栏搜索同时匹配会话标题及用户/助手消息正文，显示命中片段；大文件或部分读取会明确提示。
-- **轻量自动化**：自动化任务可选择提醒或指定插件动作，并记录执行结果；任务失败会显示错误。
-- **会话文件**：桌面、桥接和手机共用会话文件标识；发送附件时绑定到实际会话，历史文件可继续下载。
-- **手机续聊**：设置 → 界面中按需开启，通过限时二维码配对后查看和继续已有会话，支持附件与停止生成；设备可单独撤销。工具审批仍在桌面端完成。
-- **可选树影**：界面设置新增树影质感开关，默认关闭。
-- 手机 PWA 安装需要 HTTPS（localhost 除外）；普通局域网 HTTP 可用于浏览器续聊。Windows 继续提供未签名 x64 NSIS 安装包。
-
-Kimi 登录需要用户自行完成扫码，数据源可用范围由账号与服务决定。开发验证覆盖官方设备授权入口、MCP 协议及隔离环境中的手机页面；不将模拟流程作为真实账号授权或 iOS/Android 安装验证。
+- **Lynn 窗边树影**：原创 SVG 枝叶与柔和窗光替代视频，保留原来的 Lynn 头像。设置 → 界面中按需开启；后台暂停，减少动态效果时静止，深色和高对比主题停用。
+- **输入栏精简**：移除常驻任务模式，小说、长文、社媒、代码、商务、翻译、研究和笔记改为可编辑的斜杠模板。保留深度调研、写作布局与执行权限选择。
+- **文件与图片统一**：文件面板增加“全部 / 图片”筛选，保留文件夹入口、旧 gallery 文件与图片生成。
+- **翻译收进菜单**：在回复的“更多消息操作”中选择目标语言，译文仍显示在原回复下方。
+- **本地模型提示减负**：聊天不再主动弹出安装推荐；设置中的模型安装和已选择本地模型的运行状态继续保留。
+- **专家按需安装**：六组专业顾问与圆桌入口移为独立的 `lynn-expert-roundtable-0.87.0.zip` 插件。已创建的角色、头像、频道和历史保留。安装方法见插件内 README。
+- **直接表达与按需复查**：不再要求新回答输出固定 MOOD / PULSE / REFLECT / XING 区块，旧消息兼容显示；普通搜索和轻量编辑不再仅因调用工具触发复查，失败、报告交付、高风险与时效性结果继续复查，手动复查保留。
+- Kimi MCP 扫码登录、历史搜索、会话文件、轻量自动化与手机续聊继续提供。
+- Windows 继续提供未签名 x64 NSIS 安装包。
 
 ## English highlights
 
-- Add Kimi Datasource under Settings → MCP. Scan to sign in with your own account; successful authorization enables the data source. Credentials stay in Lynn's local data directory. Advanced setup can import an existing official plugin.
-- Support MCP OAuth discovery, PKCE, authorization status, refresh and cancellation across HTTP/SSE transports, with an optional service-specific Client ID.
-- Search conversation titles and user/assistant message bodies in the sidebar, with snippets and explicit partial-result indicators.
-- Run lightweight reminders or a selected plugin action from automations, with execution history and visible errors.
-- Share session file identifiers across desktop, bridges and mobile; bind attachments to the actual conversation when sending and retain historical downloads.
-- Opt in to mobile continuation under Settings → Interface. Pair using an expiring QR code, continue existing conversations, attach files and stop generation. Revoke devices individually; tool approvals remain on desktop.
-- Offer an optional tree-shadow texture, disabled by default.
-- Installing the mobile PWA requires HTTPS except on localhost; ordinary LAN HTTP supports browser continuation. Windows retains its unsigned x64 NSIS installer.
-
-Users complete Kimi authorization themselves, and account/service access determines available data. Development checks cover the official device authorization endpoint, MCP protocol and isolated mobile flows; simulated checks do not establish real-account authorization or installation on physical iOS/Android devices.
+- Replace the tree-shadow video with Lynn's original SVG canopy and soft window light. Preserve the Lynn portrait. Opt in under Settings → Interface; animation pauses in the background and stays still with reduced motion. Dark and high-contrast themes disable the effect.
+- Replace persistent task modes with explicit, editable slash templates. Keep deep research, writing layout and security controls.
+- Merge images into the file panel's All / Images filter; retain folders, existing gallery files and image generation.
+- Move translation to each reply's More menu, retaining language selection and the translation below the reply.
+- Remove proactive local-model installation prompts from chat; keep installation in model settings and status for selected local models.
+- Offer six professional advisors and roundtables as an optional plugin ZIP. Existing agents, avatars, channels and history remain available.
+- Use direct prose instead of newly generated mood/reflection protocol blocks, while retaining historical rendering. Narrow automatic review for routine searches and edits; retain failed-tool, report-delivery, high-stakes, time-sensitive and manual reviews.
+- Preserve Kimi MCP authorization, conversation search, session files, lightweight automations and mobile continuation. Windows retains its unsigned x64 NSIS installer.
 
 ## Repositories
 
-- [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.8)
-- [GitHub · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.8)
-- [Gitee · merkyor/Lynn](https://gitee.com/merkyor/Lynn/releases/tag/v0.86.8)
+- [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.87.0)
+- [GitHub · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.0)
+- [Gitee · merkyor/Lynn](https://gitee.com/merkyor/Lynn/releases/tag/v0.87.0)

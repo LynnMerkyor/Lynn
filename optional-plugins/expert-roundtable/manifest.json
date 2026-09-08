@@ -1,0 +1,6 @@
+{
+  "id": "expert-roundtable",
+  "name": "专家圆桌",
+  "version": "0.87.0",
+  "description": "按需添加六位专业顾问和圆桌讨论。使用你已配置的模型。"
+}

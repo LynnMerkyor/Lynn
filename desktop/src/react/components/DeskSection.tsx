@@ -10,15 +10,13 @@ import { DeskWorkspaceButton, DeskBreadcrumb, DeskSortButton } from './desk/Desk
 import { DeskFileList } from './desk/DeskFileList';
 import { DeskDropZone } from './desk/DeskDropZone';
 import { DeskEmptyOverlay } from './desk/DeskEmptyOverlay';
-import { GalleryPanel } from './desk/GalleryPanel';
-import { GalleryToggleButton } from './desk/DeskToolbar';
+import { DeskImageFilter } from './desk/DeskToolbar';
 import { SessionMapView } from './desk/SessionMapView';
 import { loadDeskAutomationStatus, loadDeskPatrolStatus, triggerDeskHeartbeat } from '../stores/desk-actions';
 import { loadSessions } from '../stores/session-actions';
 import styles from './desk/Desk.module.css';
 
 export function DeskSection() {
-  const deskFiles = useStore(state => state.deskFiles);
   const deskBasePath = useStore(state => state.deskBasePath);
   const deskView = useStore(state => state.deskView);
   const setDeskView = useStore(state => state.setDeskView);
@@ -39,7 +37,6 @@ export function DeskSection() {
     setCtxMenu(null);
   }, []);
 
-  const deskGalleryOpen = useStore(state => state.deskGalleryOpen);
   const translate = window.t;
   const tt = useCallback((key: string, fallback: string) => {
     const value = translate?.(key);
@@ -47,7 +44,7 @@ export function DeskSection() {
   }, [translate]);
   const patrolRefreshTimers = useRef<number[]>([]);
   const hasWorkspace = !!deskBasePath;
-  const showFileSurface = hasWorkspace && deskFiles.length > 0;
+  const showFileSurface = hasWorkspace;
 
   useEffect(() => () => {
     for (const timer of patrolRefreshTimers.current) window.clearTimeout(timer);
@@ -140,15 +137,14 @@ export function DeskSection() {
                 <div className={styles.toolbar}>
                   <DeskBreadcrumb />
                   <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                    <GalleryToggleButton />
+                    <DeskImageFilter />
                     <DeskSortButton sortMode={sortMode} onSort={setSortMode} onShowMenu={handleShowMenu} />
                   </div>
                 </div>
                 <div className={styles.fileSection}>
-                  <div className={styles.fileSectionHeader}>{t('desk.workspace') || t('input.workspace')}</div>
+                  <div className={styles.fileSectionHeader}>{tt('input.workspace', '工作空间')}</div>
                   <DeskFileList sortMode={sortMode} onShowMenu={handleShowMenu} />
                 </div>
-                {deskGalleryOpen && <GalleryPanel />}
               </>
             )}
             <DeskEmptyOverlay />

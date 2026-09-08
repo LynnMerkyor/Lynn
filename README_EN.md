@@ -16,6 +16,24 @@
 
 ---
 
+## New in v0.87.0
+
+<details open>
+<summary><strong>Lynn v0.87.0</strong> · 2026-09-08 · Window light and a simpler workspace</summary>
+
+- Original SVG leaves and soft window light; the original Lynn portrait stays. Opt in under Interface settings, with background pause and reduced-motion support.
+- Persistent task modes become editable slash templates. Deep research, writing layout and security controls stay available.
+- Images join the file panel's All / Images filter; translation moves into each message's More menu.
+- Chat no longer promotes local-model installation; installation remains in model settings.
+- Professional advisors and roundtables become an [optional plugin](optional-plugins/expert-roundtable/README.md); existing agents and history remain.
+- Direct prose replaces newly generated mood/reflection blocks. Routine searches and light edits trigger fewer automatic reviews; manual and important-result reviews remain.
+- Kimi MCP sign-in, conversation search, session files, automations and mobile continuation continue to be available.
+
+[Release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.0)
+
+</details>
+
+
 ## Ecosystem Links
 
 - **Source and app**: [Primary GitHub repository · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn) · [GitHub mirror · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases) · [download mirror](https://download.merkyorlynn.com/download.html)
@@ -95,12 +113,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.8.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.0.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.86.8
+Lynn --version  # should print 0.87.0
 Lynn agents   # copyable headless worker commands for other agents
 ```
 

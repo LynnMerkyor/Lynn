@@ -143,6 +143,20 @@ describe("ExpertManager", () => {
     expect(fs.readFileSync(path.join(agentDir, "ishiki.md"), "utf-8")).toBe("preset ishiki");
   });
 
+  it('loads optional presets only while registered and preserves spawned agent files on disposal', async () => {
+    const { manager, agentDir } = makeManager(tmpDir);
+    const optionalDir = path.join(tmpDir, 'optional');
+    writePreset(optionalDir, 'optional-advisor');
+    expect(manager.getExpert('optional-advisor')).toBeNull();
+    const dispose = manager.registerPresets('optional-test', optionalDir);
+    expect(manager.getExpert('optional-advisor')).not.toBeNull();
+    await manager.spawnExpert('optional-advisor');
+    dispose();
+    expect(manager.getExpert('optional-advisor')).toBeNull();
+    expect(manager.getExpert('analyst')).not.toBeNull();
+    expect(fs.readFileSync(path.join(agentDir, 'identity.md'), 'utf8')).toBe('preset identity');
+  });
+
   it("uses an explicit provider and model when supplied", async () => {
     const { manager, agent } = makeManager(tmpDir);
 

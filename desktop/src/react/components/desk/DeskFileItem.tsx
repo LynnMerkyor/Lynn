@@ -102,6 +102,32 @@ export function DeskFileItem({
 }: DeskFileItemProps) {
   const setPendingConfirm = useStore(s => s.setPendingConfirm);
   const addToast = useStore(s => s.addToast);
+  const imageFilter = useStore(s => s.deskFileFilter === 'images');
+  const currentPath = useStore(s => s.deskCurrentPath);
+  const basePath = useStore(s => s.deskBasePath);
+  const itemRef = useRef<HTMLDivElement>(null);
+  const [thumbnailSrc, setThumbnailSrc] = useState<string | null>(null);
+  const fullPath = deskFullPath(file.name);
+  useEffect(() => {
+    setThumbnailSrc(null);
+    if (!imageFilter || file.isDir || !fullPath || (file.size ?? 0) > 8 * 1024 * 1024) return;
+    const element = itemRef.current;
+    if (!element) return;
+    let cancelled = false;
+    const observer = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting)) return;
+      observer.disconnect();
+      void window.platform?.readFileBase64?.(fullPath).then(data => {
+        if (cancelled || !data) return;
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+        const mime = ext === 'svg' ? 'svg+xml' : ext === 'jpg' ? 'jpeg' : ext === 'ico' ? 'x-icon' : ext;
+        setThumbnailSrc(`data:image/${mime};base64,${data}`);
+      }).catch(() => { /* Keep the file icon when a thumbnail cannot be read. */ });
+    }, { rootMargin: '100px' });
+    observer.observe(element);
+    return () => { cancelled = true; observer.disconnect(); };
+  }, [imageFilter, file.isDir, file.name, file.size, file.mtime, fullPath, currentPath, basePath]);
+  const thumbnail = imageFilter && !!thumbnailSrc;
   const icon = file.isDir ? ICONS.folder : getFileIcon(file.name);
   const [dropTarget, setDropTarget] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -269,7 +295,8 @@ export function DeskFileItem({
 
   return (
     <div
-      className={[st.item, file.isDir ? st.isDir : '', selected ? st.selected : '', dropTarget ? st.dropTarget : ''].filter(Boolean).join(' ')}
+      className={[st.item, file.isDir ? st.isDir : '', thumbnail ? st.imageItem : '', selected ? st.selected : '', dropTarget ? st.dropTarget : ''].filter(Boolean).join(' ')}
+      ref={itemRef}
       data-name={file.name}
       data-desk-item=""
       onClick={handleClick}
@@ -281,7 +308,10 @@ export function DeskFileItem({
       onDragLeave={file.isDir ? handleFolderDragLeave : undefined}
       onDrop={file.isDir ? handleFolderDrop : undefined}
     >
-      <span className={st.itemIcon} dangerouslySetInnerHTML={{ __html: icon }} />
+      {thumbnail && fullPath ? (
+        <img className={st.imageThumb} src={thumbnailSrc!}
+          alt="" loading="lazy" onError={() => setThumbnailSrc(null)} draggable={false} />
+      ) : <span className={st.itemIcon} dangerouslySetInnerHTML={{ __html: icon }} />}
       {isRenaming ? (
         <input
           ref={renameInputRef}

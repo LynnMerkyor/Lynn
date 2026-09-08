@@ -7,6 +7,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useStore } from '../../stores';
 import { useI18n } from '../../hooks/use-i18n';
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import { createChannel, createChannelWithExpert, createRoundtableWithExperts } from '../../stores/channel-actions';
@@ -168,6 +169,15 @@ export function ExpertTeamGuide({ agents }: ExpertTeamGuideProps) {
       setCreating(false);
     }
   }, [creating, hasRoundtableSelection, roundtableTopic, selectedExpertSlugs]);
+
+  if (experts.length === 0) return (
+    <div className={styles.expertGuide}>
+      <p className={styles.expertGuideTitle}>{t('channel.groupLabel')}</p>
+      <p className={styles.expertGuideDesc}>{t('channel.simpleEmpty')}</p>
+      <button type="button" className={styles.expertCreateBtn}
+        onClick={() => useStore.getState().setChannelCreateOverlayVisible(true)}>{t('channel.createTitle')}</button>
+    </div>
+  );
 
   return (
     <div className={styles.expertGuide}>

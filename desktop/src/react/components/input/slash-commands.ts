@@ -6,7 +6,7 @@
 
 import { hanaFetch } from '../../hooks/use-hana-fetch';
 import { getWebSocket } from '../../services/websocket';
-import { getAllSlashCommands } from '../../config/task-modes';
+import { PROMPT_TEMPLATES } from '../../config/prompt-templates';
 
 // ── Xing Prompt ──
 
@@ -25,9 +25,9 @@ export const XING_PROMPT = isZh
 
 标题要具体，能一眼看出这个工作流是干什么的（例："战争报道事实核查流程""论文润色风格指南"），不要用泛化的名字（如"工作流总结""对话复盘"）。
 
-严格按照以下格式输出（注意用直引号 "，不要用弯引号 ""）：
+用普通 Markdown 输出，一级标题写具体工作流名称，随后按类别分节：
 
-<xing title="具体的工作流名称">
+# 具体的工作流名称
 ## 风格偏好
 - 做 X
 - 避免 Y
@@ -35,7 +35,6 @@ export const XING_PROMPT = isZh
 ## 工作流程
 1. 第一步
 2. 第二步
-</xing>
 
 以上是格式示范，实际内容根据对话提取。`
   : `Review the messages I (the user) sent in this session. Extract only guidance, preferences, corrections, and workflows from my conversation content, and compile them into a reusable work guide.
@@ -50,9 +49,9 @@ Requirements:
 
 The title should be specific enough to tell at a glance what this workflow is about (e.g., "War Reporting Fact-Check Process", "Paper Polishing Style Guide"). Avoid generic names (e.g., "Workflow Summary", "Conversation Review").
 
-Output strictly in the following format (use straight quotes ", not curly quotes):
+Use ordinary Markdown, beginning with a specific workflow title and sections:
 
-<xing title="Specific workflow name">
+# Specific workflow name
 ## Style Preferences
 - Do X
 - Avoid Y
@@ -60,7 +59,6 @@ Output strictly in the following format (use straight quotes ", not curly quotes
 ## Workflow
 1. Step one
 2. Step two
-</xing>
 
 The above is a format example; actual content should be extracted from the conversation.`;
 
@@ -194,15 +192,14 @@ export function executeSave(
 }
 
 /**
- * 任务模式 slash 命令（/xhs /gzh /weibo 等）— 扩展为 composer 文本，让用户在后面填主题再发。
- * 跨模式全局可用：即使当前模式是「自动」，也能用 /xhs。
+ * Explicit templates expand into composer text for editing before sending.
  */
-export function buildTaskModeSlashCommands(
+export function buildPromptTemplateSlashCommands(
   setInput: (text: string) => void,
   setMenuOpen: (open: boolean) => void,
   requestInputFocus: () => void,
 ): SlashCommand[] {
-  return getAllSlashCommands().map((sc) => ({
+  return PROMPT_TEMPLATES.map((sc) => ({
     name: sc.cmd.replace(/^\//, ''),
     label: sc.cmd,
     description: sc.label,

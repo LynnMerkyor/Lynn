@@ -9,7 +9,7 @@ import {
   deskMkdir,
   deskRenameFile,
 } from '../../stores/desk-actions';
-import { sortDeskFiles, type SortMode, type CtxMenuState } from './desk-types';
+import { filterDeskFiles, sortDeskFiles, type SortMode, type CtxMenuState } from './desk-types';
 import { DeskFileItem } from './DeskFileItem';
 import s from './Desk.module.css';
 
@@ -17,6 +17,7 @@ const RUBBER_BAND_MIN = 4; // px threshold to start rubber band
 
 export function DeskFileList({ sortMode, onShowMenu }: { sortMode: SortMode; onShowMenu: (state: CtxMenuState) => void }) {
   const deskFiles = useStore(s => s.deskFiles);
+  const filter = useStore(s => s.deskFileFilter);
   const deskCurrentPath = useStore(s => s.deskCurrentPath);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const lastSelectedRef = useRef<string | null>(null);
@@ -31,7 +32,7 @@ export function DeskFileList({ sortMode, onShowMenu }: { sortMode: SortMode; onS
   const [renamingFile, setRenamingFile] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
-  const sorted = useMemo(() => sortDeskFiles(deskFiles, sortMode), [deskFiles, sortMode]);
+  const sorted = useMemo(() => sortDeskFiles(filterDeskFiles(deskFiles, filter), sortMode), [deskFiles, sortMode, filter]);
 
   const allSelectedArr = useMemo(() => Array.from(selectedFiles), [selectedFiles]);
 
@@ -40,7 +41,7 @@ export function DeskFileList({ sortMode, onShowMenu }: { sortMode: SortMode; onS
     setSelectedFiles(new Set());
     lastSelectedRef.current = null;
     setRenamingFile(null);
-  }, [deskCurrentPath]);
+  }, [deskCurrentPath, filter]);
 
   // Cleanup rubber band listeners on unmount
   useEffect(() => () => cleanupRef.current?.(), []);
@@ -171,7 +172,7 @@ export function DeskFileList({ sortMode, onShowMenu }: { sortMode: SortMode; onS
   return (
     <div
       className={s.list}
-      data-empty-text={window.t?.('common.noFiles') || ''}
+      data-empty-text={window.t?.(filter === 'images' ? 'desk.noImages' : 'common.noFiles') || ''}
       ref={listRef}
       onMouseDown={handleMouseDown}
       onContextMenu={handleContextMenu}

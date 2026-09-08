@@ -1,11 +1,6 @@
-/**
- * Adapted from liliMozi/openhanako LeavesOverlay (Apache-2.0), commit 1d3ef308.
- * Lynn changes: restrained edge lighting, accessible preferences, theme gating,
- * cross-window synchronization, and visibility-aware playback. See asset NOTICE.
- */
-import { memo, useEffect, useRef, useState } from 'react';
+/** Lynn's window-side canopy. Code-native decoration; no video or avatar assets. */
+import { memo, useEffect, useState } from 'react';
 import { useLeavesOverlayEnabled } from '../hooks/use-leaves-overlay';
-import leavesSrc from '../../assets/textures/leaves-overlay.mp4';
 import styles from './LeavesOverlay.module.css';
 
 function themeAllowsLeaves(): boolean {
@@ -13,65 +8,54 @@ function themeAllowsLeaves(): boolean {
   return theme !== 'midnight' && theme !== 'high-contrast';
 }
 
+// Asymmetric branches leave the centre of the page open for reading.
+const branches = [
+  { x: 980, y: -50, angle: 33, scale: 1.35 },
+  { x: 1240, y: 70, angle: 71, scale: 1.15 },
+  { x: 1150, y: -100, angle: -12, scale: 1.2 },
+  { x: -100, y: 200, angle: -62, scale: 0.85 },
+];
+const leaves = [
+  [4, 46, -54, 0.7], [-10, 84, 52, 0.95], [0, 130, -60, 1],
+  [-18, 169, 49, 1.1], [-12, 218, -56, 1.05], [-29, 263, 51, 0.9],
+  [-30, 311, -39, 0.75], [-44, 351, 18, 0.6],
+];
+
 export const LeavesOverlay = memo(function LeavesOverlay() {
   const enabled = useLeavesOverlayEnabled();
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [themeAllowed, setThemeAllowed] = useState(themeAllowsLeaves);
-  const [reducedMotion, setReducedMotion] = useState(
-    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-  );
-  const [failed, setFailed] = useState(false);
+  const [hidden, setHidden] = useState(() => document.hidden);
 
   useEffect(() => {
-    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const onMotion = () => setReducedMotion(motion.matches);
     const onTheme = () => setThemeAllowed(themeAllowsLeaves());
+    const onVisibility = () => setHidden(document.hidden);
     const observer = new MutationObserver(onTheme);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    motion.addEventListener('change', onMotion);
-    onMotion();
+    document.addEventListener('visibilitychange', onVisibility);
     onTheme();
     return () => {
       observer.disconnect();
-      motion.removeEventListener('change', onMotion);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 
-  useEffect(() => { setFailed(false); }, [enabled]);
-  const active = enabled && themeAllowed && !reducedMotion && !failed;
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!active || !video) return;
-    const updatePlayback = () => {
-      if (document.hidden) video.pause();
-      else void video.play().catch(() => { /* Decoration must never interrupt work. */ });
-    };
-    document.addEventListener('visibilitychange', updatePlayback);
-    video.addEventListener('canplay', updatePlayback);
-    updatePlayback();
-    return () => {
-      document.removeEventListener('visibilitychange', updatePlayback);
-      video.removeEventListener('canplay', updatePlayback);
-      video.pause();
-    };
-  }, [active]);
-
-  if (!active) return null;
+  if (!enabled || !themeAllowed) return null;
   return (
-    <video
-      ref={videoRef}
-      className={styles.overlay}
-      data-lynn-leaves-overlay="true"
-      src={leavesSrc}
-      loop
-      muted
-      playsInline
-      preload="auto"
-      disablePictureInPicture
-      tabIndex={-1}
-      aria-hidden="true"
-      onError={() => setFailed(true)}
-    />
+    <div className={styles.overlay} data-lynn-leaves-overlay="true" data-paused={hidden} aria-hidden="true">
+      <div className={styles.windowLight} />
+      <svg className={styles.canopy} viewBox="0 0 1440 900" preserveAspectRatio="xMidYMin slice" focusable="false">
+        {branches.map((branch, index) => (
+          <g key={index} transform={`translate(${branch.x} ${branch.y}) rotate(${branch.angle}) scale(${branch.scale})`}>
+            <g className={styles.branch} style={{ animationDelay: `${index * -7}s`, animationDuration: `${28 + index * 5}s` }}>
+              <path className={styles.stem} d="M0 0 C12 96 -2 185 -23 272 Q-31 328 -46 372" />
+              {leaves.map(([x, y, angle, scale], leaf) => (
+                <path key={leaf} className={styles.leaf} transform={`translate(${x} ${y}) rotate(${angle}) scale(${scale})`}
+                  d="M0 0 C-22 12 -27 44 -5 77 C15 62 28 30 0 0Z" />
+              ))}
+            </g>
+          </g>
+        ))}
+      </svg>
+    </div>
   );
 });

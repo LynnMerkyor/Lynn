@@ -1,5 +1,6 @@
 {
   "channel": {
+    "simpleEmpty": "選擇已有角色，開始一段共同討論。",
     "tab": "頻道",
     "chatTab": "聊天",
     "empty": "還沒有頻道 ✿",
@@ -635,8 +636,8 @@
       "autoMode": "跟隨系統",
       "serifFont": "襯線字體",
       "serifFontHint": "使用襯線體顯示正文內容",
-      "leavesOverlay": "樹影光感",
-      "leavesOverlayHint": "在淺色介面邊緣投下輕柔樹影。背景執行時暫停；深色、高對比主題或系統減少動態效果時停用。"
+      "leavesOverlay": "窗邊樹影",
+      "leavesOverlayHint": "柔和窗光與緩慢搖曳的枝葉。背景執行時暫停；減少動態效果時靜止；深色和高對比主題停用。"
     },
     "locale": {
       "title": "語言和地區",
@@ -1337,6 +1338,9 @@
     }
   },
   "desk": {
+    "fileFilter": "檔案篩選",
+    "filter": {"all": "全部", "images": "圖片"},
+    "noImages": "目前資料夾沒有圖片",
     "title": "書桌",
     "workspaceMap": "會話進展",
     "runPatrol": "重新整理進展",

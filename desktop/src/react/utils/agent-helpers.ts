@@ -17,7 +17,7 @@ export type YuanMeta = {
 };
 
 export function normalizeYuanKey(yuan?: string): string {
-  return yuan === 'ming' ? 'lynn' : (yuan || 'hanako');
+  return yuan === 'ming' ? 'lynn' : (yuan || 'lynn');
 }
 
 function normalizeYuanMeta(key: string, meta: YuanMeta = {}): YuanMeta {
@@ -78,7 +78,7 @@ export function yuanFallbackAvatar(yuan?: string): string {
   const types = t('yuan.types') || {};
   const key = normalizeYuanKey(yuan);
   const entries = Object.fromEntries(getDisplayYuanEntries(types));
-  const entry = entries[key] || entries['hanako'];
+  const entry = entries[key] || entries['lynn'];
   return resolveBundledAvatar(entry?.avatar || 'Lynn.png');
 }
 

@@ -166,7 +166,6 @@ export class LynnEngine {
 
     // ── Expert Manager ──
     this._expertMgr = new ExpertManager({
-      presetsDir: path.join(productDir, "experts", "presets"),
       getAgentManager: () => this._agentMgr,
       getModelManager: () => this._models,
       getSkillManager: () => this._skills,
@@ -461,6 +460,7 @@ export class LynnEngine {
   // ════════════════════════════
 
   get expertManager() { return this._expertMgr; }
+  registerExpertPresets(pluginId: string, presetsDir: string) { return this._expertMgr.registerPresets(pluginId, presetsDir); }
   listExperts(locale?: string) { return this._expertMgr.listExperts(locale); }
   getExpert(slug: string, locale?: string) { return this._expertMgr.getExpert(slug, locale); }
   async spawnExpert(slug: string, opts?: AnyRecord) { return this._expertMgr.spawnExpert(slug, opts); }

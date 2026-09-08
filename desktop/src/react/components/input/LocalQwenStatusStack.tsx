@@ -18,9 +18,6 @@ export interface LocalQwenStatusStackProps {
   coldStartLikely: boolean;
   canSwitch: boolean;
   canShowStopped: boolean;
-  canShowInstallPrompt: boolean;
-  hasModel: boolean;
-  hasRuntime: boolean;
   tpsSummary: string | null;
   metricSummary: string;
   slotSummary: string | null;
@@ -33,8 +30,6 @@ export interface LocalQwenStatusStackProps {
   onRestore: () => void;
   onStart: () => void;
   onOpenSettings: () => void;
-  onSnooze: () => void;
-  onDismissForever: () => void;
   onSetPanelOpen: (open: boolean) => void;
 }
 
@@ -129,26 +124,7 @@ export function LocalQwenStatusStack(props: LocalQwenStatusStackProps) {
           </div>
         </div>
       )}
-      {props.canShowInstallPrompt && (
-        <div className={`${styles['local-model-status-bar']} ${styles['local-model-status-bar-recommend']}`}>
-          <div className={styles['local-model-status-left']}>
-            <span className={styles['local-model-status-dot']} aria-hidden="true" />
-            <div className={styles['local-model-status-copy']}>
-              <strong>可安装本地 Qwen3.8-27B</strong>
-              <span>
-                {props.hasModel && props.hasRuntime
-                  ? '模型和 llama.cpp 已就绪，点击后启动本地离线端点。'
-                  : '24GB+ 显存推荐 Q3，16GB 显存推荐 Q2，均搭配 Q4 DFlash2；点击后准备并启动，当前模型保留。'}
-              </span>
-            </div>
-          </div>
-          <div className={styles['local-model-status-actions']}>
-            <button type="button" onClick={props.onStart}>安装并启动</button>
-            <button type="button" onClick={props.onSnooze}>7 天后提醒</button>
-            <button type="button" onClick={props.onDismissForever}>不再提醒</button>
-          </div>
-        </div>
-      )}
+
     </>
   );
 }

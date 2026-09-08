@@ -1,27 +1,43 @@
-/* Uses openhanako's original tree-shadow video; layout adapted for Lynn. */
+/* Window light on paper: cool willow silhouettes with a warm, open centre. */
 .overlay {
   position: fixed;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  overflow: hidden;
   pointer-events: none;
   user-select: none;
-  mix-blend-mode: multiply;
-  opacity: 0.22;
-  /* Keep dialogs, title bar and composer controls above the decoration. */
   z-index: 4;
-  /* Preserve a quiet reading area and fade out before the bottom controls. */
-  mask-image: radial-gradient(ellipse 45% 62% at 52% 48%, rgba(0, 0, 0, 0.12) 35%, #000 100%),
-    linear-gradient(#000 65%, transparent 94%);
-  mask-composite: intersect;
+  mask-image: linear-gradient(#000 45%, transparent 91%);
 }
-
+.windowLight {
+  position: absolute;
+  inset: -12%;
+  background:
+    linear-gradient(119deg, transparent 40%, rgba(255, 231, 180, 0.12) 41%, rgba(255, 250, 226, 0.28) 53%, transparent 54%),
+    linear-gradient(119deg, transparent 55%, rgba(255, 248, 218, 0.2) 56%, transparent 68%);
+  filter: blur(14px);
+}
+.canopy {
+  width: 100%;
+  height: 100%;
+  color: #496a69;
+  opacity: 0.13;
+  filter: blur(5px);
+  mix-blend-mode: multiply;
+  mask-image: radial-gradient(ellipse 43% 60% at 48% 51%, transparent 25%, #000 100%);
+}
+.branch {
+  transform-origin: 0 0;
+  animation: breeze 28s ease-in-out infinite alternate;
+}
+.stem { fill: none; stroke: currentColor; stroke-width: 2.5; }
+.leaf { fill: currentColor; }
+@keyframes breeze {
+  from { transform: rotate(-3deg) skewX(-1deg); }
+  to { transform: rotate(4deg) skewX(2deg); }
+}
+.overlay[data-paused="true"] .branch { animation-play-state: paused; }
 :global([data-theme="midnight"]) .overlay,
-:global([data-theme="high-contrast"]) .overlay {
-  display: none;
-}
-
+:global([data-theme="high-contrast"]) .overlay { display: none; }
 @media (prefers-reduced-motion: reduce) {
-  .overlay { display: none; }
+  .branch { animation: none; }
 }

@@ -485,7 +485,7 @@
     padding: 6px 12px;
     cursor: pointer;
     font-size: 13px;
-    color: var(--text-primary);
+    color: var(--text);
     transition: background 0.1s;
 }
 
@@ -733,7 +733,7 @@
 .expertGuideTitle {
     font-size: 0.88rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text);
     margin: 0;
 }
 
@@ -772,7 +772,7 @@
     cursor: pointer;
     text-align: left;
     transition: border-color 0.15s, background 0.15s;
-    color: var(--text-primary);
+    color: var(--text);
     font-family: inherit;
 }
 
@@ -1018,3 +1018,15 @@
     opacity: 0.4;
     cursor: default;
 }
+
+.expertCreateBtn {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: var(--bg-card);
+  font: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+.expertCreateBtn:hover { background: var(--bg-hover); }

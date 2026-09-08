@@ -70,8 +70,8 @@ export interface DeskSlice {
   setTrustedRoots: (roots: string[]) => void;
   setSelectedFolder: (folder: string | null) => void;
   setCwdHistory: (history: string[]) => void;
-  deskGalleryOpen: boolean;
-  setDeskGalleryOpen: (open: boolean) => void;
+  deskFileFilter: 'all' | 'images';
+  setDeskFileFilter: (filter: 'all' | 'images') => void;
 }
 
 export const createDeskSlice = (
@@ -92,7 +92,7 @@ export const createDeskSlice = (
   trustedRoots: [],
   selectedFolder: null,
   cwdHistory: [],
-  deskGalleryOpen: false,
+  deskFileFilter: 'all',
   setCwdSkills: (skills) => set({ cwdSkills: skills }),
   setCwdSkillsOpen: (open) => set({ cwdSkillsOpen: open }),
   toggleCwdSkillsOpen: () => set({ cwdSkillsOpen: !get?.().cwdSkillsOpen }),
@@ -108,5 +108,5 @@ export const createDeskSlice = (
   setTrustedRoots: (roots) => set({ trustedRoots: roots }),
   setSelectedFolder: (folder) => set({ selectedFolder: folder }),
   setCwdHistory: (history) => set({ cwdHistory: history }),
-  setDeskGalleryOpen: (open) => set({ deskGalleryOpen: open }),
+  setDeskFileFilter: (filter) => set({ deskFileFilter: filter }),
 });

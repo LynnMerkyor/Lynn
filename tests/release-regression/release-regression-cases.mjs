@@ -302,7 +302,7 @@ export const RELEASE_CASES = [
       "desktop/src/react/components/chat/ThinkingBlock.tsx",
       "desktop/src/react/components/chat/ToolGroupBlock.tsx",
       "desktop/src/react/components/chat/WritingDiffViewer.tsx",
-      "desktop/src/react/components/input/TaskModePicker.tsx",
+      "desktop/src/react/config/prompt-templates.ts",
       "desktop/src/react/components/voice/PressToTalkButton.tsx",
       "desktop/src/react/stores/streaming-slice.ts",
       "desktop/src/react/smoke-fixture.ts",

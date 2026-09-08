@@ -133,7 +133,7 @@ export interface AgentManagerLike {
 }
 
 export interface ExpertManagerDeps {
-  presetsDir: string;
+  presetsDir?: string;
   getAgentManager: () => AgentManagerLike;
   getModelManager: () => ModelManagerLike;
   getSkillManager: () => unknown;
@@ -164,7 +164,8 @@ function rawProviderHasModel(raw: unknown, modelId: string): boolean {
 }
 
 export class ExpertManager {
-  private _presetsDir: string;
+  private _presetsDir?: string;
+  private _pluginPresetDirs = new Map<string, string>();
   private _getAgentMgr: () => AgentManagerLike;
   private _getModelMgr: () => ModelManagerLike;
   private _getSkillMgr: () => unknown;
@@ -191,10 +192,26 @@ export class ExpertManager {
    * 扫描并加载所有预设专家（启动时或首次访问时调用）
    */
   loadPresets(): ExpertPreset[] {
-    this._presets = loadPresets(this._presetsDir) as ExpertPreset[];
+    const directories = [this._presetsDir, ...this._pluginPresetDirs.values()].filter((dir): dir is string => !!dir);
+    const presets = directories.flatMap(dir => loadPresets(dir) as ExpertPreset[]);
+    this._presets = [...new Map(presets.map(preset => [preset.slug, preset])).values()];
     this._presetsLoaded = true;
     log.log(`加载了 ${this._presets.length} 个专家预设`);
     return this._presets;
+  }
+
+  /** Register an optional plugin's presets; disposing never touches existing agents. */
+  registerPresets(pluginId: string, presetsDir: string): () => void {
+    if (this._pluginPresetDirs.has(pluginId)) throw new Error(`Expert presets already registered: ${pluginId}`);
+    this._pluginPresetDirs.set(pluginId, presetsDir);
+    this._presetsLoaded = false;
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      this._pluginPresetDirs.delete(pluginId);
+      this._presetsLoaded = false;
+    };
   }
 
   /**

@@ -19,7 +19,6 @@ import { createActivitySlice, type ActivitySlice } from './activity-slice';
 import { createBridgeSlice, type BridgeSlice } from './bridge-slice';
 import { createSecuritySlice, type SecuritySlice } from './security-slice';
 import { createStartupSlice, type StartupSlice } from './startup-slice';
-import { createTaskModeSlice, type TaskModeSlice } from './task-mode-slice';
 import { createVoiceSlice, type VoiceSlice } from './voice-slice';
 import { createFleetSlice, type FleetSlice } from './fleet-slice';
 import { createUsageSlice, type UsageSlice } from './usage-slice';
@@ -43,7 +42,6 @@ export type StoreState = ConnectionSlice &
   BridgeSlice &
   SecuritySlice &
   StartupSlice &
-  TaskModeSlice &
   VoiceSlice &
   FleetSlice &
   UsageSlice;
@@ -68,7 +66,6 @@ export const useStore = create<StoreState>()((set, _get, _api) => ({
   ...createBridgeSlice(set),
   ...createSecuritySlice(set),
   ...createStartupSlice(set),
-  ...createTaskModeSlice(set),
   ...createVoiceSlice(set),
   ...createFleetSlice(set),
   ...createUsageSlice(set),
@@ -97,7 +94,6 @@ export type {
   BridgeSlice,
   SecuritySlice,
   StartupSlice,
-  TaskModeSlice,
   VoiceSlice,
   FleetSlice,
 };

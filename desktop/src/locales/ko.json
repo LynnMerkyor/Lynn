@@ -1,5 +1,6 @@
 {
   "channel": {
+    "simpleEmpty": "기존 에이전트를 선택하여 함께 대화를 시작하세요.",
     "tab": "채널",
     "chatTab": "채팅",
     "empty": "아직 채널이 없어요 ✿",
@@ -569,8 +570,8 @@
       "autoMode": "시스템",
       "serifFont": "명조 글꼴",
       "serifFontHint": "본문에 명조 글꼴을 사용해요",
-      "leavesOverlay": "나무 그림자",
-      "leavesOverlayHint": "밝은 테마 가장자리에 부드러운 나무 그림자를 표시해요. 백그라운드에서는 일시 정지하며, 어두운 테마·고대비 테마·동작 줄이기 설정에서는 꺼져요."
+      "leavesOverlay": "창가의 나뭇잎",
+      "leavesOverlayHint": "부드러운 창빛과 천천히 흔들리는 나뭇잎. 백그라운드에서는 일시 정지하며, 동작 줄이기에서는 정지하고 어두운 테마와 고대비에서는 꺼져요."
     },
     "locale": {
       "title": "언어 및 지역",
@@ -1265,6 +1266,9 @@
     }
   },
   "desk": {
+    "fileFilter": "파일 필터",
+    "filter": {"all": "전체", "images": "이미지"},
+    "noImages": "이 폴더에 이미지가 없습니다",
     "title": "책상",
     "workspaceMap": "대화 진행 상황",
     "runPatrol": "진행 상황 새로고침",

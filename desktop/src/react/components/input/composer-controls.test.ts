@@ -20,23 +20,19 @@ function zIndex(block: string): number {
 }
 
 describe('composer controls regression', () => {
-  it('keeps task and execution mode menus above the composer chrome', () => {
+  it('keeps execution mode menus above the composer chrome', () => {
     const inputCss = read('desktop/src/react/components/input/InputArea.module.css');
-    const taskCss = read('desktop/src/react/components/input/TaskModePicker.module.css');
     const securityCss = read('desktop/src/react/components/input/SecurityModeSelector.module.css');
 
     expect(cssBlock(inputCss, '.input-actions')).toContain('overflow: visible');
     expect(inputCss).toContain('.input-wrapper > *');
     expect(inputCss).not.toContain('.input-wrapper * {\n    min-width: 0;');
-    expect(zIndex(cssBlock(taskCss, '.picker-wrap'))).toBeGreaterThanOrEqual(20);
-    expect(zIndex(cssBlock(taskCss, '.panel'))).toBeGreaterThanOrEqual(10_000);
     expect(zIndex(cssBlock(securityCss, '.selector'))).toBeGreaterThanOrEqual(20);
     expect(zIndex(cssBlock(securityCss, '.dropdown'))).toBeGreaterThanOrEqual(10_000);
     expect(cssBlock(inputCss, '.thinking-selector')).toContain('flex: 0 0 auto');
     expect(cssBlock(inputCss, '.thinking-dropdown')).toContain('width: 280px');
     expect(zIndex(cssBlock(inputCss, '.thinking-dropdown'))).toBeGreaterThanOrEqual(10_000);
     expect(cssBlock(securityCss, '.dropdown')).toContain('width: 260px');
-    expect(cssBlock(taskCss, '.panel')).toContain('min-width: 300px');
   });
 
   it('keeps the model chooser visually attached to the send button', () => {
@@ -50,14 +46,13 @@ describe('composer controls regression', () => {
 
   it('keeps advanced setup out of the primary composer path', () => {
     const appShell = read('desktop/src/react/App.tsx');
-    const taskModePicker = read('desktop/src/react/components/input/TaskModePicker.tsx');
+    const submitArea = read('desktop/src/react/components/input/SubmitArea.tsx');
     const deskSection = read('desktop/src/react/components/DeskSection.tsx');
     const deskDropZone = read('desktop/src/react/components/desk/DeskDropZone.tsx');
     const deskFileList = read('desktop/src/react/components/desk/DeskFileList.tsx');
 
     expect(appShell).not.toContain('WorkersPanel');
-    expect(taskModePicker).not.toContain('MCP 接入');
-    expect(taskModePicker).not.toContain("openSettings?.('mcp')");
+    expect(submitArea).not.toContain('TaskModePicker');
     expect(deskSection).not.toContain('JianEditor');
     expect(deskDropZone).not.toContain('deskCreateFile');
     expect(deskFileList).not.toContain('deskCreateFile');

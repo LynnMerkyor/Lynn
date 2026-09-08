@@ -319,10 +319,10 @@ describe('Local Qwen provider UX guards', () => {
     expect(inputArea).not.toContain('可接收');
   });
 
-  it('starts the recommended local model directly from the chat install prompt', () => {
+  it('keeps local installation in settings without promoting it in chat', () => {
     const localQwenStack = read('desktop/src/react/components/input/LocalQwenStatusStack.tsx');
-    expect(localQwenStack).toContain('安装并启动');
-    expect(localQwenStack).toContain('onClick={props.onStart}>安装并启动</button>');
-    expect(localQwenStack).toContain('点击后准备并启动，当前模型保留');
+    expect(localQwenStack).not.toContain('安装并启动');
+    expect(localQwenStack).not.toContain('7 天后提醒');
+    expect(localQwenStack).toContain('onClick={props.onStart}>启动</button>');
   });
 });

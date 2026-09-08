@@ -9,6 +9,7 @@ import { ThinkingBlock } from './ThinkingBlock';
 import { ExecutionTraceBlock } from './ExecutionTraceBlock';
 import { SettingsConfirmCard } from './SettingsConfirmCard';
 import { AuthorizationCard } from './AuthorizationCard';
+import { TranslationMenu } from './TranslationMenu';
 import { TtsControlButton } from './TtsControlButton';
 import { ArtifactCard, BrowserScreenshot, CronConfirmCard, FileOutputCard, SkillCard } from './MessageCards';
 import type { ChatMessage, ContentBlock } from '../../stores/chat-types';
@@ -42,7 +43,6 @@ import {
   extractPlainTextFromBlocks,
   reviewerKindFromConfig,
   reviewerNameFromKind,
-  TRANSLATION_TARGETS,
   MAX_TRANSLATE_CHARS,
   findLatestReviewBlock,
   shouldShowFollowUpAction,
@@ -52,7 +52,7 @@ import {
 
 export const AssistantMessage = memo(function AssistantMessage({ message, showAvatar, isLastAssistant }: Props) {
   const agentName = useStore(s => s.agentName) || 'Lynn';
-  const agentYuan = useStore(s => s.agentYuan) || 'hanako';
+  const agentYuan = useStore(s => s.agentYuan) || 'lynn';
   const agentAvatarUrl = useStore(s => s.agentAvatarUrl);
   const sessionAgent = useStore(s => s.sessionAgent);
   const addToast = useStore(s => s.addToast);
@@ -287,7 +287,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
     }
   }, [plainText]);
 
-  const handleTranslate = useCallback(async () => {
+  const handleTranslate = useCallback(async (targetLanguage: string) => {
     if (!plainText || translateBusy) return;
     if (showStreamingMeta) {
       addToast('回复完成后再翻译', 'info');
@@ -299,6 +299,8 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
       addToast(msg, 'error');
       return;
     }
+    setTranslateTarget(targetLanguage);
+    setTranslatedText(null);
     setTranslateBusy(true);
     setTranslateError(null);
     try {
@@ -307,7 +309,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: plainText,
-          targetLanguage: translateTarget,
+          targetLanguage,
         }),
         timeout: 70_000,
       });
@@ -316,7 +318,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
         throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
       }
       setTranslatedText(data.text);
-      addToast(`已翻译成${translateTarget}`, 'success');
+      addToast(`已翻译成${targetLanguage}`, 'success');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setTranslateError(msg);
@@ -324,7 +326,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
     } finally {
       setTranslateBusy(false);
     }
-  }, [addToast, plainText, showStreamingMeta, translateBusy, translateTarget]);
+  }, [addToast, plainText, showStreamingMeta, translateBusy]);
 
   useEffect(() => {
     setTranslatedText(null);
@@ -484,28 +486,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
             </div>
             <div className={styles.messageActionRailIcons}>
               {!!plainText && (
-                <span className={styles.msgTranslateGroup}>
-                  <select
-                    className={styles.msgTranslateSelect}
-                    value={translateTarget}
-                    onChange={(e) => setTranslateTarget(e.target.value)}
-                    title="选择译文语言"
-                    aria-label="选择译文语言"
-                  >
-                    {TRANSLATION_TARGETS.map((target) => (
-                      <option key={target} value={target}>{target}</option>
-                    ))}
-                  </select>
-                  <button
-                    className={styles.msgTranslateBtn}
-                    onClick={handleTranslate}
-                    disabled={translateBusy || showStreamingMeta}
-                    title={`翻译成${translateTarget}`}
-                    aria-label={`翻译成${translateTarget}`}
-                  >
-                    {translateBusy ? '翻译中' : '翻译'}
-                  </button>
-                </span>
+                <TranslationMenu busy={translateBusy} disabled={showStreamingMeta} onTranslate={handleTranslate} />
               )}
               <button className={`${styles.msgCopyBtn}${copied ? ` ${styles.msgCopyBtnCopied}` : ''}`} onClick={handleCopy} title={t('common.copyText')} aria-label={t('common.copyText')}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

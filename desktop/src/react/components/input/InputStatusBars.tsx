@@ -115,9 +115,6 @@ export function InputStatusBars({
         coldStartLikely={localQwen.coldStartLikely}
         canSwitch={localQwen.canSwitch}
         canShowStopped={localQwen.canShowStopped}
-        canShowInstallPrompt={localQwen.canShowInstallPrompt}
-        hasModel={localQwen.hasModel}
-        hasRuntime={localQwen.hasRuntime}
         tpsSummary={localQwen.tpsSummary}
         metricSummary={localQwen.metricSummary}
         slotSummary={localQwen.slotSummary}
@@ -130,8 +127,6 @@ export function InputStatusBars({
         onRestore={localQwen.showStatus}
         onStart={localQwen.start}
         onOpenSettings={localQwen.openSettings}
-        onSnooze={localQwen.snoozePrompt}
-        onDismissForever={localQwen.dismissPromptForever}
         onSetPanelOpen={localQwen.setPanelOpen}
       />
     </>

@@ -21,7 +21,7 @@ import { JARVIS_RUNTIME_START_EVENT } from '../services/jarvis-runtime-events';
 import { loadModels } from '../utils/ui-helpers';
 import {
   XING_PROMPT, executeDiary, executeCompact, executeClear, executePlan, executeSave, buildSlashCommands,
-  buildTaskModeSlashCommands,
+  buildPromptTemplateSlashCommands,
   type SlashCommand,
 } from './input/slash-commands';
 import {
@@ -337,8 +337,8 @@ function InputAreaInner() {
   const slashCommands = useMemo(
     () => {
       const core = buildSlashCommands(t, diaryFn, xingFn, compactFn, clearFn, planFn, saveFn, goalFn);
-      const taskModeSlash = buildTaskModeSlashCommands(fillSlashInput, setSlashMenuOpen, requestInputFocus);
-      return [...core, ...taskModeSlash];
+      const promptTemplateSlash = buildPromptTemplateSlashCommands(fillSlashInput, setSlashMenuOpen, requestInputFocus);
+      return [...core, ...promptTemplateSlash];
     },
     [diaryFn, xingFn, compactFn, clearFn, planFn, saveFn, goalFn, t, fillSlashInput, requestInputFocus],
   );

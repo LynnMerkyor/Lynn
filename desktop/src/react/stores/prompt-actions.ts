@@ -3,7 +3,6 @@ import type { PromptImage, UserAttachment, GitContext } from './chat-types';
 import type { ComposerDraft, QuotedSelection } from './input-slice';
 import { ensureSession, showSidebarToast } from './session-actions';
 import { getWebSocket } from '../services/websocket';
-import { getModeById } from '../config/task-modes';
 import { buildRetryDraftFromMessage } from '../utils/composer-state';
 import { hanaFetch } from '../hooks/use-hana-fetch';
 
@@ -20,7 +19,6 @@ export interface SendPromptOptions {
   gitContext?: GitContext | null;
   replaceFromMessageId?: string | null;
   replaceFromMessageIndex?: number | null;
-  skipPersonaInjection?: boolean;
 }
 
 function canSendPayload(text: string, images?: PromptImage[]): boolean {
@@ -157,16 +155,6 @@ export async function submitPromptTask(options: SendPromptOptions): Promise<bool
   const mode = options.mode ?? 'prompt';
   const displayText = options.displayText ?? options.text;
   let requestText = options.requestText ?? options.text;
-
-  // ── 任务模式 persona 注入（仅新发 prompt；steer 流中已有上下文，不重复注入）──
-  if (mode === 'prompt' && !options.skipPersonaInjection) {
-    const activeModeId = useStore.getState().taskModeId;
-    const activeMode = activeModeId ? getModeById(activeModeId) : null;
-    const persona = activeMode?.persona;
-    if (persona && activeModeId !== 'auto') {
-      requestText = `${persona}\n\n${requestText}`;
-    }
-  }
 
   if (!canSendPayload(requestText, options.images)) {
     return false;
@@ -316,7 +304,6 @@ export async function retryAssistantResponse(assistantMessageId: string): Promis
         retryDraft: draft,
         replaceFromMessageId: userMessage.id,
         replaceFromMessageIndex: numericVisibleIndex(userMessage.visibleIndex),
-        skipPersonaInjection: !!storedRequestText,
       });
 
       if (!sent) {

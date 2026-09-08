@@ -11,13 +11,6 @@ import {
   LOCAL_QWEN35_PROVIDER_ID,
   LOCAL_QWEN_DISPLAY_NAME,
   LOCAL_QWEN_SHORT_NAME,
-  LOCAL_QWEN_PROMPT_DELAY_MS,
-  LOCAL_QWEN_PROMPT_DISMISS_KEY,
-  LOCAL_QWEN_PROMPT_NEVER_KEY,
-  LOCAL_QWEN_PROMPT_SNOOZE_UNTIL_KEY,
-  LOCAL_QWEN_PROMPT_SHOWN_KEY,
-  isLocalQwenPromptSnoozed,
-  todayKey,
   type LocalQwen35RuntimeStatus,
 } from './local-qwen-status';
 
@@ -60,11 +53,6 @@ export function useLocalQwenStatusController({
   const [dismissed, setDismissed] = useState(false);
   const [optimisticStarting, setOptimisticStarting] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [promptReady, setPromptReady] = useState(false);
-  const [snoozed, setSnoozed] = useState(() => {
-    return isLocalQwenPromptSnoozed(localStorage);
-  });
-
   const model = useMemo(
     () => models.find(m => isRecommendedLocalModelId(m.id) && m.provider === LOCAL_QWEN35_PROVIDER_ID),
     [models],
@@ -81,10 +69,8 @@ export function useLocalQwenStatusController({
   const visible = active && !dismissed;
   const endpoint = runtime.endpoint;
   const runtimeLabel = runtime.runtimeLabel;
-  const canEnable = runtime.canEnable;
   const hasModel = runtime.hasModel;
   const hasRuntime = runtime.hasRuntime;
-  const recommended = promptReady && !!status?.ok && canEnable && !active && !dismissed && !snoozed;
   const tpsSummary = runtime.tpsSummary;
   const slotSummary = runtime.slotSummary;
   const metricSummary = runtime.metricSummary;
@@ -298,20 +284,6 @@ export function useLocalQwenStatusController({
     };
   }, [active, current, optimisticStarting, setInlineError, setInlineNotice]);
 
-  useEffect(() => {
-    const id = window.setTimeout(() => setPromptReady(true), LOCAL_QWEN_PROMPT_DELAY_MS);
-    return () => window.clearTimeout(id);
-  }, []);
-
-  useEffect(() => {
-    if (!recommended) return;
-    try {
-      localStorage.setItem(LOCAL_QWEN_PROMPT_SHOWN_KEY, todayKey());
-    } catch {
-      // ignore unavailable storage
-    }
-  }, [recommended]);
-
   const switchToLocal = useCallback(async () => {
     try {
       await hanaFetch('/api/models/set', {
@@ -402,30 +374,6 @@ export function useLocalQwenStatusController({
     void refresh();
   }, [refresh]);
 
-  const snoozePrompt = useCallback(() => {
-    try {
-      localStorage.setItem(LOCAL_QWEN_PROMPT_SNOOZE_UNTIL_KEY, String(Date.now() + 7 * 24 * 60 * 60 * 1000));
-      localStorage.removeItem(LOCAL_QWEN_PROMPT_DISMISS_KEY);
-    } catch {
-      // ignore unavailable storage
-    }
-    setSnoozed(true);
-    setDismissed(true);
-    showSidebarToast('7 天内不再提醒。你仍可在“设置 > 模型”里随时安装。', 3600, 'info', 'local-qwen-snoozed');
-  }, []);
-
-  const dismissPromptForever = useCallback(() => {
-    try {
-      localStorage.setItem(LOCAL_QWEN_PROMPT_NEVER_KEY, '1');
-      localStorage.removeItem(LOCAL_QWEN_PROMPT_SNOOZE_UNTIL_KEY);
-    } catch {
-      // ignore unavailable storage
-    }
-    setSnoozed(true);
-    setDismissed(true);
-    showSidebarToast('不再显示本地模型推荐。你仍可在“设置 > 模型”里安装。', 3600, 'info', 'local-qwen-dismissed');
-  }, []);
-
   return {
     status,
     visible,
@@ -442,8 +390,7 @@ export function useLocalQwenStatusController({
     current,
     coldStartLikely,
     canSwitch: !!(running && model && !current),
-    canShowStopped: !!(!active && model && hasModel && hasRuntime && !dismissed),
-    canShowInstallPrompt: !!(recommended && (!model || !hasModel || !hasRuntime)),
+    canShowStopped: !!(current && !active && model && hasModel && hasRuntime && !dismissed),
     hasModel,
     hasRuntime,
     tpsSummary,
@@ -459,8 +406,6 @@ export function useLocalQwenStatusController({
     showStatus,
     start,
     openSettings,
-    snoozePrompt,
-    dismissPromptForever,
     setPanelOpen,
   };
 }

@@ -169,7 +169,7 @@ export function buildReviewSystemAppend(options: { autoReview?: boolean; reviewM
       "你现在是 Review 角色。另一个 Agent 刚刚完成了一项任务，用户请求你复查。",
       "",
       "要求：",
-      "- 保留你的 MOOD / PULSE / REFLECT 区块（这是你的思维框架，review 时同样有用）",
+      "- 直接给出有证据支持的复查结论、问题和建议，不额外输出情绪或内心活动区块",
       "- 聚焦于：逻辑漏洞、遗漏的边界情况、可改进的点、潜在风险",
       "- 如果一切看起来没问题，简短确认即可，不要为了挑刺而挑刺",
       ...(autoReview
@@ -214,7 +214,7 @@ export function buildReviewSystemAppend(options: { autoReview?: boolean; reviewM
     "You are now in Review mode. Another agent just completed a task, and the user asked you to review it.",
     "",
     "Requirements:",
-    "- Keep your MOOD / PULSE / REFLECT block (it's your thinking framework, useful for review too)",
+    "- Give evidence-backed findings and suggestions directly, without mood or internal-monologue blocks",
     "- Focus on: logic gaps, missed edge cases, areas for improvement, potential risks",
     "- If everything looks fine, confirm briefly. Do not nitpick for the sake of it",
     ...(autoReview

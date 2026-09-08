@@ -1,5 +1,6 @@
 {
   "channel": {
+    "simpleEmpty": "既存のエージェントを選んで、一緒に話し合いましょう。",
     "tab": "チャンネル",
     "chatTab": "チャット",
     "empty": "チャンネルはまだありません ✿",
@@ -568,8 +569,8 @@
       "autoMode": "システム",
       "serifFont": "明朝体",
       "serifFontHint": "本文に明朝体を使用する",
-      "leavesOverlay": "木漏れ日の影",
-      "leavesOverlayHint": "ライトテーマの周辺に柔らかな木の影を表示します。バックグラウンドでは一時停止し、ダーク・高コントラスト・視差効果を減らす設定では無効になります。"
+      "leavesOverlay": "窓辺の木陰",
+      "leavesOverlayHint": "柔らかな窓の光と、ゆっくり揺れる枝葉。バックグラウンドでは一時停止し、動きを減らす設定では静止。ダーク・高コントラストでは無効。"
     },
     "locale": {
       "title": "言語と地域",
@@ -1255,6 +1256,9 @@
     }
   },
   "desk": {
+    "fileFilter": "ファイル絞り込み",
+    "filter": {"all": "すべて", "images": "画像"},
+    "noImages": "このフォルダーに画像はありません",
     "title": "デスク",
     "workspaceMap": "セッションの進捗",
     "runPatrol": "進捗を更新",

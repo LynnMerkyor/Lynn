@@ -21,7 +21,7 @@ export const PREVIEWABLE_EXTS: Record<string, string> = {
   c: 'code', cpp: 'code', h: 'code', java: 'code',
   rs: 'code', go: 'code', rb: 'code', php: 'code',
   csv: 'csv', pdf: 'pdf',
-  png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image',
+  avif: 'image', ico: 'image', png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image',
   docx: 'docx', xlsx: 'xlsx', xls: 'xlsx',
 };
 
