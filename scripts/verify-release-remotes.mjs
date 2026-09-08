@@ -11,6 +11,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 function parseArgs(argv) {
   const args = {
     branch: "main",
+    expectedCommit: "",
     remotes: (process.env.LYNN_RELEASE_REMOTES || "github-lynnmerkyor,origin,gitee")
       .split(",")
       .map((item) => item.trim())
@@ -22,6 +23,8 @@ function parseArgs(argv) {
     const next = () => argv[++i];
     if (arg === "--branch") args.branch = next();
     else if (arg.startsWith("--branch=")) args.branch = arg.slice("--branch=".length);
+    else if (arg === "--expected-commit") args.expectedCommit = next();
+    else if (arg.startsWith("--expected-commit=")) args.expectedCommit = arg.slice("--expected-commit=".length);
     else if (arg === "--tag") args.tag = next();
     else if (arg.startsWith("--tag=")) args.tag = arg.slice("--tag=".length);
     else if (arg === "--remotes") {
@@ -45,6 +48,7 @@ Checks that release remotes expose the current branch head and release tag.
 
 Options:
   --branch NAME       branch to check, default: main
+  --expected-commit REF expected branch commit; use HEAD when releasing from a worktree
   --tag TAG           tag to check, default: v<package.json version>
   --remotes A,B       remotes to check, default: github-lynnmerkyor,origin,gitee
 
@@ -81,7 +85,7 @@ function lsRemote(remote, refs) {
 const args = parseArgs(process.argv.slice(2));
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
 const tag = args.tag || `v${pkg.version}`;
-const localHead = git(["rev-parse", args.branch]);
+const localHead = git(["rev-parse", "--verify", "--end-of-options", `${args.expectedCommit || args.branch}^{commit}`]);
 const localTagCommit = git(["rev-list", "-n", "1", tag]);
 const failures = [];
 

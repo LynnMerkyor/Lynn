@@ -54,6 +54,17 @@ const arch = process.argv[3] || process.arch;
 // electron-builder 的 ${os} 变量：darwin→"mac"、win32→"win"、linux→"linux"
 const osDirName = platform === "darwin" ? "mac" : platform === "win32" ? "win" : platform;
 const outDir = path.join(ROOT, "dist-server", `${osDirName}-${arch}`);
+const depsRoot = process.env.LYNN_BUILD_DEPS_ROOT;
+const dependencySource = depsRoot
+  ? fs.realpathSync(path.join(depsRoot, `${osDirName}-${arch}`))
+  : null;
+if (dependencySource) {
+  const outputRoot = fs.existsSync(outDir) ? fs.realpathSync(outDir) : path.resolve(outDir);
+  const relative = path.relative(outputRoot, dependencySource);
+  if (!relative || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))) {
+    throw new Error("[build-server] Dependency source must be separate from the output directory");
+  }
+}
 
 console.log(`[build-server] Building for ${platform}-${arch}...`);
 
@@ -388,10 +399,8 @@ fs.writeFileSync(
 // （prebuild-install 下载正确 ABI 的预编译二进制）
 // 用 npm install 而非 npm ci：lockfile 跟精简 package.json 不匹配
 console.log("[build-server] installing external dependencies...");
-const depsRoot = process.env.LYNN_BUILD_DEPS_ROOT;
-if (depsRoot) {
-  const source = fs.realpathSync(path.join(depsRoot, `${osDirName}-${arch}`));
-  if (source === fs.realpathSync(outDir)) throw new Error("[build-server] Dependency source must be separate from the output directory");
+if (dependencySource) {
+  const source = dependencySource;
   const sourcePkg = JSON.parse(fs.readFileSync(path.join(source, "package.json"), "utf8"));
   const canonicalDeps = value => JSON.stringify(Object.entries(value || {}).sort(([a], [b]) => a.localeCompare(b)));
   if (canonicalDeps(sourcePkg.dependencies) !== canonicalDeps(externalDeps)) throw new Error("[build-server] Cached dependency declarations do not match this build");

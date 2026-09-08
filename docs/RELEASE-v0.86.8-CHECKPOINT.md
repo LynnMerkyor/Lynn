@@ -42,3 +42,9 @@
 自动化视觉回归因新增执行方式使旧基线改变，长项目断言原本误取第一个 select；改用命名项目字段。新增提醒/插件动作的模型字段切换、必选插件、JSON 对象与实际保存 payload 断言。78 张本机候选截图已生成，覆盖 2 主题 × 3 尺寸 × 13 状态；关键变化画面已人工查看并结合全部尺寸的溢出/边界断言核对。候选与采用哈希见 output/release-v0.86.8/automation-baseline-adoption.json；严格比较复跑单独记录，候选模式不算最终放行。
 
 Windows 验收沿用 Build workflow，在原生 Windows 上从最终 NSIS 提取 CLI/运行时并做加载测试；不会把 Mac 静态检查当成 Windows 运行验收。候选分支 CI 不发布正式版本。
+
+Windows 严格视觉比较：GitHub Actions `34190445399`，提交 `35609b0cf8ae5bad5efb85f671def0c2dccd2610`，DPR 1 / 1.25 / 1.5 全部 success。功能源码对应的跨平台 CI `34189915485` 在 macOS 与 Windows 均 success。原始基线差异运行 `34189915526` 未视为通过，只用于候选截图和视觉核对。
+
+CLI100：`reports/cli-50-results-2026-09-08T05-16-57-990Z.json`，100/100 ok，22 次工具调用，平均 4303ms。GUI100 与夜间链仍在执行。Intel Node v22.16.0 / ABI 127 实际 SQLite 查询返回 42。
+
+离线缓存源在清理输出前检查别名/包含关系，3 项真实入口回归通过，确认同路径、输出内嵌套和符号链接场景不会删除原数据。远端验证支持 `npm run release:verify-remotes -- --expected-commit HEAD`，只读比较远端 main 与发布工作树，不修改本地主工作目录。两个 GitHub 仓库的 LYNN_ACTIONS_PUBLISH_RELEASE 均 unset。Gitee 凭据通过原有 Git credential helper 验证为 merkyor，旧 GitHub 仓库使用现存 LynnMerkyor 的 per-process GH_TOKEN，不切换全局登录账号。
