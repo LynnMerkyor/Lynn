@@ -99,7 +99,7 @@ LYNN_HOME=~/.lynn-dev npm run test:release
 - `packaged-server-smoke`:真实包 server 冷启动、原生模块、health、配置污染修复。
 - `packaged-cli-runtime-smoke`:真实包内 CLI runtime,避免全局 `lynn` 旧拷贝误判。
 - `packaged-settings-provider-smoke`:真实 Electron Settings 窗口,Provider 去重、Key 状态、读取/删除模型不回流。
-- `packaged-main-ui-smoke`:真实 Electron 主聊天窗口,隔离 `LYNN_HOME`,种入 BYOK DeepSeek V4 Pro/Flash,在窄窗下点击输入栏、模型下拉、任务模式、执行模式并断言控件没有截断或横向溢出。
+- `packaged-main-ui-smoke`:真实 Electron 主聊天窗口,隔离 `LYNN_HOME`,种入 BYOK DeepSeek V4 Pro/Flash,在窄窗下点击输入栏、模型下拉、斜杠模板、深度调研与执行模式，并断言控件没有截断或横向溢出。
 - 并发自动复查:真实 WebSocket + `/api/review`,一次发起 3 个 Hanako 自动复查,必须全部收到非空 `review_result`。
 
 失败即阻断发布。若外部模型/Brain 暂时不可用,结果也是阻断,不能降级成 warning;这是为了避免“本地看起来能开,真实用户路径不可用”。
@@ -108,7 +108,7 @@ LYNN_HOME=~/.lynn-dev npm run test:release
 
 自动脚本不能完全替代真实桌面视觉检查。正式发版前必须用打包后的 app 做一次人工 UI 检查：
 
-1. 首屏：会话列表、输入框、模型选择、安全模式、任务模式、语音按钮无重叠。
+1. 首屏：会话列表、输入框、模型选择、安全模式、更多输入选项、语音按钮无重叠。
 2. 发送短 prompt：用户消息、助手消息、thinking block、停止按钮状态正确。
 3. 发送工具 prompt：工具卡片展开/折叠、失败态、重试态、最终答案都可见。
 4. 发送长输出：滚动、代码块、复制按钮、Markdown 表格不遮挡。

@@ -362,7 +362,6 @@ async function main() {
       const textarea = document.querySelector('#inputBox');
       const bottomBar = document.querySelector('[class*="input-bottom-bar"]');
       const modelButton = document.querySelector('[class*="model-pill"]');
-      const taskButton = Array.from(document.querySelectorAll('button')).find((el) => (el.textContent || '').includes('自动'));
       const moreButton = document.querySelector('button[aria-label="更多输入选项"]');
       const sendButton = document.querySelector('button[class*="send-btn"]');
       return {
@@ -374,7 +373,6 @@ async function main() {
         textarea: rectOf(textarea),
         bottomBar: rectOf(bottomBar),
         modelButton: rectOf(modelButton),
-        taskButton: rectOf(taskButton),
         moreButton: rectOf(moreButton),
         sendButton: rectOf(sendButton),
         hasAttach: !!document.querySelector('button[class*="attach-btn"]'),
@@ -398,7 +396,6 @@ async function main() {
     within("textarea", baseLayout.textarea, { minWidth: 220, minHeight: 30 });
     within("bottomBar", baseLayout.bottomBar, { minWidth: 300, minHeight: 38 });
     within("modelButton", baseLayout.modelButton, { minWidth: 80, minHeight: 28 });
-    within("taskButton", baseLayout.taskButton, { minWidth: 60, minHeight: 20 });
     within("moreButton", baseLayout.moreButton, { minWidth: 28, minHeight: 28 });
     within("sendButton", baseLayout.sendButton, { minWidth: 34, minHeight: 34 });
     if (!baseLayout.hasAttach) failures.push("attach button missing");
@@ -532,19 +529,45 @@ async function main() {
         btn.click();
         return true;
       };
-      const clickedTask = clickText('自动');
       const moreButton = document.querySelector('button[aria-label="更多输入选项"]');
       if (moreButton) moreButton.click();
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const clickedResearch = clickText('深度调研');
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const researchVisible = !!document.querySelector('[class*="deep-research-card"]');
+      document.querySelector('button[aria-label="关闭深度调研引导"]')?.click();
+      if (moreButton?.getAttribute('aria-expanded') !== 'true') moreButton?.click();
       await new Promise((resolve) => setTimeout(resolve, 150));
       const clickedExec = clickText('执行模式', 'security.mode.');
       await new Promise((resolve) => setTimeout(resolve, 300));
       const text = document.body.innerText || '';
-      return { clickedTask, clickedExec, text };
+      return { clickedResearch, researchVisible, clickedExec, text };
     })()`);
-    assertOk(popoverSnapshot.clickedTask, "task mode button was not clickable");
+    assertOk(popoverSnapshot.clickedResearch && popoverSnapshot.researchVisible, "deep research launcher did not open its guide");
     assertOk(popoverSnapshot.clickedExec, "execution mode button was not clickable");
     assertOk(/自动|快速|深研|执行模式/.test(String(popoverSnapshot.text || "")), "mode popovers did not leave expected UI text");
     await cdp.screenshot(path.join(outputDir, "mode-popovers.png"));
+
+    await cdp.evaluate(`(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const more = document.querySelector('button[aria-label="更多输入选项"]');
+      if (more?.getAttribute('aria-expanded') === 'true') more.click();
+      const input = document.querySelector('#inputBox');
+      window.__lynnTemplateMessagesBefore = document.querySelectorAll('[class*="userMessage"]').length;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, '/novel');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+    })()`);
+    await waitFor(cdp, `!!document.querySelector('[class*="slash-menu-item"]')`, 15000, "explicit novel template");
+    await cdp.evaluate(`document.querySelector('[class*="slash-menu-item"]').click()`);
+    const templateSnapshot = await waitFor(cdp, `(() => {
+      const value = document.querySelector('#inputBox')?.value || '';
+      if (value.length < 20 || value.startsWith('/novel')) return null;
+      return { value, menuClosed: !document.querySelector('[class*="slash-menu-item"]'),
+        notSent: document.querySelectorAll('[class*="userMessage"]').length === window.__lynnTemplateMessagesBefore };
+    })()`, 15000, "editable template without sending");
+    assertOk(templateSnapshot.menuClosed && templateSnapshot.notSent, "template did not remain an editable unsent draft");
+    await cdp.screenshot(path.join(outputDir, "slash-template.png"));
 
     const smokeUrl = new URL(page.url);
     smokeUrl.searchParams.set("uiSmoke", "1");
