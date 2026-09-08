@@ -19,11 +19,15 @@ export function createWsControlHandler({
   return async function handleWsControlMessage(msg: Record<string, any>, ws: any) {
     if (msg.type === "abort") {
       const abortPath = msg.sessionPath || engine.currentSessionPath;
-      if (engine.isSessionStreaming(abortPath)) {
-        const ss = sessionState.get(abortPath);
-        if (ss) ss.userAbortRequested = true;
+      const ss = sessionState.get(abortPath);
+      const engineStreaming = engine.isSessionStreaming(abortPath);
+      if (ss?.isStreaming || engineStreaming) {
+        if (ss) {
+          ss.userAbortRequested = true;
+          ss.turnAbortController?.abort();
+        }
         try {
-          await hub.abort(abortPath);
+          if (engineStreaming) await hub.abort(abortPath);
         } catch (err: any) {
           console.warn("[chat] abort failed:", err?.message || err);
         }

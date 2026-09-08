@@ -5,6 +5,7 @@ import { runSearchQuery } from "../../lib/tools/web-search.js";
 import { buildStructuredSection, extractToolText, parseIndexSnapshot, parseStockSnapshot, parseWeatherSnapshot } from "./report-research-answer.js";
 import { detectPrimaryIndexTarget, extractCompositeWeatherLocation, extractFlightWeatherRoute, extractPrimaryUsTicker, extractStockTargetForResearch, extractWeatherLocationForResearch } from "./report-research-intent.js";
 import { currentLynnVersionTag } from "./release-info.js";
+import { runAbortable } from "../../shared/abortable-task.js";
 import type { IndexResearchTarget, ReportResearchKind, StockResearchTarget } from "./report-research-intent.js";
 
 export type RealtimeResearchToolKind = "live_news" | "sports" | "weather";
@@ -76,6 +77,7 @@ export interface ReportResearchTimeouts {
 }
 
 export interface ReportResearchFetchOptions {
+  signal?: AbortSignal;
   userPrompt?: unknown;
   prompt?: unknown;
   text?: unknown;
@@ -573,7 +575,13 @@ export const defaultReportResearchToolWrappers: ResolvedReportResearchToolWrappe
   webSearch: (query, limit, options) => runSearchQuery(query, limit, options),
 };
 function resolveToolWrappers(opts: ReportResearchFetchOptions = {}): ResolvedReportResearchToolWrappers {
-  return { ...defaultReportResearchToolWrappers, ...(opts.toolWrappers || opts.tools || {}) };
+  const tools = { ...defaultReportResearchToolWrappers, ...(opts.toolWrappers || opts.tools || {}) };
+  return {
+    stockMarket: (...args) => runAbortable(() => tools.stockMarket(...args), opts.signal),
+    realtimeInfo: (...args) => runAbortable(() => tools.realtimeInfo(...args), opts.signal),
+    webSearch: (...args) => runAbortable(() => tools.webSearch(...args), opts.signal),
+    webFetch: (...args) => runAbortable(() => tools.webFetch(...args), opts.signal),
+  };
 }
 function resolveTimeout(opts: ReportResearchFetchOptions | undefined, key: TimeoutKey, fallback: number): number {
   const value = opts?.timeouts?.[key] ?? opts?.[`${key}TimeoutMs`];

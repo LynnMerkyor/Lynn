@@ -1,4 +1,5 @@
 import { wsSend } from "../ws-protocol.js";
+import { runAbortable } from "../../shared/abortable-task.js";
 import { debugLog } from "../../lib/debug-log.js";
 import { t } from "../i18n.js";
 import { classifyRouteIntent } from "../../shared/task-route-intent.js";
@@ -182,6 +183,7 @@ export function createPromptTurnRunner({
     ss,
     promptText,
   }: RunPromptTurnOptions) {
+    let streamToken: string | null = null;
     try {
       const activeSession = engine.getSessionByPath(promptSessionPath);
       prepareChatTurnState(ss, {
@@ -200,7 +202,8 @@ export function createPromptTurnRunner({
       } else if (recordPendingDeleteRequest(ss, promptText)) {
         debugLog()?.log("ws", `[PENDING-DELETE-REQUEST v1] tracked delete request for confirmation rehydrate · session=${promptSessionPath}`);
       }
-      const streamToken = beginSessionStream(ss);
+      streamToken = beginSessionStream(ss);
+      const signal: AbortSignal = ss.turnAbortController.signal;
       ss.activeStreamToken = streamToken;
       ss.streamSource = "user";
       emitStreamEvent(promptSessionPath, ss, { type: "run_start", ...guiRunStartFields(ss) });
@@ -314,6 +317,7 @@ export function createPromptTurnRunner({
             maxTokens: resolveLocalQwen35DirectMaxTokens(promptText, localEnableThinking),
           });
         } catch (directErr: any) {
+          signal.throwIfAborted();
           debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] failed · ${directErr?.message || directErr} · ${promptSessionPath}`);
           const fallbackOk = await fallbackLocalQwen35DirectToBrain({
             sessionPath: promptSessionPath,
@@ -359,7 +363,10 @@ export function createPromptTurnRunner({
           localPrefetch: true,
         });
         try {
-          const reportContext = await buildReportResearchContext(promptText, { userPrompt: promptText });
+          const reportContext = await runAbortable(
+            () => buildReportResearchContext(promptText, { userPrompt: promptText, signal }), signal,
+          );
+          signal.throwIfAborted();
           if (reportContext && reportContext.trim()) {
             const toolSummary = buildPrefetchToolSummary(reportContext);
             ss.hasLocalPrefetchEvidence = true;
@@ -403,6 +410,7 @@ export function createPromptTurnRunner({
             rememberFailedTool(ss, toolName);
           }
         } catch (prefetchErr: any) {
+          signal.throwIfAborted();
           emitStreamEvent(promptSessionPath, ss, {
             type: "tool_end",
             name: toolName,
@@ -434,6 +442,7 @@ export function createPromptTurnRunner({
               earlyCloseVisibleChars: 240,
             });
           } catch (directErr: any) {
+            signal.throwIfAborted();
             debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v2] failed after prefetch · ${directErr?.message || directErr} · ${promptSessionPath}`);
             const fallbackOk = await fallbackLocalQwen35DirectToBrain({
               sessionPath: promptSessionPath,
@@ -460,6 +469,7 @@ export function createPromptTurnRunner({
           return;
         }
       }
+      signal.throwIfAborted();
       if (ss._lastTurnAborted) {
         ss._lastTurnAborted = false;
       }
@@ -471,6 +481,7 @@ export function createPromptTurnRunner({
           ? { images: msg.images, sessionPath: promptSessionPath, streamToken, disableTools: disableTurnTools, turnInstruction: noToolTurnInstruction }
           : { sessionPath: promptSessionPath, streamToken, disableTools: disableTurnTools, turnInstruction: noToolTurnInstruction },
       );
+      if (ss.streamId !== streamToken || hasStreamEvent(ss, "turn_end")) return;
       if (!ss.isStreaming) {
         if (hasToolExecutionInFlight(ss)) {
           scheduleToolFinalizationFallback(promptSessionPath, ss);
@@ -493,6 +504,7 @@ export function createPromptTurnRunner({
         debugLog()?.log("ws", `hub.send returned while server stream remains open · ${promptSessionPath}`);
       }
     } catch (err: any) {
+      if (streamToken && (ss.streamId !== streamToken || hasStreamEvent(ss, "turn_end"))) return;
       clearTurnTimers(ss);
       const userAborted = ss?.userAbortRequested === true;
       const aborted = userAborted

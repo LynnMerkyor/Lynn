@@ -19,9 +19,16 @@ Work only in `/Users/lynn/.codex/worktrees/821f/Lynn`, branch `codex/release-v0.
 
 ## Development evidence
 
-- Root: 3481 tests passed, 3 skipped. Brain: 370 passed. Both TypeScript checks passed.
+- Root: 3487 tests passed, 3 skipped. Brain: 370 passed. Both TypeScript checks passed.
 - Optional plugin install/load/unload and preservation of existing data passed; expert manager and file preview follow-up: 8 passed.
 - Both original avatar SHA256 values unchanged.
 - Isolated real Electron UI: tree toggle, reduced motion, theme gating and pointer-events passed; real model reply and translation succeeded. File filtering, thumbnail loading, old gallery navigation and empty-folder return passed.
 - Evidence: `output/release-v0.87.0/` (screenshots, interaction JSON, per-stage logs).
 - Release gates remain in progress. Initial preflight stopped at a stale CLI README version (87/88 static checks); fixed and resumed from static checks in `overnight-continuation.log`. No remote release assets have been changed.
+
+## Final interaction fixes
+
+- Editing history then switching/starting a conversation now clears the old edit target.
+- User cancellation covers pending research and direct local-model requests; cancelled or superseded turns discard late results.
+- 23 related tests and both type checks passed; the actual Electron workflow stopped prefetch in 82 ms with no stale edit error or stopping notice.
+- Final source rebuild, runtime import smoke, renderer chunk checks and static release checks (88/88) passed. Updated package, installed-app and live gates follow this source freeze.

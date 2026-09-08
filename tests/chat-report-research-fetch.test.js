@@ -8,6 +8,19 @@ import {
 import { buildDirectResearchAnswer } from "../server/chat/report-research-answer.js";
 
 describe("report research fetch module", () => {
+  it("cancels a pending tool and prevents subsequent work after cancellation", async () => {
+    const controller = new AbortController();
+    const stockMarket = vi.fn(() => new Promise(() => {}));
+    const options = { signal: controller.signal, toolWrappers: { stockMarket } };
+    const pending = executeStockMarketTool({ query: "AAPL" }, options);
+    const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    await Promise.resolve();
+    controller.abort();
+    await rejected;
+    await expect(executeStockMarketTool({ query: "MSFT" }, options)).rejects.toMatchObject({ name: "AbortError" });
+    expect(stockMarket).toHaveBeenCalledTimes(1);
+  });
+
   it("supports wrapper-injected realtime tools for isolated fetch tests", async () => {
     const realtimeInfo = vi.fn().mockResolvedValue({
       content: [{ text: "杭州 current weather\n- 天气: Cloudy\n- 温度: 19°C" }],

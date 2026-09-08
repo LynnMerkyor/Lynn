@@ -20,6 +20,25 @@ function sseResponse(events) {
 }
 
 describe("local Qwen3.5 direct runner", () => {
+  it("aborts a pending connection when the user stops, without treating it as a timeout", async () => {
+    const controller = new AbortController();
+    let requestSignal;
+    const pending = streamLocalQwen35Completion({
+      signal: controller.signal,
+      timeoutMs: 60_000,
+      fetchImpl: async (_url, opts) => {
+        requestSignal = opts.signal;
+        return new Promise((_resolve, reject) => {
+          opts.signal.addEventListener("abort", () => reject(opts.signal.reason), { once: true });
+        });
+      },
+    });
+    const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    controller.abort();
+    await rejected;
+    expect(requestSignal.aborted).toBe(true);
+  });
+
   it("streams reasoning, content, and usage from OpenAI-compatible SSE", async () => {
     const fetchImpl = vi.fn(async () => sseResponse([
       { choices: [{ delta: { reasoning_content: "想一下" } }] },

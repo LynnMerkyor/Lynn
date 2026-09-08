@@ -40,7 +40,7 @@ import { useGitContext } from './input/useGitContext';
 import { useConfiguredThinkingLevel } from './input/useConfiguredThinkingLevel';
 import { useTextareaAutoResize } from './input/useTextareaAutoResize';
 import { detectInlineFileSuggestion } from './input/file-context-suggestions';
-import { consumeEditResendTarget } from './input/edit-resend-target';
+import { consumeEditResendTarget, type EditResendTargetRef } from './input/edit-resend-target';
 import { computeComposerTextUpdate, type ComposerInsertMode } from './input/composer-text';
 import {
   fileToWorkingSet,
@@ -94,6 +94,9 @@ function InputAreaInner() {
   const clearComposerState = useStore(s => s.clearComposerState);
   const setLastSubmittedDraft = useStore(s => s.setLastSubmittedDraft);
   const setInlineNotice = useStore(s => s.setInlineNotice);
+  useEffect(() => {
+    if (!isStreaming && inlineNotice === '正在停止当前回答…') setInlineNotice(null);
+  }, [isStreaming, inlineNotice, setInlineNotice]);
   const setInlineError = useStore(s => s.setInlineError);
   const workingSetRecentFiles = useStore(s => s.workingSetRecentFiles);
   const rememberWorkingSetFile = useStore(s => s.rememberWorkingSetFile);
@@ -204,7 +207,10 @@ function InputAreaInner() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposing = useRef(false);
   const skipNextDraftSaveRef = useRef(true);
-  const editResendTargetRef = useRef<string | null>(null);
+  const editResendTargetRef = useRef<EditResendTargetRef['current']>(null);
+  useEffect(() => {
+    editResendTargetRef.current = null;
+  }, [composerSessionKey]);
 
   const inputFocusTrigger = useStore(s => s.inputFocusTrigger);
   const requestInputFocus = useStore(s => s.requestInputFocus);
@@ -518,7 +524,7 @@ function InputAreaInner() {
     selectedFolder,
     setComposerTextFromEvent,
     setEditResendTarget: (messageId) => {
-      editResendTargetRef.current = messageId;
+      editResendTargetRef.current = messageId ? { messageId, sessionKey: composerSessionKey } : null;
     },
     setInlineNotice,
     setPendingConfirm,
@@ -628,7 +634,9 @@ function InputAreaInner() {
         readFileBase64: window.hana?.readFileBase64?.bind(window.hana),
       });
 
-      const replaceFromMessageId = consumeEditResendTarget(editResendTargetRef, mode);
+      const latestSession = useStore.getState();
+      const replaceFromMessageId = consumeEditResendTarget(editResendTargetRef, mode,
+        getComposerSessionKey(latestSession.currentSessionPath, latestSession.pendingNewSession));
       const sent = await submitPromptTask({
         ...prepared.submission,
         replaceFromMessageId,

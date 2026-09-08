@@ -42,6 +42,7 @@ export interface StreamLocalQwen35CompletionOptions {
   enableThinking?: boolean;
   maxTokens?: number;
   timeoutMs?: number;
+  signal?: AbortSignal;
   temperature?: number;
   fetchImpl?: LocalQwen35FetchImpl;
   onFirstDelta?: () => void;
@@ -65,6 +66,7 @@ export async function streamLocalQwen35Completion({
   enableThinking,
   maxTokens,
   timeoutMs,
+  signal,
   temperature = 0.2,
   fetchImpl = globalThis.fetch as unknown as LocalQwen35FetchImpl,
   onFirstDelta,
@@ -78,6 +80,9 @@ export async function streamLocalQwen35Completion({
   }
 
   const controller = new AbortController();
+  signal?.throwIfAborted();
+  const onAbort = () => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", onAbort, { once: true });
   let abortedByTimeout = false;
   let timedOutAfterVisibleOutput = false;
   let assistantText = "";
@@ -120,9 +125,11 @@ export async function streamLocalQwen35Completion({
     let buffer = "";
     let streamDone = false;
     for await (const chunk of res.body) {
+      signal?.throwIfAborted();
       buffer += decoder.decode(chunk, { stream: true });
       let newlineIdx = buffer.indexOf("\n");
       while (newlineIdx >= 0) {
+        signal?.throwIfAborted();
         const line = buffer.slice(0, newlineIdx).trim();
         buffer = buffer.slice(newlineIdx + 1);
         newlineIdx = buffer.indexOf("\n");
@@ -167,11 +174,13 @@ export async function streamLocalQwen35Completion({
       }
     }
   } catch (err) {
+    signal?.throwIfAborted();
     if (!(abortedByTimeout && assistantText.trim())) {
       throw err;
     }
     timedOutAfterVisibleOutput = true;
   } finally {
+    signal?.removeEventListener("abort", onAbort);
     clearTimeout(timeout);
   }
 

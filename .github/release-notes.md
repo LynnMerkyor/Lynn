@@ -21,6 +21,8 @@ Lynn --version
 
 - **Lynn 窗边树影**：原创 SVG 枝叶与柔和窗光替代视频，保留原来的 Lynn 头像。设置 → 界面中按需开启；后台暂停，减少动态效果时静止，深色和高对比主题停用。
 - **输入栏精简**：移除常驻任务模式，小说、长文、社媒、代码、商务、翻译、研究和笔记改为可编辑的斜杠模板。保留深度调研、写作布局与执行权限选择。
+- **编辑会话隔离**：编辑历史消息后切换或新建对话，会清空旧消息的编辑目标，避免下一条消息被错误当成历史重发。
+- **停止及时生效**：检索预处理和本地模型直连都支持取消，停止后的迟到结果不会继续生成回答；结束后清除停止提示。
 - **文件与图片统一**：文件面板增加“全部 / 图片”筛选，保留文件夹入口、旧 gallery 文件与图片生成。
 - **翻译收进菜单**：在回复的“更多消息操作”中选择目标语言，译文仍显示在原回复下方。
 - **本地模型提示减负**：聊天不再主动弹出安装推荐；设置中的模型安装和已选择本地模型的运行状态继续保留。
@@ -33,6 +35,8 @@ Lynn --version
 
 - Replace the tree-shadow video with Lynn's original SVG canopy and soft window light. Preserve the Lynn portrait. Opt in under Settings → Interface; animation pauses in the background and stays still with reduced motion. Dark and high-contrast themes disable the effect.
 - Replace persistent task modes with explicit, editable slash templates. Keep deep research, writing layout and security controls.
+- Clear pending history-edit targets when switching or starting conversations so new messages cannot accidentally edit an old session.
+- Cancel pending research and direct local-model requests promptly; ignore late research results and clear the stopping notice when the turn ends.
 - Merge images into the file panel's All / Images filter; retain folders, existing gallery files and image generation.
 - Move translation to each reply's More menu, retaining language selection and the translation below the reply.
 - Remove proactive local-model installation prompts from chat; keep installation in model settings and status for selected local models.

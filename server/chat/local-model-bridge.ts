@@ -137,6 +137,7 @@ export function createLocalModelBridge({
         ? { images, sessionPath, streamToken, disableTools, turnInstruction, modelOverride }
         : { sessionPath, streamToken, disableTools, turnInstruction, modelOverride },
     );
+    if (streamToken && (ss.streamId !== streamToken || ss.endedAt > 0)) return;
     if (!ss.isStreaming) {
       if (hasToolExecutionInFlight(ss)) {
         scheduleToolFinalizationFallback(sessionPath, ss);
@@ -156,10 +157,13 @@ export function createLocalModelBridge({
   }
 
   async function fallbackLocalQwen35DirectToBrain({ sessionPath, ss, promptText, effectivePromptText, modelInfo, msg, streamToken, disableTools, turnInstruction, reason }: any) {
+    const signal: AbortSignal | undefined = ss.turnAbortController?.signal;
+    signal?.throwIfAborted();
     if (ss.hasOutput || ss.hasThinking) {
       return false;
     }
     const fallbackModel = await resolveBrainTurnFallback(sessionPath, ss, reason, modelInfo);
+    signal?.throwIfAborted();
     if (!fallbackModel) return false;
     ss.streamSource = "brain_fallback";
     ss.effectivePromptText = effectivePromptText || promptText;
@@ -176,6 +180,8 @@ export function createLocalModelBridge({
   }
 
   async function streamLocalQwen35DirectBridge(sessionPath: any, ss: any, originalPromptText: any, effectivePromptText: any, modelInfo: any = {}, opts: any = {}) {
+    const signal: AbortSignal | undefined = ss.turnAbortController?.signal;
+    signal?.throwIfAborted();
     const startedAt = Date.now();
     const localProviderId = String(modelInfo?.provider || LOCAL_QWEN35_PROVIDER_ID);
     const localModelId = String(modelInfo?.modelId || modelInfo?.id || LOCAL_QWEN35_MODEL_ID);
@@ -208,6 +214,7 @@ export function createLocalModelBridge({
     };
 
     const runAttempt = async ({ attemptEnableThinking, attemptMaxTokens, attemptTimeoutMs, allowEarlyClose }: any) => {
+      signal?.throwIfAborted();
       const attemptMessages = buildAttemptMessages(attemptEnableThinking);
       const attempt = await streamLocalQwen35Completion({
         endpoint: LOCAL_QWEN35_DIRECT_ENDPOINT,
@@ -216,6 +223,7 @@ export function createLocalModelBridge({
         enableThinking: attemptEnableThinking,
         maxTokens: attemptMaxTokens,
         timeoutMs: attemptTimeoutMs,
+        signal,
         onFirstDelta: () => {
           if (!firstModelDeltaSeen) {
             firstModelDeltaSeen = true;
@@ -245,45 +253,50 @@ export function createLocalModelBridge({
       return attempt;
     };
 
-    const firstAttempt = await runAttempt({
-      attemptEnableThinking: enableThinking,
-      attemptMaxTokens: maxTokens,
-      attemptTimeoutMs: timeoutMs,
-      allowEarlyClose: true,
-    });
-    if (shouldRetryLocalQwen35WithoutThinking({
-      enableThinking,
-      assistantText: firstAttempt.assistantText,
-      reasoningText: firstAttempt.reasoningText,
-    })) {
-      if (ss.isThinking) {
-        ss.isThinking = false;
-        emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
-      }
-      debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] thinking-only output, retrying with thinking-off · reasoningChars=${firstAttempt.reasoningText.length} · ${sessionPath}`);
-      const retryAttempt = await runAttempt({
-        attemptEnableThinking: false,
-        attemptMaxTokens: resolveLocalQwen35DirectMaxTokens(originalPromptText, false),
-        attemptTimeoutMs: 60_000,
-        allowEarlyClose: false,
+    try {
+      const firstAttempt = await runAttempt({
+        attemptEnableThinking: enableThinking,
+        attemptMaxTokens: maxTokens,
+        attemptTimeoutMs: timeoutMs,
+        allowEarlyClose: true,
       });
-      if (!retryAttempt.assistantText.trim()) {
-        assistantText += LOCAL_QWEN35_EMPTY_CONTENT_FALLBACK_MESSAGE;
-        feedAssistantVisibleText(sessionPath, ss, LOCAL_QWEN35_EMPTY_CONTENT_FALLBACK_MESSAGE);
+      if (shouldRetryLocalQwen35WithoutThinking({
+        enableThinking,
+        assistantText: firstAttempt.assistantText,
+        reasoningText: firstAttempt.reasoningText,
+      })) {
+        if (ss.isThinking) {
+          ss.isThinking = false;
+          emitStreamEvent(sessionPath, ss, { type: "thinking_end" });
+        }
+        debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] thinking-only output, retrying with thinking-off · reasoningChars=${firstAttempt.reasoningText.length} · ${sessionPath}`);
+        const retryAttempt = await runAttempt({
+          attemptEnableThinking: false,
+          attemptMaxTokens: resolveLocalQwen35DirectMaxTokens(originalPromptText, false),
+          attemptTimeoutMs: 60_000,
+          allowEarlyClose: false,
+        });
+        if (!retryAttempt.assistantText.trim()) {
+          assistantText += LOCAL_QWEN35_EMPTY_CONTENT_FALLBACK_MESSAGE;
+          feedAssistantVisibleText(sessionPath, ss, LOCAL_QWEN35_EMPTY_CONTENT_FALLBACK_MESSAGE);
+        }
       }
+      stopWarmupOnce();
+      signal?.throwIfAborted();
+      flushBufferedAssistantText(sessionPath, ss);
+      persistLocalQwen35DirectTurn(sessionPath, originalPromptText, assistantText, {
+        reasoningText,
+        usage,
+        provider: localProviderId,
+        model: localModelId,
+      });
+      closeLocalQwen35DirectTurn(sessionPath, ss, {
+        debugLabel: `chars=${assistantText.length} ms=${Date.now() - startedAt}`,
+      });
+      return true;
+    } finally {
+      stopWarmupOnce();
     }
-    stopWarmupOnce();
-    flushBufferedAssistantText(sessionPath, ss);
-    persistLocalQwen35DirectTurn(sessionPath, originalPromptText, assistantText, {
-      reasoningText,
-      usage,
-      provider: localProviderId,
-      model: localModelId,
-    });
-    closeLocalQwen35DirectTurn(sessionPath, ss, {
-      debugLabel: `chars=${assistantText.length} ms=${Date.now() - startedAt}`,
-    });
-    return true;
   }
 
   return {

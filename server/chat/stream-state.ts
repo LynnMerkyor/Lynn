@@ -208,6 +208,8 @@ function resetToolEvidenceState(ss: SessionLike): void {
  * new stream starts, including turns that follow stale-stream recovery.
  */
 export function prepareChatTurnState(ss: SessionLike, options: PrepareChatTurnStateOptions): SessionLike {
+  ss.turnAbortController?.abort();
+  ss.turnAbortController = new AbortController();
   clearTurnTimers(ss);
   clearSlowToolTimers(ss);
   resetTurnParsers(ss);
@@ -257,6 +259,8 @@ export function prepareChatTurnState(ss: SessionLike, options: PrepareChatTurnSt
 }
 
 export function resetCompletedTurnState(ss: SessionLike): void {
+  ss.turnAbortController?.abort();
+  ss.turnAbortController = null;
   clearTurnTimers(ss);
   clearSlowToolTimers(ss);
   ss.activeStreamToken = null;

@@ -839,6 +839,10 @@ export function createToolTurnFinalizer({
 
   function closeStreamAfterError(sessionPath: any, ss: any, reason: any = "model_tool_error") {
     if (!sessionPath || !ss || hasStreamEvent(ss, "turn_end")) return;
+    if (ss.userAbortRequested) {
+      closeStreamWithVisibleFallback(sessionPath, ss, ss.hasOutput ? "" : "已停止本轮回答。", "user_aborted", { trustedFallback: true });
+      return;
+    }
     if (!ss.hasOutput && !ss.hasToolCall) ss._lastTurnAborted = true;
     const fallbackText = !ss.hasOutput
       ? (hasToolEvidence(ss)
