@@ -25,6 +25,9 @@ desktop/main.bundle.cjs
 .cache/
 desktop/dist-renderer/
 vendor/
+!lib/mcp/vendor/
+!lib/mcp/vendor/kimi-datasource/
+!lib/mcp/vendor/kimi-datasource/*
 inbox/
 
 # 运行时 / 依赖

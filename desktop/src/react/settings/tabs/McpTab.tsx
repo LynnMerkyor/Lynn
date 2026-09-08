@@ -3,6 +3,8 @@ import { hanaFetch } from '../api';
 import { t } from '../helpers';
 import { useSettingsStore } from '../store';
 import styles from '../Settings.module.css';
+import { KimiDatasourceCard } from './KimiDatasourceCard';
+import { McpOAuthControls } from './McpOAuthControls';
 
 import {
   BUILTIN_FALLBACKS,
@@ -313,6 +315,7 @@ export function McpTab() {
 
   return (
     <div className={`${styles['settings-tab-content']} ${styles['active']}`} data-tab="mcp">
+      <KimiDatasourceCard onChanged={loadServers} />
       <section className={styles['settings-section']}>
         <div className={styles['settings-section-header']}>
           <h2 className={styles['settings-section-title']}>{t('settings.mcp.title') || 'MCP'}</h2>
@@ -539,10 +542,11 @@ export function McpTab() {
             <select
               className={styles['settings-input']}
               value={draft.transport}
-              onChange={(e) => setDraft((prev) => ({ ...prev, transport: e.target.value as 'stdio' | 'sse' }))}
+              onChange={(e) => setDraft((prev) => ({ ...prev, transport: e.target.value as 'stdio' | 'sse' | 'http' }))}
             >
               <option value="stdio">stdio</option>
               <option value="sse">SSE</option>
+              <option value="http">Streamable HTTP</option>
             </select>
           </div>
         </div>
@@ -588,6 +592,16 @@ export function McpTab() {
                 onChange={(e) => setDraft((prev) => ({ ...prev, url: e.target.value }))}
                 placeholder="https://mcp.example.com/sse"
               />
+            </div>
+            <div className={styles['settings-field']}>
+              <label className={styles['settings-toggle-row']}><input type="checkbox" checked={!!draft.oauthEnabled} onChange={event => setDraft(prev => ({ ...prev, oauthEnabled: event.target.checked }))} /> OAuth</label>
+              {draft.oauthEnabled && <>
+                <label className={styles['settings-field-label']} htmlFor="mcp-oauth-client">OAuth Client ID</label>
+                <input id="mcp-oauth-client" className={styles['settings-input']} value={draft.oauthClientId || ''} onChange={event => setDraft(prev => ({ ...prev, oauthClientId: event.target.value }))} placeholder="Optional · automatic public client registration" />
+                <label className={styles['settings-field-label']} htmlFor="mcp-oauth-scope">OAuth scopes</label>
+                <input id="mcp-oauth-scope" className={styles['settings-input']} value={draft.oauthScope || ''} onChange={event => setDraft(prev => ({ ...prev, oauthScope: event.target.value }))} placeholder="Optional · discovered from the server" />
+                {selectedServer?.oauth && <McpOAuthControls key={selectedServer.name} name={selectedServer.name} onConnected={loadServers} />}
+              </>}
             </div>
             <div className={styles['settings-field']}>
               <label className={styles['settings-field-label']}>{t('settings.mcp.messageUrl') || '消息 URL（可选）'}</label>

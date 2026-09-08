@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { createDefaultMcpServerTemplate } from "../../lib/mcp-client.js";
+import { createKimiDatasourceRoute } from "./kimi-datasource.js";
 
 type McpRouteBody = {
   name?: string;
@@ -11,6 +12,9 @@ type McpRouteBody = {
 };
 
 type McpManagerLike = {
+  oauthStatus?(name: string): unknown;
+  startOAuth?(name: string): Promise<unknown>;
+  disconnectOAuth?(name: string): Promise<void>;
   listServerStates(): unknown;
   listBuiltinStates(): unknown;
   saveServer(name: string, config: unknown): unknown | Promise<unknown>;
@@ -22,6 +26,7 @@ type McpManagerLike = {
 };
 
 type McpRouteEngine = {
+  lynnHome?: string;
   mcpManager?: McpManagerLike | null;
   currentSessionPath?: string | null;
   getSessionActiveMcp?: (sessionPath: string) => unknown;
@@ -39,6 +44,21 @@ function getManager(engine: McpRouteEngine): McpManagerLike | null {
 
 export function createMcpRoute(engine: McpRouteEngine): Hono {
   const route = new Hono();
+  route.route("/", createKimiDatasourceRoute(() => getManager(engine), engine.lynnHome ? `${engine.lynnHome}/user/kimi-datasource` : undefined));
+  route.get("/mcp/oauth/:name", c => {
+    try { c.header("Cache-Control", "no-store"); return c.json(getManager(engine)?.oauthStatus?.(c.req.param("name")) || { status: "idle" }); }
+    catch (error) { return c.json({ error: errorMessage(error) }, 400); }
+  });
+  route.post("/mcp/oauth/:name", async c => {
+    const manager = getManager(engine);
+    if (!manager?.startOAuth) return c.json({ error: "MCP OAuth unavailable" }, 503);
+    try { return c.json(await manager.startOAuth(c.req.param("name"))); }
+    catch (error) { return c.json({ error: errorMessage(error) }, 400); }
+  });
+  route.delete("/mcp/oauth/:name", async c => {
+    try { await getManager(engine)?.disconnectOAuth?.(c.req.param("name")); return c.json({ ok: true }); }
+    catch (error) { return c.json({ error: errorMessage(error) }, 400); }
+  });
 
   route.get("/mcp/servers", async (c) => {
     const manager = getManager(engine);

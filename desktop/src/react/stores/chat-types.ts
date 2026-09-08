@@ -58,6 +58,7 @@ export interface PromptImage {
 }
 
 export interface UserAttachment {
+  uploadId?: string;
   path: string;
   name: string;
   isDir: boolean;
@@ -132,7 +133,7 @@ export type ContentBlock =
   | { type: 'tool_group'; tools: ToolCall[]; collapsed: boolean }
   | { type: 'text'; html: string; plainText?: string }
   | { type: 'xing'; title: string; content: string; sealed: boolean }
-  | { type: 'file_output'; filePath: string; label: string; ext: string }
+  | { type: 'file_output'; filePath: string; label: string; ext: string; fileId?: string; sessionId?: string; downloadUrl?: string }
   | { type: 'file_diff'; filePath: string; diff: string; linesAdded: number; linesRemoved: number; rollbackId?: string }
   | { type: 'artifact'; artifactId: string; artifactType: string; title: string; content: string; language?: string }
   | { type: 'browser_screenshot'; base64: string; mimeType: string }

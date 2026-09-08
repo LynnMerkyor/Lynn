@@ -25,11 +25,13 @@ export function FileOutputCard({
   label,
   ext,
   openLabel,
+  downloadUrl,
 }: {
   filePath: string;
   label: string;
   ext: string;
   openLabel: string;
+  downloadUrl?: string;
 }) {
   const [mdHtml, setMdHtml] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -97,6 +99,16 @@ export function FileOutputCard({
         <span className={styles.fileOutputBadge}>{extLabel(ext)}</span>
         <span className={styles.fileOutputLabel}>{label || filePath.split('/').pop() || filePath}</span>
         <div className={styles.fileOutputActions}>
+          {downloadUrl && /^\/api\/session-files\/[a-f0-9]{32}\/[a-f0-9-]{36}$/.test(downloadUrl) && <button type="button" className={styles.fileOutputOpen} onClick={async () => {
+            try {
+              const response = await hanaFetch(downloadUrl);
+              const url = URL.createObjectURL(await response.blob());
+              // A temporary download anchor carries the authenticated response blob; it is not part of the rendered component tree.
+              // eslint-disable-next-line no-restricted-syntax
+              const link = document.createElement('a'); link.href = url; link.download = label || filePath.split('/').pop() || 'download'; link.click();
+              setTimeout(() => URL.revokeObjectURL(url), 60000);
+            } catch (error) { setDiffError(error instanceof Error ? error.message : String(error)); }
+          }}>{isZh ? '下载' : 'Download'}</button>}
           <button type="button" className={styles.fileOutputOpen} onClick={() => openFilePreview(filePath, label, ext)}>
             {openLabel}
           </button>
@@ -272,6 +284,7 @@ export function CronConfirmCard({ confirmId, jobData, status }: { confirmId?: st
     <div className={styles.cronConfirmCard}>
       <div className={styles.cronConfirmTitle}>{jobData.label || t('cron.confirm.title')}</div>
       <div className={styles.cronConfirmMeta}>{jobData.schedule}</div>
+      {jobData.executor?.kind === 'reminder' && <div className={styles.cronConfirmMeta}>{document.documentElement.lang.startsWith('zh') ? '直接提醒 · 不调用模型' : 'Direct reminder · no model call'}</div>}
       <div className={styles.cronConfirmPrompt}>{jobData.prompt}</div>
       {status === 'pending' && confirmId && (
         <div className={styles.cronConfirmActions}>

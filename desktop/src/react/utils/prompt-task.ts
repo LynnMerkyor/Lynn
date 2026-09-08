@@ -284,6 +284,7 @@ export async function prepareComposerTask({
   for (const file of displayAttachments) {
     const cached = imageAttachmentCache.get(file.path);
     attachments.push({
+      uploadId: file.uploadId,
       path: file.path,
       name: file.name,
       isDir: !!file.isDirectory,

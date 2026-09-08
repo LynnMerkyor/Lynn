@@ -4,6 +4,8 @@ import { t, VALID_THEMES, autoSaveConfig } from '../helpers';
 import { SelectWidget } from '../widgets/SelectWidget';
 import { Toggle } from '../widgets/Toggle';
 import styles from '../Settings.module.css';
+import { setLeavesOverlayEnabled, useLeavesOverlayEnabled } from '../../hooks/use-leaves-overlay';
+import { MobileAccessCard } from './MobileAccessCard';
 
 const platform = window.platform;
 const i18n = window.i18n;
@@ -12,6 +14,7 @@ export function InterfaceTab() {
   const { settingsConfig } = useSettingsStore();
   const currentTheme = localStorage.getItem('hana-theme') || 'warm-paper';
   const serifEnabled = localStorage.getItem('hana-font-serif') !== '0';
+  const leavesEnabled = useLeavesOverlayEnabled();
 
   const locale = settingsConfig?.locale || 'zh-CN';
   const localeVal = ['zh-CN', 'zh-TW', 'ja', 'ko', 'en'].includes(locale) ? locale
@@ -112,6 +115,27 @@ export function InterfaceTab() {
           </div>
         </div>
 
+        <div className={styles['tool-caps-group']}>
+          <div className={styles['tool-caps-item']}>
+            <div className={styles['tool-caps-label']}>
+              <span className={styles['tool-caps-name']} id="leaves-overlay-label">{t('settings.appearance.leavesOverlay')}</span>
+              <span className={styles['tool-caps-desc']} id="leaves-overlay-hint">{t('settings.appearance.leavesOverlayHint')}</span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={leavesEnabled}
+              aria-labelledby="leaves-overlay-label"
+              aria-describedby="leaves-overlay-hint"
+              className={`hana-toggle${leavesEnabled ? ' on' : ''}`}
+              onClick={() => {
+                const enabled = !leavesEnabled;
+                setLeavesOverlayEnabled(enabled);
+                platform?.settingsChanged?.('leaves-overlay-changed', { enabled });
+              }}
+            />
+          </div>
+        </div>
       </section>
 
       {/* 语言和地区 */}
@@ -153,6 +177,7 @@ export function InterfaceTab() {
         </div>
       </section>
 
+      <MobileAccessCard />
       {/* #14: Global shortcut discoverability — surfaces the keybinding that was previously
           only set in main.cjs registerGlobalSummon() with no UI exposure. Rebinding still
           happens in Voice tab (existing wiring); this read-only section makes the binding

@@ -19,6 +19,7 @@ export function getComposerSessionKey(sessionPath: string | null, pendingNewSess
 export function attachmentToDraftFile(file: UserAttachment): AttachedFile {
   return {
     path: file.path,
+    uploadId: file.uploadId,
     name: file.name,
     isDirectory: file.isDir,
     base64Data: file.base64Data,

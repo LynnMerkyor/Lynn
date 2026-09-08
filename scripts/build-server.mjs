@@ -93,6 +93,7 @@ const cachedNpmCli = isWin
   : path.join(cacheDir, nodeDirName, "lib", "node_modules", "npm", "bin", "npm-cli.js");
 
 if (!fs.existsSync(cachedNodeBin)) {
+  if (process.env.LYNN_BUILD_OFFLINE === "1") throw new Error(`[build-server] Offline build requires cached runtime: ${cachedNodeBin}`);
   const url = `https://nodejs.org/dist/${NODE_VERSION}/${filename}`;
   console.log(`[build-server] downloading Node.js ${NODE_VERSION} for ${platform}-${arch}...`);
   execSync(`curl -L -o "${cachedArchive}" "${url}"`, { stdio: "inherit" });
@@ -280,6 +281,10 @@ if (fs.existsSync(skillsSrc)) {
 }
 
 // i18n locales（server/i18n.js 通过 fromRoot("desktop","src","locales") 引用）
+fs.mkdirSync(path.join(outDir, "server", "mobile"), { recursive: true });
+fs.cpSync(path.join(ROOT, "server", "mobile", "public"), path.join(outDir, "server", "mobile", "public"), { recursive: true });
+fs.mkdirSync(path.join(outDir, "lib", "mcp", "vendor"), { recursive: true });
+fs.cpSync(path.join(ROOT, "lib", "mcp", "vendor", "kimi-datasource"), path.join(outDir, "lib", "mcp", "vendor", "kimi-datasource"), { recursive: true });
 const localesSrc = path.join(ROOT, "desktop", "src", "locales");
 fs.mkdirSync(path.join(outDir, "desktop", "src", "locales"), { recursive: true });
 fs.cpSync(localesSrc, path.join(outDir, "desktop", "src", "locales"), { recursive: true });
@@ -383,7 +388,25 @@ fs.writeFileSync(
 // （prebuild-install 下载正确 ABI 的预编译二进制）
 // 用 npm install 而非 npm ci：lockfile 跟精简 package.json 不匹配
 console.log("[build-server] installing external dependencies...");
-try {
+const depsRoot = process.env.LYNN_BUILD_DEPS_ROOT;
+if (depsRoot) {
+  const source = fs.realpathSync(path.join(depsRoot, `${osDirName}-${arch}`));
+  if (source === fs.realpathSync(outDir)) throw new Error("[build-server] Dependency source must be separate from the output directory");
+  const sourcePkg = JSON.parse(fs.readFileSync(path.join(source, "package.json"), "utf8"));
+  const canonicalDeps = value => JSON.stringify(Object.entries(value || {}).sort(([a], [b]) => a.localeCompare(b)));
+  if (canonicalDeps(sourcePkg.dependencies) !== canonicalDeps(externalDeps)) throw new Error("[build-server] Cached dependency declarations do not match this build");
+  fs.cpSync(path.join(source, "node_modules"), path.join(outDir, "node_modules"), { recursive: true });
+  const sourceLock = path.join(source, "package-lock.json");
+  if (fs.existsSync(sourceLock)) {
+    const lock = JSON.parse(fs.readFileSync(sourceLock, "utf8"));
+    lock.version = rootPkg.version;
+    if (lock.packages?.[""]) lock.packages[""].version = rootPkg.version;
+    fs.writeFileSync(path.join(outDir, "package-lock.json"), JSON.stringify(lock, null, 2) + "\n");
+  }
+  console.log(`[build-server] reused existing ${osDirName}-${arch} dependencies with matching declarations`);
+} else if (process.env.LYNN_BUILD_OFFLINE === "1") {
+  throw new Error("[build-server] Offline build requires LYNN_BUILD_DEPS_ROOT");
+} else try {
   runWithTargetNode(`"${cachedNpmCli}" install --omit=dev`);
 } catch (err) {
   const fallbackRegistry = process.env.LYNN_BUILD_NPM_REGISTRY || "https://registry.npmjs.org";

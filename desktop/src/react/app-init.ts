@@ -8,6 +8,7 @@
  */
 
 import { useStore } from './stores';
+import { setLeavesOverlayEnabled } from './hooks/use-leaves-overlay';
 import { hanaFetch } from './hooks/use-hana-fetch';
 import { applyAgentIdentity, loadAgents, loadAvatars } from './stores/agent-actions';
 import { loadSessions } from './stores/session-actions';
@@ -412,6 +413,9 @@ export async function initApp(): Promise<void> {
         break;
       case 'font-changed':
         setSerifFont(data.serif);
+        break;
+      case 'leaves-overlay-changed':
+        if (typeof data?.enabled === 'boolean') setLeavesOverlayEnabled(data.enabled);
         break;
     }
   });

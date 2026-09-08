@@ -1,6 +1,7 @@
 import { sanitizeQuotedSelection } from '../utils/composer-state';
 
 export interface AttachedFile {
+  uploadId?: string;
   path: string;
   name: string;
   isDirectory?: boolean;

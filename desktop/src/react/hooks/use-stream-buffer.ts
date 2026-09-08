@@ -589,7 +589,7 @@ class StreamBufferManager {
         this.flush(buf);
         this.updateStreamingMessage(buf, (m) => ({
           ...m,
-          blocks: [...(m.blocks || []), { type: 'file_output', filePath: msg.filePath, label: msg.label, ext: msg.ext }],
+          blocks: [...(m.blocks || []), { type: 'file_output', filePath: msg.filePath, label: msg.label, ext: msg.ext, fileId: msg.fileId, sessionId: msg.sessionId, downloadUrl: msg.downloadUrl }],
         }));
         // 写作模式：通知预览面板
         if (msg.filePath) {

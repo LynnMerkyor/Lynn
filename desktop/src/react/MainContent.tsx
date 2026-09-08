@@ -123,6 +123,7 @@ async function handleDrop(e: React.DragEvent): Promise<void> {
       if (item.dest) {
         useStore.getState().addAttachedFile({
           path: item.dest,
+          uploadId: item.uploadId,
           name: item.name,
           isDirectory: item.isDirectory || false,
         });

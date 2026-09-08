@@ -589,7 +589,7 @@ const ContentBlockView = memo(function ContentBlockView({ block, agentName, agen
         </Suspense>
       );
     case 'file_output':
-      return <FileOutputCard filePath={block.filePath} label={block.label} ext={block.ext} openLabel={openLabel} />;
+      return <FileOutputCard filePath={block.filePath} label={block.label} ext={block.ext} openLabel={openLabel} downloadUrl={block.downloadUrl} />;
     case 'file_diff': {
       const ext = (block.filePath.split('.').pop() || '').toLowerCase();
       const isProse = ext === 'md' || ext === 'markdown' || ext === 'txt';

@@ -26,7 +26,7 @@ export interface HistoryApiResponse {
   }>;
   fileOutputs?: Array<{
     afterIndex: number;
-    files: Array<{ filePath: string; label: string; ext: string }>;
+    files: Array<{ filePath: string; label: string; ext: string; fileId?: string; sessionId?: string; downloadUrl?: string }>;
   }>;
   fileDiffs?: Array<{
     afterIndex: number;
@@ -54,7 +54,7 @@ export function buildItemsFromHistory(data: HistoryApiResponse): ChatListItem[] 
   const items: ChatListItem[] = [];
 
   // 按 afterIndex 分组 fileOutputs 和 artifacts
-  const fileMap: Record<number, Array<{ filePath: string; label: string; ext: string }>> = {};
+  const fileMap: Record<number, Array<{ filePath: string; label: string; ext: string; fileId?: string; sessionId?: string; downloadUrl?: string }>> = {};
   const diffMap: Record<number, Array<{ filePath: string; diff: string; linesAdded: number; linesRemoved: number; rollbackId?: string }>> = {};
   const artMap: Record<number, Array<{ artifactId: string; artifactType: string; title: string; content: string; language?: string }>> = {};
 
@@ -184,7 +184,7 @@ export function buildItemsFromHistory(data: HistoryApiResponse): ChatListItem[] 
       const files = fileMap[i];
       if (files) {
         for (const f of files) {
-          blocks.push({ type: 'file_output', filePath: f.filePath, label: f.label, ext: f.ext });
+          blocks.push({ type: 'file_output', filePath: f.filePath, label: f.label, ext: f.ext, ...(f.downloadUrl ? { downloadUrl: f.downloadUrl, fileId: f.fileId, sessionId: f.sessionId } : {}) });
         }
       }
 

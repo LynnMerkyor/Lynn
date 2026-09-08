@@ -6,6 +6,8 @@
  */
 
 export type McpServerState = {
+  env?: Record<string, unknown>;
+  oauth?: { clientId?: string; scope?: string };
   name: string;
   transport: 'stdio' | 'sse' | 'http';
   disabled?: boolean;
@@ -275,8 +277,12 @@ export function humanizeBuiltinError(name: string, rawMessage?: string | null) {
 }
 
 export type DraftState = {
+  env?: Record<string, unknown>;
+  oauthEnabled?: boolean;
+  oauthClientId?: string;
+  oauthScope?: string;
   name: string;
-  transport: 'stdio' | 'sse';
+  transport: 'stdio' | 'sse' | 'http';
   command: string;
   argsText: string;
   cwd: string;
@@ -411,8 +417,10 @@ export function headersFromText(value: string): Record<string, string> {
 export function draftFromServer(server: McpServerState | null): DraftState {
   if (!server) return emptyDraft();
   return {
+    oauthEnabled: !!server.oauth, oauthClientId: server.oauth?.clientId || '', oauthScope: server.oauth?.scope || '',
     name: server.name || '',
-    transport: server.transport === 'sse' ? 'sse' : 'stdio',
+    transport: server.transport === 'http' ? 'http' : server.transport === 'sse' ? 'sse' : 'stdio',
+    env: server.env,
     command: server.command || '',
     argsText: (server.args || []).join('\n'),
     cwd: server.cwd || '',
@@ -426,9 +434,10 @@ export function draftFromServer(server: McpServerState | null): DraftState {
 }
 
 export function buildPayload(draft: DraftState) {
-  if (draft.transport === 'sse') {
+  if (draft.transport === 'sse' || draft.transport === 'http') {
     return {
-      transport: 'sse',
+      transport: draft.transport,
+      ...(draft.oauthEnabled ? { oauth: { clientId: draft.oauthClientId || '', scope: draft.oauthScope || '' } } : {}),
       url: draft.url.trim(),
       headers: headersFromText(draft.headersText),
       messageUrl: draft.messageUrl.trim(),
@@ -437,6 +446,7 @@ export function buildPayload(draft: DraftState) {
   }
   return {
     command: draft.command.trim(),
+    ...(draft.env ? { env: draft.env } : {}),
     args: argsFromText(draft.argsText),
     cwd: draft.cwd.trim(),
     disabled: draft.disabled,

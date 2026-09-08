@@ -154,7 +154,10 @@
       "resumePrompt": "继续刚才的任务，先告诉我当前进度和下一步。",
       "workspacePrompt": "先快速读一下当前工作区，告诉我你会从哪里开始。",
       "fleetTip": "CLI 并行协作:在终端用 worker 协议处理长任务"
-    }
+    },
+    "searchingBody": "正在搜索历史正文…",
+    "bodySearchFailed": "正文搜索失败，请重试；仍显示标题匹配。",
+    "bodySearchPartial": "部分会话过大或不可读，或结果超过上限；请缩小关键词范围。"
   },
   "titlebar": {
     "task": {
@@ -792,7 +795,9 @@
       "auto": "自动",
       "autoMode": "跟随系统",
       "serifFont": "衬线字体",
-      "serifFontHint": "使用衬线体显示正文内容"
+      "serifFontHint": "使用衬线体显示正文内容",
+      "leavesOverlay": "树影光感",
+      "leavesOverlayHint": "在浅色界面边缘投下轻柔树影。后台暂停；深色、高对比主题或系统减少动态效果时停用。"
     },
     "locale": {
       "title": "语言和地区",
@@ -959,7 +964,28 @@
       "resources": "资源",
       "source": "来源",
       "local": "本地配置",
-      "discovered": "自动发现"
+      "discovered": "自动发现",
+      "kimi": {
+        "description": "内置官方 Kimi 数据源。扫码登录后使用你自己的账号和额度，凭据仅保存在本机，无需安装 Kimi CLI。",
+        "home": "本机插件扫描目录（可选，沿用 Kimi Code 登录）",
+        "homePlaceholder": "留空使用默认目录 ~/.kimi-code",
+        "scan": "扫描本机插件",
+        "login": "扫码登录内置 Kimi",
+        "install": "使用说明",
+        "notFound": "尚未发现已安装的 Kimi Datasource。请在 Kimi Code 的 /plugins → Official 中安装后重新扫描。",
+        "command": "查看启动配置",
+        "enable": "启用并连接",
+        "connected": "MCP 已连接。数据查询权限以你的 Kimi 登录状态和额度为准。",
+        "saved": "配置已保存，请在服务器列表查看连接状态。",
+        "waiting": "等待 Kimi 官方授权，可扫描二维码或打开登录页面。",
+        "qrAlt": "Kimi 官方登录二维码",
+        "openLogin": "打开官方登录页面",
+        "cancel": "取消登录",
+        "loggedIn": "Kimi 已登录，内置数据源将自动连接。",
+        "bundled": "· 内置官方版本",
+        "local": "· 本机安装",
+        "localOptions": "使用已安装的 Kimi Code 插件（可选）"
+      }
     },
     "oauth": {
       "title": "快速登录",

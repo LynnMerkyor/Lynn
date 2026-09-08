@@ -82,6 +82,13 @@ export function copyLegacyFiles(rootDir: string): Plugin {
           path.join(outDir, 'assets', asset),
         );
       }
+
+      for (const notice of ['NOTICE.md', 'LICENSE-openhanako.txt']) {
+        copyEntry(
+          path.join(srcDir, 'assets/textures', notice),
+          path.join(outDir, 'assets/textures', notice),
+        );
+      }
     },
   };
 }

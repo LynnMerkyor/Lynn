@@ -86,7 +86,10 @@
     "bridgeShort": "연결",
     "capability": {
       "fleetTip": "CLI 워커: 긴 작업은 터미널에서 헤드리스로 실행"
-    }
+    },
+    "searchingBody": "Searching conversation text…",
+    "bodySearchFailed": "Body search failed. Title matches are still shown.",
+    "bodySearchPartial": "Some sessions were too large or unreadable, or the result limit was reached. Refine your search."
   },
   "session": {
     "untitled": "새 대화",
@@ -563,7 +566,9 @@
       "auto": "자동",
       "autoMode": "시스템",
       "serifFont": "명조 글꼴",
-      "serifFontHint": "본문에 명조 글꼴을 사용해요"
+      "serifFontHint": "본문에 명조 글꼴을 사용해요",
+      "leavesOverlay": "나무 그림자",
+      "leavesOverlayHint": "밝은 테마 가장자리에 부드러운 나무 그림자를 표시해요. 백그라운드에서는 일시 정지하며, 어두운 테마·고대비 테마·동작 줄이기 설정에서는 꺼져요."
     },
     "locale": {
       "title": "언어 및 지역",
@@ -727,7 +732,28 @@
       "resources": "리소스",
       "source": "출처",
       "local": "로컬 설정",
-      "discovered": "자동 발견"
+      "discovered": "자동 발견",
+      "kimi": {
+        "description": "공식 Kimi 데이터 소스가 내장되어 있습니다. QR 코드로 로그인하여 본인 계정과 이용 한도를 사용하세요. 인증 정보는 이 기기에만 저장되며 Kimi CLI를 설치할 필요가 없습니다.",
+        "home": "로컬 플러그인 폴더 (선택 사항, Kimi Code 로그인 사용)",
+        "homePlaceholder": "비워 두면 ~/.kimi-code 사용",
+        "scan": "로컬 플러그인 검색",
+        "login": "QR 코드로 Kimi 로그인",
+        "install": "사용 안내",
+        "notFound": "로컬 플러그인이 없습니다. 내장 버전을 사용할 수 있습니다.",
+        "command": "실행 설정 보기",
+        "enable": "활성화 및 연결",
+        "connected": "MCP에 연결되었습니다. 데이터 접근은 Kimi 계정과 이용 한도에 따라 달라집니다.",
+        "saved": "설정이 저장되었습니다. 서버 목록에서 연결 상태를 확인하세요.",
+        "waiting": "Kimi 인증을 기다리는 중입니다. QR 코드를 스캔하거나 로그인 페이지를 여세요.",
+        "qrAlt": "Kimi 공식 로그인 QR 코드",
+        "openLogin": "공식 로그인 페이지 열기",
+        "cancel": "로그인 취소",
+        "loggedIn": "로그인되었습니다. 내장 데이터 소스에 연결하는 중입니다.",
+        "bundled": "· 공식 내장 버전",
+        "local": "· 로컬 설치",
+        "localOptions": "설치된 Kimi Code 플러그인 사용 (선택 사항)"
+      }
     },
     "oauth": {
       "title": "간편 로그인",

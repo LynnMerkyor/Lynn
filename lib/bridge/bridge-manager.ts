@@ -161,6 +161,7 @@ interface BridgeHub {
 }
 
 interface BridgeEngine {
+  getBridgeSessionPath?(sessionKey: string): string | null;
   agentName: string;
   currentAgentId?: string | null;
   lynnHome: string;
@@ -681,7 +682,7 @@ export class BridgeManager {
 
         // 统一发送所有提取到的媒体
         for (const url of allMediaUrls) {
-          try { await sendBridgeMediaItem(adapter, chatId, url); }
+          try { await sendBridgeMediaItem(adapter, chatId, url, this.engine.getBridgeSessionPath?.(sessionKey) || undefined); }
           catch (err: unknown) { debugLog()?.warn("bridge", `media send failed: ${errorMessage(err)} (${url.slice(0, 60)})`); }
         }
 

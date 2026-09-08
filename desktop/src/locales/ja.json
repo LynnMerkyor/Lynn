@@ -86,7 +86,10 @@
     "bridgeShort": "連携",
     "capability": {
       "fleetTip": "CLI ワーカー:長いタスクはターミナルからヘッドレスに実行"
-    }
+    },
+    "searchingBody": "Searching conversation text…",
+    "bodySearchFailed": "Body search failed. Title matches are still shown.",
+    "bodySearchPartial": "Some sessions were too large or unreadable, or the result limit was reached. Refine your search."
   },
   "session": {
     "untitled": "新しいチャット",
@@ -562,7 +565,9 @@
       "auto": "自動",
       "autoMode": "システム",
       "serifFont": "明朝体",
-      "serifFontHint": "本文に明朝体を使用する"
+      "serifFontHint": "本文に明朝体を使用する",
+      "leavesOverlay": "木漏れ日の影",
+      "leavesOverlayHint": "ライトテーマの周辺に柔らかな木の影を表示します。バックグラウンドでは一時停止し、ダーク・高コントラスト・視差効果を減らす設定では無効になります。"
     },
     "locale": {
       "title": "言語と地域",
@@ -726,7 +731,28 @@
       "resources": "リソース",
       "source": "ソース",
       "local": "ローカル設定",
-      "discovered": "自動検出"
+      "discovered": "自動検出",
+      "kimi": {
+        "description": "公式 Kimi データソースを内蔵しています。QR コードでログインして、ご自身のアカウントと利用枠を使用できます。認証情報はこの端末に保存され、Kimi CLI のインストールは不要です。",
+        "home": "ローカルプラグインの場所（任意・Kimi Code のログインを使用）",
+        "homePlaceholder": "空欄の場合は ~/.kimi-code",
+        "scan": "ローカルプラグインを検索",
+        "login": "QR コードで Kimi にログイン",
+        "install": "使い方",
+        "notFound": "ローカルプラグインは見つかりませんでした。内蔵版を使用できます。",
+        "command": "起動設定を表示",
+        "enable": "有効にして接続",
+        "connected": "MCP に接続しました。データへのアクセスは Kimi アカウントと利用枠に従います。",
+        "saved": "設定を保存しました。サーバー一覧で接続状態を確認してください。",
+        "waiting": "Kimi の認証を待っています。QR コードを読み取るか、ログインページを開いてください。",
+        "qrAlt": "Kimi 公式ログイン QR コード",
+        "openLogin": "公式ログインページを開く",
+        "cancel": "ログインをキャンセル",
+        "loggedIn": "ログインしました。内蔵データソースに接続しています。",
+        "bundled": "· 内蔵公式版",
+        "local": "· ローカル版",
+        "localOptions": "インストール済み Kimi Code プラグインを使用（任意）"
+      }
     },
     "oauth": {
       "title": "クイックログイン",

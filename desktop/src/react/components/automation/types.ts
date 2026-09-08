@@ -1,4 +1,5 @@
 export interface CronJob {
+  executor?: import('../../../../../shared/automation-executor').AutomationExecutor;
   id: string;
   type?: 'at' | 'every' | 'cron';
   enabled: boolean;

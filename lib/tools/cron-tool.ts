@@ -31,6 +31,7 @@ type CronJob = {
 };
 
 type CronJobInput = {
+  executor?: { kind: "agent_session" | "reminder" };
   type: CronScheduleType;
   schedule: string | number;
   prompt: string;
@@ -46,6 +47,7 @@ type CronStoreLike = {
 };
 
 type CronToolParams = {
+  executor?: "agent_session" | "reminder";
   action: CronAction | string;
   type?: CronScheduleType;
   schedule?: string;
@@ -122,6 +124,7 @@ export function createCronTool(
       model: Type.Optional(Type.String({
         description: t("toolDef.cron.modelDesc")
       })),
+      executor: Type.Optional(StringEnum(["agent_session", "reminder"], { description: "Use reminder for a direct notification with the prompt text and no model call. Use agent_session for tasks that require reasoning or tools (default)." })),
       id: Type.Optional(Type.String({
         description: t("toolDef.cron.idDesc")
       })),
@@ -182,6 +185,7 @@ export function createCronTool(
             const job = cronStore.addJob({
               type: params.type, schedule, prompt: params.prompt,
               label: params.label, model: params.model,
+              ...(params.executor ? { executor: { kind: params.executor } } : {}),
             });
             return {
               content: [{ type: "text", text: t("error.cronCreated", { label: job.label, id: job.id }) }],
@@ -190,7 +194,7 @@ export function createCronTool(
           }
 
           // 阻塞式确认
-          const jobData: CronJobInput = { type: params.type, schedule, prompt: params.prompt, label: params.label, model: params.model };
+          const jobData: CronJobInput = { type: params.type, schedule, prompt: params.prompt, label: params.label, model: params.model, ...(params.executor ? { executor: { kind: params.executor } } : {}) };
 
           if (confirmStore) {
             const sessionPath = getSessionPath?.() || null;

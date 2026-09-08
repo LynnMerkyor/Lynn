@@ -12,6 +12,8 @@
  */
 
 import fs from "fs";
+import { McpOAuth } from "./mcp/oauth.js";
+import { refreshManagedKimiCredentials } from "./mcp/kimi-device-auth.js";
 import os from "os";
 import path from "path";
 import YAML from "js-yaml";
@@ -67,6 +69,7 @@ export type {
 } from "./mcp-client-config.js";
 
 export class McpManager {
+  private oauth: McpOAuth;
   private _lynnHome: string;
   private _configPath: string;
   private _credentialsPath: string;
@@ -78,6 +81,7 @@ export class McpManager {
   private _mergedServers: McpServerConfigMap;
 
   constructor(lynnHome: string) {
+    this.oauth = new McpOAuth(path.join(lynnHome, "user", "mcp-oauth"));
     this._lynnHome = lynnHome;
     this._configPath = path.join(lynnHome, "mcp-servers.yaml");
     this._credentialsPath = path.join(lynnHome, "user", "mcp-credentials.json");
@@ -98,7 +102,8 @@ export class McpManager {
     log.log(`MCP init done: ${this.serverCount} server(s), ${this.toolCount} tool(s)`);
   }
 
-  async dispose(): Promise<void> {
+  async dispose(preserveOAuth = false): Promise<void> {
+    if (!preserveOAuth) this.oauth.dispose();
     for (const [, conn] of this._connections) {
       conn.close();
     }
@@ -106,7 +111,7 @@ export class McpManager {
   }
 
   async reload(): Promise<void> {
-    await this.dispose();
+    await this.dispose(true);
     this._loadConfigs();
     await this.init();
   }
@@ -160,9 +165,11 @@ export class McpManager {
       const builtin = BUILTIN_SERVERS[name] || null;
       return {
         name,
+        ...(config.oauth ? { oauth: config.oauth } : {}),
         transport: config.transport || "stdio",
         disabled: config.disabled === true,
         command: configView.command || "",
+        ...(config.transport === "stdio" ? { env: config.env } : {}),
         args: configView.args || [],
         cwd: configView.cwd || "",
         url: configView.url || "",
@@ -318,6 +325,7 @@ export class McpManager {
         connection.listTools(),
         connection.listResources(),
       ]);
+      if (connection.lastError) throw new Error(connection.lastError);
       return {
         ok: true,
         toolCount: tools.length,
@@ -333,18 +341,32 @@ export class McpManager {
   private async _connectServer(name: string, config: NormalizedMcpServerConfig): Promise<void> {
     try {
       const connection = this._createConnection(name, config);
+      this._connections.set(name, connection);
       await connection.connect();
       await Promise.all([connection.listTools(), connection.listResources()]);
+      if (connection.lastError) throw new Error(connection.lastError);
       this._connections.set(name, connection);
       log.log(`[${name}] connected, ${connection.tools.length} tool(s), ${connection.resources.length} resource(s)`);
     } catch (err) {
+      this._connections.get(name)?.markFailed(errorMessage(err));
       log.log(`[${name}] connect failed: ${errorMessage(err)}`);
     }
   }
 
   private _createConnection(name: string, config: NormalizedMcpServerConfig): McpConnectionBase {
-    return createMcpConnection(name, config);
+    const connection = createMcpConnection(name, config);
+    if (config.oauth && config.transport !== "stdio") connection.setAuthorizationProvider(force => this.oauth.headers(name, config.url, force));
+    return connection;
   }
+
+  private oauthConfig(name: string) {
+    const config = this._mergedServers[name];
+    if (!config || config.transport === "stdio" || !config.oauth) throw new Error("Enable OAuth on an HTTP or SSE MCP server first");
+    return config;
+  }
+  oauthStatus(name: string) { const config = this.oauthConfig(name); return this.oauth.status(name, config.url); }
+  startOAuth(name: string) { const config = this.oauthConfig(name); return this.oauth.start(name, config.url, config.oauth); }
+  async disconnectOAuth(name: string) { const config = this.oauthConfig(name); this.oauth.disconnect(name, config.url); await this.reload(); }
 
   private _convertTool(fullName: string, connection: McpConnectionBase, mcpTool: McpTool): McpToolDefinition {
     const params = mcpTool.inputSchema || Type.Object({});
@@ -355,6 +377,7 @@ export class McpManager {
       parameters: params,
       execute: async (_toolCallId: string, args: unknown) => {
         try {
+          if (connection.config.transport === 'stdio' && connection.config.env.LYNN_KIMI_MANAGED === '1' && typeof connection.config.env.KIMI_CODE_HOME === 'string') await refreshManagedKimiCredentials(connection.config.env.KIMI_CODE_HOME);
           const result = await connection.callTool(mcpTool.name, args || {});
           const content = result?.content || [];
           if (content.length === 0) {

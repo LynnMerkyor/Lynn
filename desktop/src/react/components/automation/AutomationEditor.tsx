@@ -1,4 +1,5 @@
-import type { Ref } from 'react';
+import { useEffect, useState, type Ref } from 'react';
+import { hanaFetch } from '../../hooks/use-hana-fetch';
 import { DaySelector, TimePicker } from './ScheduleControls';
 import type { ModelOption } from './types';
 import type { AutomationDraft, ProjectOption } from './useAutomationDraft';
@@ -25,7 +26,19 @@ export function AutomationEditor({
   testFailure?: string;
   onSave: (runNow: boolean) => void;
 }) {
-  const canSave = Boolean((draft.name.trim() || draft.currentTemplate) && (draft.prompt.trim() || draft.currentTemplate));
+  const [actions, setActions] = useState<Array<{ pluginId: string; toolName: string; description: string; schema: unknown }>>([]);
+  const [actionsError, setActionsError] = useState('');
+  useEffect(() => {
+    let live = true;
+    void hanaFetch('/api/desk/cron/actions').then(res => res.json()).then(data => { if (live) setActions(data.actions || []); }).catch(error => { if (live) setActionsError(String(error)); });
+    return () => { live = false; };
+  }, []);
+  let inputValid = true;
+  if (draft.executorKind === 'plugin_action') {
+    try { const input = JSON.parse(draft.pluginInput); inputValid = !!input && typeof input === 'object' && !Array.isArray(input) && !!draft.pluginTool; }
+    catch { inputValid = false; }
+  }
+  const canSave = inputValid && Boolean((draft.name.trim() || draft.currentTemplate) && (draft.prompt.trim() || draft.currentTemplate));
   return (
     <div ref={rootRef} className={styles.automationComposer}>
       <div className={styles.automationComposerTop}>
@@ -44,6 +57,14 @@ export function AutomationEditor({
       </div>
 
       <div className={styles.automationComposerFields}>
+        <label className={styles.automationField}>
+          <span className={styles.automationFieldLabel}>{isZh ? '执行方式' : 'Execution'}</span>
+          <select className={styles.automationFieldSelect} value={draft.executorKind} onChange={event => draft.setExecutorKind(event.target.value as typeof draft.executorKind)}>
+            <option value="agent_session">{isZh ? 'Agent 任务' : 'Agent task'}</option>
+            <option value="reminder">{isZh ? '直接提醒（不调用模型）' : 'Reminder (no model call)'}</option>
+            <option value="plugin_action">{isZh ? '插件动作' : 'Plugin action'}</option>
+          </select>
+        </label>
         {!draft.templateMode && (
           <label className={styles.automationField}>
             <span className={styles.automationFieldLabel}>{isZh ? '任务名称' : 'Task name'}</span>
@@ -70,13 +91,13 @@ export function AutomationEditor({
             <option value="custom">{isZh ? '定制' : 'Custom'}</option>
           </select>
         </label>}
-        <label className={styles.automationField}>
+        {draft.executorKind === 'agent_session' && <label className={styles.automationField}>
           <span className={styles.automationFieldLabel}>{isZh ? '模型' : 'Model'}</span>
           <select className={styles.automationFieldSelect} value={draft.model} onChange={(event) => draft.setModel(event.target.value)}>
             <option value="">{defaultModelLabel}</option>
             {availableModels.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
-        </label>
+        </label>}
         {!draft.scheduleLocked && <div className={styles.automationField}>
           <span className={styles.automationFieldLabel}>{isZh ? '时间' : 'Time'}</span>
           <TimePicker hour={draft.hour} minute={draft.minute} onChange={(hour, minute) => {
@@ -85,6 +106,26 @@ export function AutomationEditor({
           }} />
         </div>}
       </div>
+
+      {draft.executorKind === 'plugin_action' && <div className={styles.automationComposerFields}>
+        <label className={styles.automationField}>
+          <span className={styles.automationFieldLabel}>{isZh ? '插件工具' : 'Plugin tool'}</span>
+          <select className={styles.automationFieldSelect} value={draft.pluginTool} onChange={event => draft.setPluginTool(event.target.value)}>
+            <option value="">{isZh ? '选择已启用的插件工具' : 'Choose an enabled plugin tool'}</option>
+            {draft.pluginTool && !actions.some(action => action.toolName === draft.pluginTool) && <option value={draft.pluginTool}>{draft.pluginTool} ({isZh ? '不可用' : 'unavailable'})</option>}
+            {actions.map(action => <option key={action.toolName} value={action.toolName}>{action.toolName}</option>)}
+          </select>
+        </label>
+        <label className={`${styles.automationField} ${styles.automationFieldGrow}`}>
+          <span className={styles.automationFieldLabel}>{isZh ? '工具参数（JSON 对象）' : 'Tool arguments (JSON object)'}</span>
+          <textarea className={styles.automationFieldTextarea} rows={4} value={draft.pluginInput} onChange={event => draft.setPluginInput(event.target.value)} aria-invalid={!inputValid} />
+        </label>
+        {actions.find(action => action.toolName === draft.pluginTool) && <details><summary>{isZh ? '工具说明与参数格式' : 'Tool description and argument schema'}</summary>
+          <p>{actions.find(action => action.toolName === draft.pluginTool)?.description}</p>
+          <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(actions.find(action => action.toolName === draft.pluginTool)?.schema, null, 2)}</pre>
+        </details>}
+        {actionsError && <p role="alert">{actionsError}</p>}
+      </div>}
 
       {draft.scheduleLocked && <div className={styles.automationPanelNotice} role="note">
         <strong>{isZh ? '保留原有执行计划' : 'Original schedule preserved'}</strong>

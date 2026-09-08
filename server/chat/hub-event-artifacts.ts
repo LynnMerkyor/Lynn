@@ -1,4 +1,5 @@
 import path from "path";
+import { registerSessionFile } from "../../lib/session-files.js";
 import { debugLog } from "../../lib/debug-log.js";
 import {
   artifactPreviewDedupeKey,
@@ -26,7 +27,11 @@ export function emitFileOutputsFromDetails(
     const key = path.resolve(String(f.filePath));
     if (ss.emittedFileOutputPaths.has(key)) continue;
     ss.emittedFileOutputPaths.add(key);
+    let sessionFile = {};
+    try { if (sessionPath) sessionFile = registerSessionFile(sessionPath, key, { name: f.label }); }
+    catch { /* Preserve legacy file delivery if the file is unavailable or oversized. */ }
     emitStreamEvent(sessionPath, ss, {
+      ...sessionFile,
       type: "file_output",
       filePath: f.filePath,
       label: f.label || path.basename(f.filePath),

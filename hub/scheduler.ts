@@ -17,6 +17,7 @@ import { CronStore, type Job } from "../lib/desk/cron-store.js";
 import { appendRecentExecutionToJian } from "../lib/desk/jian-runtime.js";
 import { getLocale } from "../server/i18n.js";
 import type { Hub } from "./index.js";
+import { executeLightweightAutomation, type AutomationPluginTool } from "../lib/desk/automation-executor.js";
 
 type HeartbeatController = ReturnType<typeof createHeartbeat>;
 type CronSchedulerOptions = Parameters<typeof createCronScheduler>[0];
@@ -77,6 +78,7 @@ interface ActivityStore {
 }
 
 type SchedulerEngine = {
+  pluginManager?: { getAllTools(): AutomationPluginTool[] } | null;
   agentsDir: string;
   currentAgentId: string;
   homeCwd: string;
@@ -195,9 +197,14 @@ export class Scheduler {
     const job = agent?.cronStore?.getJob?.(jobId) as SchedulerJob | undefined;
     if (!job) throw new Error(`cron job not found: ${jobId}`);
     if (!job.enabled) throw new Error(`cron job disabled: ${jobId}`);
-    if (this._executingJobs.has(job.id)) throw new Error(`cron job already running: ${jobId}`);
-    void this._executeCronJobForAgent(agentId, job).catch((err) => {
-      console.error(`\x1b[90m[scheduler] 手动执行 cron 失败 ${job.id}: ${errorMessage(err)}\x1b[0m`);
+    if (this._executingJobs.has(`${agentId}:${job.id}`)) throw new Error(`cron job already running: ${jobId}`);
+    const startedAt = new Date().toISOString();
+    const done = (result: { status: "success" | "error"; error?: string }) => {
+      agent?.cronStore?.logRun(job.id, { ...result, timestamp: new Date().toISOString(), startedAt, finishedAt: new Date().toISOString() });
+      this._hub.eventBus.emit({ type: "cron_job_done", jobId: job.id, label: job.label, agentId, result }, null);
+    };
+    void this._executeCronJobForAgent(agentId, job).then(() => done({ status: "success" }), err => done({ status: "error", error: errorMessage(err) })).catch(err => {
+      console.error(`[scheduler] cron history failed ${job.id}: ${errorMessage(err)}`);
     });
     return job;
   }
@@ -299,7 +306,7 @@ export class Scheduler {
       cronStore: cronStore as unknown as CronSchedulerOptions["cronStore"],
       executeJob: (job) => this._executeCronJobForAgent(agentId, job as SchedulerJob),
       abortJob: (jobId) => {
-        const ac = this._executingJobs.get(jobId);
+        const ac = this._executingJobs.get(`${agentId}:${jobId}`);
         if (ac) { ac.abort(); console.log(`\x1b[90m[scheduler] cron abort ${jobId} (timeout)\x1b[0m`); }
       },
       onJobDone: (job, result) => {
@@ -321,16 +328,35 @@ export class Scheduler {
    * 同一 agent 同时只运行一个 cron，防止并发写冲突
    */
   async _executeCronJobForAgent(agentId: string, job: SchedulerJob): Promise<void> {
+    const executionKey = `${agentId}:${job.id}`;
     // per-job 锁：同一 job 不并发，但同一 agent 的不同 job 可以并行
-    if (this._executingJobs.has(job.id)) {
+    if (this._executingJobs.has(executionKey)) {
       console.log(`\x1b[90m[scheduler] cron 跳过 ${job.id}：上一次仍在执行\x1b[0m`);
       const err = new Error(`cron job ${job.id} 仍在执行，跳过`) as SkippedCronError;
       err.skipped = true;
       throw err;
     }
     const ac = new AbortController();
-    this._executingJobs.set(job.id, ac);
+    this._executingJobs.set(executionKey, ac);
     try {
+      if (job.executor && job.executor.kind !== "agent_session") {
+        const startedAt = Date.now();
+        let error: string | null = null;
+        let summary = "";
+        try { summary = await executeLightweightAutomation(job, { tools: this._engine.pluginManager?.getAllTools() || [], signal: ac.signal }) || job.prompt; }
+        catch (err) { error = errorMessage(err); summary = error; }
+        const entry: ActivityEntry = {
+          id: `cron_${agentId}_${job.id}_${startedAt}`, type: "cron", jobId: job.id, label: job.label,
+          agentId, agentName: this._engine.getAgent(agentId)?.agentName || agentId,
+          workspace: job.workspace || null, startedAt, finishedAt: Date.now(), outputFile: null,
+          summary, sessionFile: null, status: error ? "error" : "done", error,
+        };
+        this._engine.getActivityStore(agentId).add(entry);
+        this._hub.eventBus.emit({ type: "activity_update", activity: entry }, null);
+        this._hub.eventBus.emit({ type: "notification", title: job.label || "Lynn", body: summary.slice(0, 500) }, null);
+        if (error) throw new Error(error);
+        return;
+      }
       const isZh = getLocale().startsWith("zh");
       const prompt = isZh
         ? [
@@ -358,7 +384,7 @@ export class Scheduler {
         signal: ac.signal,
       });
     } finally {
-      this._executingJobs.delete(job.id);
+      this._executingJobs.delete(executionKey);
     }
   }
 

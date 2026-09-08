@@ -33,6 +33,9 @@ export function useAutomationDraft({
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [executorKind, setExecutorKind] = useState<'agent_session' | 'reminder' | 'plugin_action'>('agent_session');
+  const [pluginTool, setPluginTool] = useState('');
+  const [pluginInput, setPluginInput] = useState('{}');
   const [project, setProject] = useState('');
   const [model, setModel] = useState('');
   const [schedulePreset, setSchedulePreset] = useState<SchedulePreset>('daily');
@@ -54,6 +57,7 @@ export function useAutomationDraft({
   const templateMode = Boolean(currentTemplate) && !editingJobId;
 
   const reset = useCallback(() => {
+    setExecutorKind('agent_session'); setPluginTool(''); setPluginInput('{}');
     nextSelection();
     setOriginalSchedule(null);
     setSelectedTemplateId(null);
@@ -75,6 +79,7 @@ export function useAutomationDraft({
   }, [project, projectOptions]);
 
   const startFromTemplate = useCallback((template: TemplateDefinition) => {
+    setExecutorKind('agent_session'); setPluginTool(''); setPluginInput('{}');
     nextSelection();
     setOriginalSchedule(null);
     setSelectedTemplateId(template.id);
@@ -92,6 +97,7 @@ export function useAutomationDraft({
   }, [isZh, nextSelection, projectOptions]);
 
   const startCustom = useCallback(() => {
+    setExecutorKind('agent_session'); setPluginTool(''); setPluginInput('{}');
     nextSelection();
     setOriginalSchedule(null);
     setSelectedTemplateId('custom');
@@ -109,6 +115,9 @@ export function useAutomationDraft({
   }, [isZh, nextSelection, projectOptions]);
 
   const editJob = useCallback((job: CronJob) => {
+    setExecutorKind(job.executor?.kind || 'agent_session');
+    setPluginTool(job.executor?.kind === 'plugin_action' ? job.executor.toolName : '');
+    setPluginInput(job.executor?.kind === 'plugin_action' ? JSON.stringify(job.executor.input, null, 2) : '{}');
     nextSelection();
     const cronTime = parseCronTime(job.schedule) || { hour: '09', minute: '00' };
     const cronDays = parseCronDays(job.schedule);
@@ -133,6 +142,7 @@ export function useAutomationDraft({
   }, [availableModels, nextSelection, projectOptions]);
 
   return {
+    executorKind, setExecutorKind, pluginTool, setPluginTool, pluginInput, setPluginInput,
     selectionVersion,
     captureSelection,
     selectedTemplateId,

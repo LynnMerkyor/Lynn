@@ -11,8 +11,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.86.7-brightgreen" alt="App Version"></a>
-  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.86.7-7bcad3" alt="CLI Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/App-0.86.8-brightgreen" alt="App Version"></a>
+  <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/CLI-0.86.8-7bcad3" alt="CLI Version"></a>
   <a href="https://github.com/MerkyorLynn/Lynn"><img src="https://img.shields.io/github/stars/MerkyorLynn/Lynn?style=social" alt="Stars"></a>
   <a href="https://github.com/MerkyorLynn/Lynn/releases"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg" alt="Platform"></a>
   <a href="https://huggingface.co/nerkyor"><img src="https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d" alt="HuggingFace Models"></a>
@@ -112,12 +112,12 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.7.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.8.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI; 输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.86.7
+Lynn --version  # should print 0.86.8
 Lynn agents     # copyable headless worker commands for other agents
 ```
 
@@ -164,7 +164,21 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 
 
 <details open>
-<summary><strong>Lynn v0.86.7</strong> · 2026-09-07 · 显存分档安装与部署助手 <em>(最新)</em></summary>
+<summary><strong>Lynn v0.86.8</strong> · 2026-09-08 · 扫码接入 Kimi、历史搜索与手机续聊 <em>(最新)</em></summary>
+
+- **Kimi Datasource**：在 MCP 设置中扫码登录自己的账号，自动连接内置官方数据源，无需安装 Kimi CLI。
+- **MCP OAuth**：支持 HTTP/SSE 授权发现、PKCE、本机回调与令牌刷新。
+- **会话与文件**：搜索历史正文和命中片段；文件使用会话级编号，上传在发送时绑定会话并保留副本。
+- **轻量自动化**：直接提醒、指定插件动作与原有 Agent 任务并存，保留通知和运行记录。
+- **手机续聊**：显式开启手机访问，扫码配对并可撤销；继续已有会话和收发文件，安装 PWA 需要 HTTPS。
+- **可选树影**：界面中增加默认关闭的树影层。
+
+[Release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.8)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.86.7</strong> · 2026-09-07 · 显存分档安装与部署助手</summary>
 
 - **Q3 / Q2 按显存推荐**：Qwen3.8-27B EfficientThink SimPO：24GB 及以上独立显存推荐 Q3 + Q4 DFlash2（模型合计 18.18GB），16GB 独立显存推荐 Q2 + Q4 DFlash2（14.14GB）。Q3 以 8K、Q2 以 4K 上下文和单并发启动；还需预留 KV 缓存、运行缓冲及系统空间。Apple 统一内存单独判断，16GB 不自动等同于 16GB 独立显存。
 - **配齐运行组件**：检查或安装兼容的 llama.cpp，主模型与独立 Q4 DFlash2 分别按固定字节数和 SHA-256 校验，健康检查通过后才切换模型；已有文件保留。
@@ -1447,7 +1461,7 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 **Windows**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.exe`，直接运行；版本记录见 [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)。
 
-> **Windows SmartScreen 提示：** V0.86.7 沿用现有 NSIS 安装方式，未包含公开信任的 Authenticode 代码签名。Windows 可能提示未知发布者或 SmartScreen 确认；请仅从上述正式渠道下载，并核对发布的 SHA-256。
+> **Windows SmartScreen 提示：** V0.86.8 沿用现有 NSIS 安装方式，未包含公开信任的 Authenticode 代码签名。Windows 可能提示未知发布者或 SmartScreen 确认；请仅从上述正式渠道下载，并核对发布的 SHA-256。
 
 Linux 版本计划中。
 

@@ -5,6 +5,7 @@ import { ensureSession, showSidebarToast } from './session-actions';
 import { getWebSocket } from '../services/websocket';
 import { getModeById } from '../config/task-modes';
 import { buildRetryDraftFromMessage } from '../utils/composer-state';
+import { hanaFetch } from '../hooks/use-hana-fetch';
 
 export interface SendPromptOptions {
   mode?: 'prompt' | 'steer';
@@ -198,6 +199,28 @@ export async function submitPromptTask(options: SendPromptOptions): Promise<bool
   if (!sessionPath || !ws || ws.readyState !== WebSocket.OPEN) {
     showSidebarToast(window.t?.('chat.needWsConnection') ?? 'Disconnected from assistant', 5000);
     return false;
+  }
+
+  const uploadIds = options.attachments?.map(file => file.uploadId).filter((id): id is string => !!id) || [];
+  if (uploadIds.length) {
+    try {
+      const response = await hanaFetch('/api/upload/bind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionPath, uploadIds }) });
+      if (!response.ok) throw new Error((await response.json()).error || 'Attachment unavailable');
+      const { files } = await response.json() as { files: Array<{ uploadId: string; path: string }> };
+      const paths = new Map(files.map(file => [file.uploadId, file.path]));
+      for (const attachment of options.attachments || []) {
+        const durable = attachment.uploadId && paths.get(attachment.uploadId);
+        if (durable) requestText = requestText.split(attachment.path).join(durable);
+      }
+      options = {
+        ...options,
+        attachments: options.attachments?.map(file => file.uploadId && paths.has(file.uploadId) ? { ...file, path: paths.get(file.uploadId)!, uploadId: undefined } : file),
+        retryDraft: options.retryDraft ? { ...options.retryDraft, attachedFiles: options.retryDraft.attachedFiles.map(file => file.uploadId && paths.has(file.uploadId) ? { ...file, path: paths.get(file.uploadId)!, uploadId: undefined } : file) } : options.retryDraft,
+      };
+    } catch (error) {
+      showSidebarToast(error instanceof Error ? error.message : String(error), 5000);
+      return false;
+    }
   }
 
   const textHtml = displayText

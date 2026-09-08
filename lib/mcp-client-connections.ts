@@ -36,6 +36,24 @@ export abstract class McpConnectionBase<TConfig extends NormalizedMcpServerConfi
   protected _ready: boolean;
   protected _lastError: string | null;
   protected _closed: boolean;
+  private authorizationProvider?: (force?: boolean) => Promise<HeaderMap>;
+
+  setAuthorizationProvider(provider: (force?: boolean) => Promise<HeaderMap>): void { this.authorizationProvider = provider; }
+
+  protected async authorizedFetch(url: string, init: RequestInit): Promise<Response> {
+    if (!this.authorizationProvider) return fetch(url, init);
+    const serverUrl = String((this.config as { url?: string }).url || "");
+    if (new URL(url).origin !== new URL(serverUrl).origin) throw new Error("MCP OAuth refuses to send credentials to a different origin");
+    const send = async (force: boolean) => {
+      const headers = new Headers(init.headers);
+      for (const [key, value] of Object.entries(await this.authorizationProvider!(force))) headers.set(key, value);
+      return fetch(url, { ...init, headers, redirect: "error", signal: init.signal || AbortSignal.timeout(30000) });
+    };
+    const response = await send(false);
+    if (response.status !== 401) return response;
+    await response.body?.cancel();
+    return send(true);
+  }
 
   constructor(name: string, config: TConfig) {
     this.name = name;
@@ -52,6 +70,7 @@ export abstract class McpConnectionBase<TConfig extends NormalizedMcpServerConfi
   get resources(): McpResource[] { return this._resources; }
   get ready(): boolean { return this._ready; }
   get lastError(): string | null { return this._lastError; }
+  markFailed(message: string): void { this._lastError = message; this.close(); }
 
   abstract connect(): Promise<unknown>;
   abstract close(): void;
@@ -264,7 +283,7 @@ class McpSseConnection extends McpConnectionBase<McpSseServerConfig> {
     const connectTimeout = setTimeout(() => controller.abort(new DOMException("MCP SSE connect timeout", "AbortError")), 15000);
 
     try {
-      const res = await fetch(this.url, {
+      const res = await this.authorizedFetch(this.url, {
         method: "GET",
         headers: {
           Accept: "text/event-stream",
@@ -411,7 +430,7 @@ class McpSseConnection extends McpConnectionBase<McpSseServerConfig> {
 
     return new Promise<unknown>((resolve, reject) => {
       this._pending.set(id, { resolve, reject });
-      fetch(postUrl, {
+      this.authorizedFetch(postUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -431,7 +450,7 @@ class McpSseConnection extends McpConnectionBase<McpSseServerConfig> {
 
   private _sendNotification(method: string, params: unknown): void {
     const postUrl = this._messageUrl || deriveSseMessageUrl(this.url);
-    void fetch(postUrl, {
+    void this.authorizedFetch(postUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -445,6 +464,8 @@ class McpSseConnection extends McpConnectionBase<McpSseServerConfig> {
 class McpHttpConnection extends McpConnectionBase<McpHttpServerConfig> {
   private url: string;
   private headers: HeaderMap;
+  private sessionId = "";
+  private protocolVersion = "2025-06-18";
 
   constructor(name: string, config: McpHttpServerConfig) {
     super(name, config);
@@ -459,10 +480,11 @@ class McpHttpConnection extends McpConnectionBase<McpHttpServerConfig> {
 
     try {
       const result = await this._sendRequest("initialize", {
-        protocolVersion: "2024-11-05",
+        protocolVersion: this.protocolVersion,
         capabilities: {},
         clientInfo: { name: "lynn", version: "1.0.0" },
       });
+      if (result && typeof result === "object" && typeof (result as { protocolVersion?: string }).protocolVersion === "string") this.protocolVersion = (result as { protocolVersion: string }).protocolVersion;
       await this._sendNotification("notifications/initialized", {});
       this._ready = true;
       return result;
@@ -498,33 +520,45 @@ class McpHttpConnection extends McpConnectionBase<McpHttpServerConfig> {
     payload: JsonRpcOutboundPayload,
     opts: HttpPostOptions = {},
   ): Promise<JsonRpcResponsePayload | null> {
-    const res = await fetch(this.url, {
+    const res = await this.authorizedFetch(this.url, {
       method: "POST",
       headers: {
         Accept: "application/json, text/event-stream",
         "Content-Type": "application/json",
         ...this.headers,
+        ...(this.sessionId ? { "Mcp-Session-Id": this.sessionId } : {}),
+        ...(payload.method !== "initialize" ? { "MCP-Protocol-Version": this.protocolVersion } : {}),
       },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
       throw new Error(`HTTP MCP failed: ${res.status} ${res.statusText}`);
     }
+    if (payload.method === "initialize") this.sessionId = res.headers.get("mcp-session-id") || "";
+
+    if (opts.notification && (res.status === 202 || res.status === 204)) { await res.body?.cancel(); return null; }
 
     const contentType = String(res.headers.get("content-type") || "").toLowerCase();
     if (contentType.includes("text/event-stream")) {
-      const rawText = await res.text();
-      const blocks = rawText.replace(/\r\n/g, "\n").split("\n\n").filter(Boolean);
-      for (const block of blocks) {
-        const parsed = parseSseEvent(block);
-        if (!parsed.data) continue;
-        try {
-          const msg = JSON.parse(parsed.data) as JsonRpcResponsePayload;
-          if (!payload.id || msg.id === payload.id || opts.notification) {
-            return msg;
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("HTTP MCP returned no stream");
+      const decoder = new TextDecoder(); let buffer = "";
+      try {
+        while (true) {
+          const chunk = await reader.read(); if (chunk.done) break;
+          buffer = (buffer + decoder.decode(chunk.value, { stream: true })).replace(/\r\n/g, "\n");
+          if (buffer.length > 8 * 1024 * 1024) throw new Error("MCP event exceeds 8 MB");
+          let boundary: number;
+          while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+            const block = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 2);
+            const parsed = parseSseEvent(block); if (!parsed.data) continue;
+            try {
+              const msg = JSON.parse(parsed.data) as JsonRpcResponsePayload;
+              if (msg.id === payload.id || opts.notification) return msg;
+            } catch { /* Ignore unrelated non-JSON events. */ }
           }
-        } catch {}
-      }
+        }
+      } finally { await reader.cancel(); }
       if (opts.notification) return null;
       throw new Error("HTTP MCP returned no JSON-RPC payload");
     }

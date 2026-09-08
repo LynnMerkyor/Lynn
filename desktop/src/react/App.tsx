@@ -39,6 +39,7 @@ import { JarvisRuntimeOverlay } from './components/voice/JarvisRuntimeOverlay';
 import { initTheme, initDragPrevention } from './bootstrap';
 import { initApp } from './app-init';
 import { MainContent } from './MainContent';
+import { LeavesOverlay } from './components/LeavesOverlay';
 import { pathDisplayName } from './utils/path-label';
 
 declare function t(key: string, vars?: Record<string, string | number>): string;
@@ -301,6 +302,7 @@ function App() {
 
   return (
     <ErrorBoundary>
+      <LeavesOverlay />
       <SidebarLayout />
 
       <div className="titlebar">

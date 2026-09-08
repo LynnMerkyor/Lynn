@@ -1,4 +1,5 @@
 import path from "path";
+import { registerSessionFile, resolveSessionFile } from "../session-files.js";
 import { debugLog } from "../debug-log.js";
 import { bufferToBase64, detectMime, downloadMedia, formatSize } from "./media-utils.js";
 import type { BridgeAdapter, BridgeAttachment } from "./adapter-types.js";
@@ -109,10 +110,17 @@ export async function sendBridgeMediaItem(
   adapter: BridgeAdapter,
   chatId: string,
   source: string,
+  sessionPath?: string,
 ): Promise<void> {
   const isLocal = path.isAbsolute(source) || source.startsWith("file://");
   if (isLocal && adapter.sendMediaBuffer) {
-    const buffer = await downloadMedia(source);
+    // Keep the bridge whitelist check before registration; a file ID never widens access.
+    let buffer = await downloadMedia(source);
+    if (sessionPath) {
+      const localPath = source.startsWith("file://") ? new URL(source).pathname : source;
+      const file = registerSessionFile(sessionPath, localPath);
+      buffer = await downloadMedia(resolveSessionFile(sessionPath, file.fileId).localPath);
+    }
     const mime = detectMime(buffer, "application/octet-stream");
     const filename = path.basename(source.startsWith("file://") ? source.replace(/^file:\/\//, "") : source);
     await adapter.sendMediaBuffer(chatId, buffer, { mime, filename });

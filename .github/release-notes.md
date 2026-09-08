@@ -1,53 +1,49 @@
-# Lynn v0.86.7 Release Notes / 发布说明
-
-> 2026-09-07 · 显存分档本地模型安装与对话式部署助手
-
 ## 国内镜像站下载（推荐） / Downloads
 
-国内用户请优先使用以下镜像站地址；GitHub Assets 作为备用下载。
-
-- [国内下载页](https://download.merkyorlynn.com/download.html)
-- [macOS Apple Silicon](https://download.merkyorlynn.com/downloads/Lynn-0.86.7-macOS-arm64.dmg)
-- [macOS Intel](https://download.merkyorlynn.com/downloads/Lynn-0.86.7-macOS-x64.dmg)
-- [Windows x64](https://download.merkyorlynn.com/downloads/Lynn-0.86.7-Windows-Setup.exe)
+国内用户请优先使用镜像站；GitHub Assets 作为备用下载。
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.7.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.8.tgz"
 Lynn --version
 ```
 
+- [macOS Apple Silicon / ARM64](https://download.merkyorlynn.com/downloads/Lynn-0.86.8-macOS-arm64.dmg)
+- [macOS Intel / x64](https://download.merkyorlynn.com/downloads/Lynn-0.86.8-macOS-x64.dmg)
+- [Windows x64](https://download.merkyorlynn.com/downloads/Lynn-0.86.8-Windows-Setup.exe)
+- [国内下载页](https://download.merkyorlynn.com/download.html)
+
+# Lynn v0.86.8 Release Notes / 发布说明
+
+2026-09-08 · Kimi 数据源、历史搜索与手机续聊
+
 ## 中文重点
 
-- GUI 默认本地安装切换为 Qwen3.8-27B EfficientThink：24GB 及以上独立显存推荐 Q3；16GB 独立显存推荐 Q2。两档均配独立 Q4 DFlash2 草稿模型，不把草稿当作主模型或标成 MTP。
-- 安装前展示两文件、总下载量、磁盘预留和初始上下文。Q3 合计约 18.18GB，初始 8K；Q2 合计约 14.14GB，初始 4K，均从单并发起步。实际余量取决于设备和负载。
-- 按单张 GPU 显存推荐，不累加多卡，不把普通系统内存当显存。Apple Silicon 单独说明统一内存与系统占用；检测不明确时由用户选择或进入部署协助。
-- 下载前检查 llama.cpp 的 DFlash2 和 GPU 支持；不兼容时安装经校验的固定版本。macOS 使用 Metal 构建，Windows 使用 Vulkan 构建；已有兼容运行时优先复用，不覆盖用户安装。
-- 主模型与草稿分别按固定源版本、字节数和 SHA-256 校验。只有启动及健康检查通过才注册端点；运行时失败、文件损坏、取消和启动失败不会被当成成功。
-- 设置与引导共用安装方案组件，显示持续可见的阶段和错误；暂停期间保留方案，避免恢复时换错模型。
-- “让 Lynn 帮我部署”将选定方案、有限硬件信息和脱敏错误带到主对话草稿，不自动发送、覆盖已有草稿或执行命令。
-- 提供[完整模型卡](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF)。默认安装为文本模型；保留旧模型、手动导入及云端 Agent/harness，不自动删除或迁移。
-- Windows 沿用未签名 NSIS 与内置基础 CPU llama.cpp；GPU 方案按需安装兼容运行时，不增加付费签名或自动安装显卡驱动。
-- CLI 与桌面版本同步，本次 GUI 安装改造不改变原有 CLI Agent LOOP。
+- **Kimi Datasource**：设置 → MCP 中扫码登录，授权成功后自动启用数据源。凭据保存在本机 Lynn 数据目录；用户使用自己的 Kimi 账号，也可在高级选项中导入已有官方插件。
+- **MCP OAuth**：支持服务元数据发现、PKCE 登录、授权状态、刷新和取消，HTTP/SSE 连接共用授权；需要 Client ID 的服务可自行填写。
+- **历史正文搜索**：侧栏搜索同时匹配会话标题及用户/助手消息正文，显示命中片段；大文件或部分读取会明确提示。
+- **轻量自动化**：自动化任务可选择提醒或指定插件动作，并记录执行结果；任务失败会显示错误。
+- **会话文件**：桌面、桥接和手机共用会话文件标识；发送附件时绑定到实际会话，历史文件可继续下载。
+- **手机续聊**：设置 → 界面中按需开启，通过限时二维码配对后查看和继续已有会话，支持附件与停止生成；设备可单独撤销。工具审批仍在桌面端完成。
+- **可选树影**：界面设置新增树影质感开关，默认关闭。
+- 手机 PWA 安装需要 HTTPS（localhost 除外）；普通局域网 HTTP 可用于浏览器续聊。Windows 继续提供未签名 x64 NSIS 安装包。
 
-本次 Q2/Q3 + DFlash2 的真实加载与生成已在 DGX Spark GB10（CUDA）验证。macOS/Windows 原生运行时与界面另行验证；Spark 的统一内存测试不代表每张 16GB/24GB 独立显卡的容量保证。
+Kimi 登录需要用户自行完成扫码，数据源可用范围由账号与服务决定。开发验证覆盖官方设备授权入口、MCP 协议及隔离环境中的手机页面；不将模拟流程作为真实账号授权或 iOS/Android 安装验证。
 
 ## English highlights
 
-- Recommend Qwen3.8-27B EfficientThink Q3 for 24GB+ dedicated VRAM, or Q2 for 16GB, each with a separate Q4 DFlash2 draft—not MTP or a standalone main model.
-- Preview both files, disk reserve and starting context: approximately 18.18GB / 8K for Q3, or 14.14GB / 4K for Q2, initially with one slot. Headroom depends on the device and workload.
-- Use one GPU's memory, not combined GPUs or ordinary system RAM. Explain Apple Silicon unified memory separately; require an explicit choice when detection is inconclusive.
-- Probe DFlash2 and GPU support first. Reuse a compatible runtime or install pinned, checksum-verified Metal/macOS or Vulkan/Windows binaries without replacing user-managed installations.
-- Verify main and draft files independently against pinned paths, sizes and SHA-256 values. Register only after successful startup and health checks; cancellation and failures never count as success.
-- Share setup UI across onboarding and settings, retain the tier while paused, and surface persistent progress and errors.
-- Chat-assisted deployment adds a bounded, redacted draft without sending it, replacing existing text or executing commands.
-- Link the model card, mark this as a text-model setup, and preserve existing models, manual imports and cloud Agent/harness behavior.
-- Keep the unsigned Windows NSIS package and bundled basic CPU runtime. Prepare GPU support on demand without paid signing or automatic GPU-driver installation.
-- Align CLI and desktop versions without changing the existing CLI Agent LOOP.
+- Add Kimi Datasource under Settings → MCP. Scan to sign in with your own account; successful authorization enables the data source. Credentials stay in Lynn's local data directory. Advanced setup can import an existing official plugin.
+- Support MCP OAuth discovery, PKCE, authorization status, refresh and cancellation across HTTP/SSE transports, with an optional service-specific Client ID.
+- Search conversation titles and user/assistant message bodies in the sidebar, with snippets and explicit partial-result indicators.
+- Run lightweight reminders or a selected plugin action from automations, with execution history and visible errors.
+- Share session file identifiers across desktop, bridges and mobile; bind attachments to the actual conversation when sending and retain historical downloads.
+- Opt in to mobile continuation under Settings → Interface. Pair using an expiring QR code, continue existing conversations, attach files and stop generation. Revoke devices individually; tool approvals remain on desktop.
+- Offer an optional tree-shadow texture, disabled by default.
+- Installing the mobile PWA requires HTTPS except on localhost; ordinary LAN HTTP supports browser continuation. Windows retains its unsigned x64 NSIS installer.
 
-Real Q2/Q3 + DFlash2 loading and generation were verified on DGX Spark GB10 (CUDA). Native macOS/Windows runtime and UI checks are separate; Spark unified-memory results do not guarantee fit on every 16GB/24GB discrete GPU.
+Users complete Kimi authorization themselves, and account/service access determines available data. Development checks cover the official device authorization endpoint, MCP protocol and isolated mobile flows; simulated checks do not establish real-account authorization or installation on physical iOS/Android devices.
 
 ## Repositories
 
-- https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.7
-- https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.7
-- https://gitee.com/merkyor/Lynn/releases
+- [GitHub · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.86.8)
+- [GitHub · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.8)
+- [Gitee · merkyor/Lynn](https://gitee.com/merkyor/Lynn/releases/tag/v0.86.8)

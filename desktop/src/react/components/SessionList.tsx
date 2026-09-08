@@ -18,6 +18,7 @@ import { lookupKnownModel } from '../utils/known-models';
 import { isDisplayDefaultModel } from '../utils/brain-models';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import styles from './SessionList.module.css';
+import { useSessionBodySearch } from '../hooks/use-session-body-search';
 import {
   normalizeLegacyWorkspacePath,
   groupSessionsByWorkspace,
@@ -113,6 +114,7 @@ function SessionListInner() {
     }
   });
   const searchRef = useRef<HTMLInputElement>(null);
+  const bodySearch = useSessionBodySearch(searchQuery, sessions);
 
   useEffect(() => {
     try {
@@ -177,7 +179,7 @@ function SessionListInner() {
   // Filter sessions by search query
   const filtered = searchQuery.trim()
     ? sessions.filter(s => {
-        const q = searchQuery.toLowerCase();
+        const q = searchQuery.trim().toLowerCase();
         const labels = Array.isArray(s.labels) ? s.labels.join(' ') : '';
         const topologyText = [
           s.topology?.branchLabel,
@@ -191,7 +193,7 @@ function SessionListInner() {
           ...(s.digest?.nextSteps || []),
           ...(s.insights || []).map((item) => item.content),
         ].filter(Boolean).join(' ');
-        return (s.title || '').toLowerCase().includes(q)
+        return !!bodySearch.snippets[s.path] || (s.title || '').toLowerCase().includes(q)
           || (s.firstMessage || '').toLowerCase().includes(q)
           || labels.toLowerCase().includes(q)
           || topologyText.toLowerCase().includes(q)
@@ -229,7 +231,8 @@ function SessionListInner() {
             <button className={styles.sessionSearchClear} onClick={() => { setSearchQuery(''); searchRef.current?.focus(); }}>×</button>
           )}
         </div>
-      {searchQuery && filtered.length === 0 && (
+      {searchQuery && (bodySearch.loading || bodySearch.error || bodySearch.incomplete) && <p role="status" className={styles.sessionEmpty}>{t(bodySearch.loading ? 'sidebar.searchingBody' : bodySearch.error ? 'sidebar.bodySearchFailed' : 'sidebar.bodySearchPartial')}</p>}
+      {searchQuery && !bodySearch.loading && filtered.length === 0 && (
         <div className={styles.sessionEmpty}>{t('sidebar.noResults') || 'No results'}</div>
       )}
       {/* ── Bridge IM Channels ── */}
@@ -322,6 +325,7 @@ function SessionListInner() {
               <SessionItem
                 key={s.path}
                 session={s}
+                searchSnippet={bodySearch.snippets[s.path]}
                 isActive={!pendingNewSession && s.path === currentSessionPath}
                 isStreaming={streamingSessions.includes(s.path)}
                 agents={agents}
@@ -374,13 +378,14 @@ function SessionListInner() {
 
 // ── Session Item ──
 
-function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, disabled = false }: {
+function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, disabled = false, searchSnippet }: {
   session: Session;
   isActive: boolean;
   isStreaming: boolean;
   agents: Agent[];
   browserUrl: string | null;
   disabled?: boolean;
+  searchSnippet?: string;
 }) {
   const { t } = useI18n();
   const [editing, setEditing] = useState(false);
@@ -559,6 +564,7 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
       onContextMenu={openCtxMenu}
       disabled={disabled}
     >
+      {searchSnippet && <span className={styles.sessionSearchSnippet}>{searchSnippet}</span>}
       <div className={styles.sessionItemHeader}>
         {s.pinned && (
           <span

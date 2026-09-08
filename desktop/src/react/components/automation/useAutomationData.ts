@@ -11,6 +11,7 @@ const hanaFetch: typeof liveFetch = (url, options) => window.__lynnAutomationSmo
   : liveFetch(url, options);
 
 export interface SaveAutomationInput {
+  executor?: import('../../../../../shared/automation-executor').AutomationExecutor;
   editingJobId: string | null;
   name: string;
   prompt: string;
@@ -207,6 +208,7 @@ export function useAutomationData({
           };
       if (input.editingJobId && input.preserveSchedule) delete payload.schedule;
       payload.model = input.model;
+      if (input.executor) payload.executor = input.executor;
       const response = await hanaFetch('/api/desk/cron', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

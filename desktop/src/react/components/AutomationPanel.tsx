@@ -47,6 +47,7 @@ export function AutomationPanel() {
     const name = draft.name.trim() || (draft.currentTemplate ? (isZh ? draft.currentTemplate.defaultLabelZh : draft.currentTemplate.defaultLabelEn) : '');
     const prompt = draft.prompt.trim() || (draft.currentTemplate ? (isZh ? draft.currentTemplate.promptZh : draft.currentTemplate.promptEn) : '');
     const saved = await data.saveJob({
+      executor: draft.executorKind === 'plugin_action' ? { kind: 'plugin_action', pluginId: draft.pluginTool.split('.')[0], toolName: draft.pluginTool, input: JSON.parse(draft.pluginInput) } : { kind: draft.executorKind },
       editingJobId: draft.editingJobId,
       name,
       prompt,

@@ -34,6 +34,8 @@ import { createSessionsRoute } from "./routes/sessions.js";
 import { createModelsRoute } from "./routes/models.js";
 import { createConfigRoute } from "./routes/config.js";
 import { createUploadRoute } from "./routes/upload.js";
+import { createSessionFilesRoute } from "./routes/session-files.js";
+import { MobileService, createMobileSettingsRoute } from "./mobile/service.js";
 import { createProvidersRoute } from "./routes/providers.js";
 import { createAvatarRoute } from "./routes/avatar.js";
 import { createAgentsRoute } from "./routes/agents.js";
@@ -247,6 +249,15 @@ taskRuntime.bindConfirmStore(confirmStore as any);
 // ── 外部平台接入管理器 ──
 const routeEngine = engine as any;
 const routeHub = hub as any;
+const mobileService = new MobileService({
+  home: lynnHome,
+  listSessions: () => engine.listSessions(),
+  request: (url, init) => app.request(`http://127.0.0.1${url}`, { ...init, headers: { Authorization: `Bearer ${SERVER_TOKEN}`, Host: "127.0.0.1" } }),
+  send: (sessionPath, text) => hub.send(text, { sessionPath }),
+  isStreaming: sessionPath => engine.isSessionStreaming(sessionPath),
+  abort: sessionPath => hub.abort(sessionPath),
+});
+app.route("/api", createMobileSettingsRoute(mobileService));
 const bridgeManager = new BridgeManager({ engine: routeEngine, hub: routeHub });
 routeHub.bridgeManager = bridgeManager;
 
@@ -286,6 +297,7 @@ app.route("/api", createSessionsRoute(routeEngine));
 app.route("/api", createModelsRoute(routeEngine));
 app.route("/api", createConfigRoute(routeEngine));
 app.route("/api", createUploadRoute(routeEngine));
+app.route("/api", createSessionFilesRoute(routeEngine));
 app.route("/api", createProvidersRoute(routeEngine));
 app.route("/api", createAvatarRoute(routeEngine));
 app.route("/api", createAgentsRoute(routeEngine));
@@ -595,6 +607,7 @@ try {
 
   console.log(`[server] Lynn Server 运行在 http://${host}:${actualPort}`);
   dlog.log("server", `listening on :${actualPort}`);
+  try { await mobileService.restore(); } catch (error) { dlog.warn("mobile", `Mobile service did not start: ${errMessage(error)}`); }
 
   // 写 server-info 文件，供 Electron 检测复用或外部工具查询
   const serverInfoPath = path.join(lynnHome, "server-info.json");
@@ -637,6 +650,7 @@ let _shutting = false;
 async function gracefulShutdown() {
   if (_shutting) return;
   _shutting = true;
+  await mobileService.stop();
   console.log("\n[server] 正在关闭...");
   dlog.log("server", "shutting down...");
 

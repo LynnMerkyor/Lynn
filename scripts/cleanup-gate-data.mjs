@@ -6,6 +6,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+// Concurrent release worktrees must not remove another task's test data.
+const cleanupScope = process.env.LYNN_GATE_CLEAN_SCOPE
+  ? path.resolve(process.env.LYNN_GATE_CLEAN_SCOPE)
+  : null;
 
 const targets = [
   {
@@ -40,6 +44,10 @@ for (const target of targets) {
   for (const entry of entries) {
     if (!target.match(entry.name)) continue;
     const fullPath = path.join(target.root, entry.name);
+    if (cleanupScope) {
+      const relative = path.relative(cleanupScope, fullPath);
+      if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) continue;
+    }
     await fs.rm(fullPath, { recursive: true, force: true });
     removed += 1;
     console.log(`[gate-clean-data] removed ${target.label}: ${fullPath}`);

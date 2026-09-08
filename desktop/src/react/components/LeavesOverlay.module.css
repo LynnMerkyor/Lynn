@@ -1,0 +1,27 @@
+/* Uses openhanako's original tree-shadow video; layout adapted for Lynn. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+  mix-blend-mode: multiply;
+  opacity: 0.22;
+  /* Keep dialogs, title bar and composer controls above the decoration. */
+  z-index: 4;
+  /* Preserve a quiet reading area and fade out before the bottom controls. */
+  mask-image: radial-gradient(ellipse 45% 62% at 52% 48%, rgba(0, 0, 0, 0.12) 35%, #000 100%),
+    linear-gradient(#000 65%, transparent 94%);
+  mask-composite: intersect;
+}
+
+:global([data-theme="midnight"]) .overlay,
+:global([data-theme="high-contrast"]) .overlay {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay { display: none; }
+}

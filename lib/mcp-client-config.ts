@@ -27,6 +27,7 @@ export interface RawMcpServerConfig extends RawObject {
 
 export interface McpServerConfigBase extends RawObject {
   disabled: boolean;
+  oauth?: { clientId?: string; scope?: string };
 }
 
 export interface McpStdioServerConfig extends McpServerConfigBase {
@@ -124,6 +125,7 @@ export interface McpToolDefinition {
 }
 
 export interface McpServerState {
+  oauth?: { clientId?: string; scope?: string };
   name: string;
   transport: McpTransport;
   disabled: boolean;
@@ -256,6 +258,9 @@ export function replaceCredentialPlaceholders(value: unknown, credentials: Crede
 export function normalizeServerConfig(raw: RawMcpServerConfig = {}): NormalizedMcpServerConfig {
   const base = {
     disabled: raw.disabled === true,
+    ...(raw.oauth && typeof raw.oauth === "object" && !Array.isArray(raw.oauth) ? { oauth: {
+      clientId: String((raw.oauth as RawObject).clientId || ""), scope: String((raw.oauth as RawObject).scope || ""),
+    } } : {}),
   };
 
   if (raw.transport === "http" || raw.transport === "streamable-http") {
@@ -293,6 +298,7 @@ export function serializeServerConfig(config: RawMcpServerConfig = {}): RawMcpSe
     return {
       transport: "http",
       url: normalized.url,
+      ...(normalized.oauth ? { oauth: normalized.oauth } : {}),
       ...(Object.keys(normalized.headers || {}).length > 0 ? { headers: normalized.headers } : {}),
       ...(normalized.disabled ? { disabled: true } : {}),
     };
@@ -301,6 +307,7 @@ export function serializeServerConfig(config: RawMcpServerConfig = {}): RawMcpSe
     return {
       transport: "sse",
       url: normalized.url,
+      ...(normalized.oauth ? { oauth: normalized.oauth } : {}),
       ...(Object.keys(normalized.headers || {}).length > 0 ? { headers: normalized.headers } : {}),
       ...(normalized.messageUrl ? { messageUrl: normalized.messageUrl } : {}),
       ...(normalized.disabled ? { disabled: true } : {}),

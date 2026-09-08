@@ -152,7 +152,10 @@
       "resumePrompt": "Continue the last task and tell me the current progress plus the next step first.",
       "workspacePrompt": "Quickly read the current workspace and tell me where you would start.",
       "fleetTip": "CLI workers: run long tasks headlessly from the terminal"
-    }
+    },
+    "searchingBody": "Searching conversation text…",
+    "bodySearchFailed": "Body search failed. Title matches are still shown.",
+    "bodySearchPartial": "Some sessions were too large or unreadable, or the result limit was reached. Refine your search."
   },
   "titlebar": {
     "task": {
@@ -779,7 +782,9 @@
       "auto": "Auto",
       "autoMode": "System",
       "serifFont": "Serif Font",
-      "serifFontHint": "Use serif font for body text"
+      "serifFontHint": "Use serif font for body text",
+      "leavesOverlay": "Tree shadows",
+      "leavesOverlayHint": "Soft moving shadows along the edges of light themes. Pauses in the background; disabled for dark, high-contrast, or reduced-motion settings."
     },
     "locale": {
       "title": "Language & Region",
@@ -942,7 +947,28 @@
       "resources": "Resources",
       "source": "Source",
       "local": "Local config",
-      "discovered": "Discovered"
+      "discovered": "Discovered",
+      "kimi": {
+        "description": "Official Kimi Datasource is included. Sign in with the QR code to use your own account and quota. Credentials stay on this device; no Kimi CLI is required.",
+        "home": "Local plugin scan directory (optional; uses your Kimi Code login)",
+        "homePlaceholder": "Leave blank for ~/.kimi-code",
+        "scan": "Scan local plugins",
+        "login": "Sign in to included Kimi",
+        "install": "Usage guide",
+        "notFound": "Kimi Datasource is not installed. Install it in Kimi Code under /plugins → Official, then scan again.",
+        "command": "View launch configuration",
+        "enable": "Enable and connect",
+        "connected": "MCP connected. Data access depends on your Kimi login and quota.",
+        "saved": "Configuration saved. Check connection status in the server list.",
+        "waiting": "Waiting for Kimi authorization. Scan the QR code or open the sign-in page.",
+        "qrAlt": "Official Kimi sign-in QR code",
+        "openLogin": "Open official sign-in",
+        "cancel": "Cancel sign-in",
+        "loggedIn": "Signed in. Connecting the included Kimi Datasource.",
+        "bundled": "· Included official version",
+        "local": "· Local installation",
+        "localOptions": "Use an installed Kimi Code plugin (optional)"
+      }
     },
     "oauth": {
       "title": "Quick Login",

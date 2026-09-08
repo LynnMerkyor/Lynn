@@ -14,8 +14,10 @@
 
 import fs from "fs";
 import path from "path";
+import { normalizeAutomationExecutor, type AutomationExecutor } from "../../shared/automation-executor.js";
 
 export interface Job {
+  executor?: AutomationExecutor;
   id: string;
   type: "at" | "every" | "cron";
   schedule: string | number;
@@ -41,6 +43,7 @@ export interface RunRecord {
 }
 
 export interface AddJobOptions {
+  executor?: AutomationExecutor;
   type: "at" | "every" | "cron";
   schedule: string | number;
   prompt: string;
@@ -51,6 +54,7 @@ export interface AddJobOptions {
 }
 
 export interface UpdateJobPatch {
+  executor?: AutomationExecutor;
   label?: string;
   model?: string;
   schedule?: string | number;
@@ -176,7 +180,8 @@ export class CronStore {
    * @param opts - 任务配置
    * @returns 新建的 job
    */
-  addJob({ type, schedule, prompt, mode = "isolated", label = "", model = "", workspace = "" }: AddJobOptions): Job {
+  addJob({ type, schedule, prompt, mode = "isolated", label = "", model = "", workspace = "", executor }: AddJobOptions): Job {
+    const normalizedExecutor = normalizeAutomationExecutor(executor);
     // type 枚举校验
     const VALID_TYPES = new Set(["at", "every", "cron"]);
     if (!VALID_TYPES.has(type)) {
@@ -204,6 +209,7 @@ export class CronStore {
     const now = new Date().toISOString();
 
     const job: Job = {
+      executor: normalizedExecutor,
       id,
       type,
       schedule,
@@ -265,7 +271,8 @@ export class CronStore {
     const job = this._jobs.find(j => j.id === id);
     if (!job) return null;
 
-    const ALLOWED = new Set(["label", "model", "schedule", "prompt", "enabled", "workspace"]);
+    if (partial.executor !== undefined) partial = { ...partial, executor: normalizeAutomationExecutor(partial.executor) };
+    const ALLOWED = new Set(["label", "model", "schedule", "prompt", "enabled", "workspace", "executor"]);
 
     for (const key of Object.keys(partial)) {
       if (!ALLOWED.has(key)) continue;

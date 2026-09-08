@@ -95,12 +95,12 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.7.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.86.8.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.86.7
+Lynn --version  # should print 0.86.8
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -127,7 +127,21 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 
 
 <details open>
-<summary><strong>Lynn v0.86.7</strong> · 2026-09-07 · Hardware-adaptive local models and guided deployment <em>(latest)</em></summary>
+<summary><strong>Lynn v0.86.8</strong> · 2026-09-08 · Kimi QR sign-in, conversation search and mobile continuation <em>(latest)</em></summary>
+
+- **Kimi Datasource**: sign in with your own account from MCP settings; the included official datasource connects automatically, with no Kimi CLI installation.
+- **MCP OAuth**: HTTP/SSE discovery, PKCE, local callbacks and token refresh.
+- **Conversations and files**: search saved message text and excerpts; use session-scoped file IDs and retain uploaded copies in the correct conversation.
+- **Lightweight automation**: direct reminders and selected plugin actions alongside existing Agent tasks, with notifications and run history.
+- **Mobile continuation**: opt-in QR pairing and revocation, existing conversations and file transfers; PWA installation requires HTTPS.
+- **Optional leaf shadows**: a subtle interface layer, disabled by default.
+
+[Release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.86.8)
+
+</details>
+
+<details>
+<summary><strong>Lynn v0.86.7</strong> · 2026-09-07 · Hardware-adaptive local models and guided deployment</summary>
 
 - **Q3 / Q2 by GPU memory**: Qwen3.8-27B EfficientThink SimPO: Q3 + Q4 DFlash2 for 24GB+ dedicated VRAM (18.18GB of model files), or Q2 + Q4 DFlash2 for 16GB dedicated VRAM (14.14GB). Q3 starts at 8K context and Q2 at 4K, with one slot. KV cache, compute buffers and the operating system need additional memory. Apple unified memory is evaluated separately; 16GB unified memory is not treated as 16GB dedicated VRAM.
 - **Complete installation**: checks or installs compatible llama.cpp, verifies main and independent Q4 DFlash2 files by pinned size and SHA-256, then checks runtime health before switching models. Existing files are preserved.
@@ -1155,7 +1169,7 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 **Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases).
 
-> **Windows SmartScreen notice:** The v0.86.7 release keeps the existing NSIS installation method and does not include a publicly trusted Authenticode code signature. Windows may show an unknown-publisher or SmartScreen prompt. Download only from the official channels above and verify the published SHA-256.
+> **Windows SmartScreen notice:** The v0.86.8 release keeps the existing NSIS installation method and does not include a publicly trusted Authenticode code signature. Windows may show an unknown-publisher or SmartScreen prompt. Download only from the official channels above and verify the published SHA-256.
 
 Linux builds are planned.
 

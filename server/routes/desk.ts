@@ -497,6 +497,11 @@ export function createDeskRoute(engine: DeskRouteEngine, hub: DeskRouteHub): Hon
     return c.json({ jobs });
   });
 
+  route.get("/desk/cron/actions", (c) => {
+    const manager = (engine as unknown as { pluginManager?: { getAllTools(): Array<{ name: string; _pluginId?: string; description?: string; parameters?: unknown }> } }).pluginManager;
+    return c.json({ actions: (manager?.getAllTools() || []).filter(tool => tool._pluginId).map(tool => ({ pluginId: tool._pluginId, toolName: tool.name, description: tool.description || "", schema: tool.parameters || {} })) });
+  });
+
   /** 操作 cron 任务 */
   route.post("/desk/cron", async (c) => {
     const store = engine.agent.cronStore;

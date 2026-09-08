@@ -16,9 +16,11 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { t } from "../i18n.js";
+import { registerSessionFile, resolveSessionFile } from "../../lib/session-files.js";
 
 const MAX_FILES = 9;
 
@@ -27,6 +29,7 @@ type UploadBody = {
 };
 
 type UploadResult = {
+  uploadId?: string;
   src: string;
   dest?: string;
   name?: string;
@@ -35,6 +38,7 @@ type UploadResult = {
 };
 
 type UploadRouteEngine = {
+  listSessions?: () => Array<{ path: string }> | Promise<Array<{ path: string }>>;
   cwd: string;
 };
 
@@ -80,6 +84,29 @@ function cleanOldUploads(uploadsDir: string): void {
 
 export function createUploadRoute(engine: UploadRouteEngine): Hono {
   const route = new Hono();
+  const pending = new Map<string, { path: string; name: string; expires: number; bound: Map<string, string> }>();
+
+  // The target session is known only when the composer submits its message.
+  // Accept server-issued upload IDs, never a caller-supplied source file path.
+  route.post("/upload/bind", async c => {
+    const body = await safeJson<{ sessionPath?: string; uploadIds?: string[] }>(c);
+    if (!Array.isArray(body.uploadIds) || body.uploadIds.length > MAX_FILES || body.uploadIds.some(id => typeof id !== "string")) return c.json({ error: "Invalid upload IDs" }, 400);
+    const session = (await engine.listSessions?.() || []).find(item => item.path === body.sessionPath);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    const uploads = body.uploadIds.map(id => pending.get(id));
+    if (uploads.some(item => !item || item.expires < Date.now())) return c.json({ error: "Upload expired. Add the attachment again before sending." }, 410);
+    try {
+      const files = uploads.map((item, index) => {
+        const upload = item!;
+        const existing = upload.bound.get(session.path);
+        const fileId = existing || registerSessionFile(session.path, upload.path, { copy: true, name: upload.name }).fileId;
+        upload.bound.set(session.path, fileId);
+        const resolved = resolveSessionFile(session.path, fileId);
+        return { ...resolved.file, uploadId: body.uploadIds![index], path: resolved.localPath };
+      });
+      return c.json({ files });
+    } catch { return c.json({ error: "Attachment is unavailable. Add the attachment again before sending." }, 400); }
+  });
 
   route.post("/upload", async (c) => {
     const body = await safeJson<UploadBody>(c);
@@ -112,6 +139,7 @@ export function createUploadRoute(engine: UploadRouteEngine): Hono {
 
     // 清理超过 24 小时的旧上传文件
     cleanOldUploads(uploadsDir);
+    for (const [id, upload] of pending) if (upload.expires < Date.now()) pending.delete(id);
 
     const results: UploadResult[] = [];
 
@@ -128,7 +156,7 @@ export function createUploadRoute(engine: UploadRouteEngine): Hono {
 
         const stat = fs.statSync(srcPath);
         const name = path.basename(srcPath);
-        const timestamp = Date.now().toString(36);
+        const timestamp = `${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
         const isDir = stat.isDirectory();
 
         // 统一命名：原名_时间戳（文件保留扩展名）
@@ -144,11 +172,17 @@ export function createUploadRoute(engine: UploadRouteEngine): Hono {
           fs.copyFileSync(srcPath, destPath);
         }
 
+        let uploadId: string | undefined;
+        if (!isDir && stat.size <= 50 * 1024 * 1024 && pending.size < 4096) {
+          uploadId = randomUUID();
+          pending.set(uploadId, { path: fs.realpathSync(destPath), name, expires: Date.now() + 24 * 60 * 60 * 1000, bound: new Map() });
+        }
         results.push({
           src: srcPath,
           dest: destPath,
           name,
           isDirectory: isDir,
+          uploadId,
         });
       } catch (err) {
         results.push({ src: srcPath, error: errorMessage(err) });

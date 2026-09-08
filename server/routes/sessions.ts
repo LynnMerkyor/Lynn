@@ -31,6 +31,8 @@ import {
   unreadInsightCount,
 } from "../../shared/session-digest.js";
 import { SessionManager } from "../../core/agent-runtime/session-manager.js";
+import { searchSessionBodies } from "../../lib/search/session-search.js";
+import { sessionIdForPath, findSessionFile } from "../../lib/session-files.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -431,12 +433,21 @@ function buildSessionMap(sessions: SessionListEntry[]) {
 export function createSessionsRoute(engine: SessionsEngine): Hono {
   const route = new Hono();
 
+  route.get("/sessions/search", async (c) => {
+    const query = (c.req.query("q") || "").trim();
+    if (query.length > 256) return c.json({ error: "Search query is too long" }, 400);
+    if (!query) return c.json({ hits: [], skipped: 0, truncated: false });
+    const sessions = await engine.listSessions();
+    return c.json(await searchSessionBodies(sessions, query, { baseDir: engine.agentsDir, signal: c.req.raw.signal }));
+  });
+
   // 列出所有 agent 的历史 session
   route.get("/sessions", async (c) => {
     try {
       const sessions = await engine.listSessions();
       return c.json(sessions.map(s => ({
         path: s.path,
+        sessionId: (() => { try { return sessionIdForPath(s.path); } catch { return null; } })(),
         title: s.title || null,
         firstMessage: (s.firstMessage || "").slice(0, 100),
         modified: formatSessionDate(s.modified),
@@ -516,7 +527,11 @@ export function createSessionsRoute(engine: SessionsEngine): Hono {
           const d = asRecord(m.details);
           const files = d.files;
           if ((m.toolName === "present_files" || m.toolName === "create_docx" || m.toolName === "create_pptx" || m.toolName === "create_report" || m.toolName === "create_poster") && Array.isArray(files) && files.length) {
-            fileOutputs.push({ afterIndex: allMessages.length - 1, files: d.files });
+            fileOutputs.push({ afterIndex: allMessages.length - 1, files: files.map(value => {
+              const file = asRecord(value);
+              const sessionFile = typeof file.filePath === "string" && (queryPath || engine.currentSessionPath) ? findSessionFile((queryPath || engine.currentSessionPath)!, file.filePath) : undefined;
+              return { ...file, ...sessionFile };
+            }) });
           }
           if ((m.toolName === "edit" || m.toolName === "edit-diff") && d.diff) {
             const assistantMsg = allMessages[allMessages.length - 1];

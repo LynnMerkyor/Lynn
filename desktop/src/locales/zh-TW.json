@@ -109,7 +109,10 @@
       "resumePrompt": "繼續剛才的任務，先告訴我目前進度和下一步。",
       "workspacePrompt": "先快速讀一下目前工作區，告訴我你會從哪裡開始。",
       "fleetTip": "CLI 並行協作:在終端用 worker 協議處理長任務"
-    }
+    },
+    "searchingBody": "Searching conversation text…",
+    "bodySearchFailed": "Body search failed. Title matches are still shown.",
+    "bodySearchPartial": "Some sessions were too large or unreadable, or the result limit was reached. Refine your search."
   },
   "titlebar": {
     "task": {
@@ -629,7 +632,9 @@
       "auto": "自動",
       "autoMode": "跟隨系統",
       "serifFont": "襯線字體",
-      "serifFontHint": "使用襯線體顯示正文內容"
+      "serifFontHint": "使用襯線體顯示正文內容",
+      "leavesOverlay": "樹影光感",
+      "leavesOverlayHint": "在淺色介面邊緣投下輕柔樹影。背景執行時暫停；深色、高對比主題或系統減少動態效果時停用。"
     },
     "locale": {
       "title": "語言和地區",
@@ -796,7 +801,28 @@
       "resources": "資源",
       "source": "來源",
       "local": "本地設定",
-      "discovered": "自動發現"
+      "discovered": "自動發現",
+      "kimi": {
+        "description": "內建官方 Kimi 資料來源。掃碼登入後使用你自己的帳號與額度，憑證僅儲存在本機，無需安裝 Kimi CLI。",
+        "home": "本機外掛掃描目錄（選填，沿用 Kimi Code 登入）",
+        "homePlaceholder": "留空使用預設目錄 ~/.kimi-code",
+        "scan": "掃描本機外掛",
+        "login": "掃碼登入 Kimi",
+        "install": "使用說明",
+        "notFound": "尚未找到本機外掛，可直接使用內建版本。",
+        "command": "查看啟動設定",
+        "enable": "啟用並連線",
+        "connected": "MCP 已連線。查詢權限取決於你的 Kimi 帳號與額度。",
+        "saved": "設定已儲存，請在伺服器清單查看連線狀態。",
+        "waiting": "等待 Kimi 官方授權，可掃描 QR 碼或開啟登入頁面。",
+        "qrAlt": "Kimi 官方登入 QR 碼",
+        "openLogin": "開啟官方登入頁面",
+        "cancel": "取消登入",
+        "loggedIn": "Kimi 已登入，內建資料來源將自動連線。",
+        "bundled": "· 內建官方版本",
+        "local": "· 本機安裝",
+        "localOptions": "使用已安裝的 Kimi Code 外掛（選填）"
+      }
     },
     "oauth": {
       "title": "快速登入",

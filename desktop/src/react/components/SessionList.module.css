@@ -522,3 +522,14 @@
     background: rgba(var(--accent-rgb), 0.06);
     color: var(--accent);
 }
+.sessionSearchSnippet {
+  display: block;
+  order: 3;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  opacity: 0.75;
+  text-align: left;
+}
