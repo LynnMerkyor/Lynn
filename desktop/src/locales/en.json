@@ -225,7 +225,8 @@
     "waitForCurrentReply": "The current reply is still running. Please wait for this turn to finish before sending another message.",
     "retry": "Retry",
     "emptyAnswerHint": "The model thought but didn't say anything. Tap retry to try again.",
-    "emptyAnswerRetry": "Retry"
+    "emptyAnswerRetry": "Retry",
+    "speak": "Read aloud · Shift+click for browser speech"
   },
   "markdown": {
     "runConfirm": {
@@ -968,7 +969,12 @@
         "bundled": "· Included official version",
         "local": "· Local installation",
         "localOptions": "Use an installed Kimi Code plugin (optional)"
-      }
+      },
+      "builtinTitle": "Built-in services",
+      "enableBuiltin": "Enable",
+      "disableBuiltin": "Disable",
+      "openDocs": "Open documentation",
+      "deleteServer": "Delete MCP server"
     },
     "oauth": {
       "title": "Quick Login",

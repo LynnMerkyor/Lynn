@@ -649,7 +649,7 @@ export function McpTab() {
             onClick={() => deleteServer()}
             disabled={busyAction === 'delete' || selectedServer?.source !== 'local'}
           >
-            {t('settings.providers.delete') || '删除'}
+            {t('settings.mcp.deleteServer') || '删除 MCP 服务'}
           </button>
         </div>
 

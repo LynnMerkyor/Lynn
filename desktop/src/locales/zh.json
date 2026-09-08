@@ -228,7 +228,8 @@
     "waitForCurrentReply": "当前回复还没结束，请等本轮结束后再发下一条。",
     "retry": "Retry",
     "emptyAnswerHint": "模型只想了想，没说出话来。可以点重试再试一次。",
-    "emptyAnswerRetry": "重试"
+    "emptyAnswerRetry": "重试",
+    "speak": "朗读 · Shift+点击使用浏览器朗读"
   },
   "markdown": {
     "runConfirm": {
@@ -985,7 +986,12 @@
         "bundled": "· 内置官方版本",
         "local": "· 本机安装",
         "localOptions": "使用已安装的 Kimi Code 插件（可选）"
-      }
+      },
+      "builtinTitle": "内置增强服务",
+      "enableBuiltin": "启用",
+      "disableBuiltin": "停用",
+      "openDocs": "打开文档",
+      "deleteServer": "删除 MCP 服务"
     },
     "oauth": {
       "title": "快速登录",

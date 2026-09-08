@@ -27,6 +27,11 @@ export function AutomationJobCard({
   const modelLabel = selectedValue
     ? modelOptions.find((option) => option.value === selectedValue)?.label || job.model || ''
     : defaultModelLabel;
+  const executorLabel = job.executor?.kind === 'reminder'
+    ? (isZh ? '直接提醒' : 'Reminder')
+    : job.executor?.kind === 'plugin_action'
+      ? job.executor.toolName
+      : modelLabel;
   const workspaceLabel = folderLabel(job.workspace || null);
   const nextRunText = formatAutomationDateTime(job.nextRunAt || null);
   const lastRunText = formatAutomationDateTime(job.lastRunAt || job.latestRun?.finishedAt || job.latestRun?.timestamp || null);
@@ -73,7 +78,7 @@ export function AutomationJobCard({
       <div className={fp.automationJobDesc}>{job.prompt || (isZh ? '暂无说明' : 'No description')}</div>
       <div className={fp.automationJobMeta}>
         <span className={fp.automationJobMetaChip}>{cronToHuman(job.schedule)}</span>
-        <span className={fp.automationJobMetaChip}>{modelLabel}</span>
+        <span className={fp.automationJobMetaChip}>{executorLabel}</span>
         {workspaceLabel ? <span className={fp.automationJobMetaChip}>{workspaceLabel}</span> : null}
         {nextRunText ? <span className={fp.automationJobMetaChip}>{isZh ? `下次 ${nextRunText}` : `Next ${nextRunText}`}</span> : null}
         {lastRunText ? <span className={fp.automationJobMetaChip}>{isZh ? `上次 ${lastRunText}` : `Last ${lastRunText}`}</span> : null}

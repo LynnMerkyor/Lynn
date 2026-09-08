@@ -182,7 +182,8 @@
     "retry": "Retry",
     "waitingTooLong": "這條回覆仍在處理中。Lynn 會持續接力預設模型的備援鏈路，盡量把這一輪任務完成。",
     "emptyAnswerHint": "模型只想了想，沒說出話來。可以點重試再試一次。",
-    "emptyAnswerRetry": "重試"
+    "emptyAnswerRetry": "重試",
+    "speak": "朗讀 · Shift+點擊使用瀏覽器朗讀"
   },
   "markdown": {
     "runConfirm": {
@@ -822,7 +823,8 @@
         "bundled": "· 內建官方版本",
         "local": "· 本機安裝",
         "localOptions": "使用已安裝的 Kimi Code 外掛（選填）"
-      }
+      },
+      "deleteServer": "刪除 MCP 服務"
     },
     "oauth": {
       "title": "快速登入",
