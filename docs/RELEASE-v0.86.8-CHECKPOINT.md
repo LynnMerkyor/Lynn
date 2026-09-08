@@ -34,3 +34,5 @@
 ## 阻断与修正记录
 
 第一次 overnight 在 prerelease:preflight 失败：共享 better-sqlite3 为 Node ABI 127，旧前置脚本只允许 Electron ABI 139。脚本在探测前刷新了共享模块的 ad-hoc 签名；未替换模块代码或版本，但该签名写入超出隔离预期，已向用户披露。后续 root node_modules 改为本任务独立副本。前置检查遵循 desktop/server-process.cjs 已有 LYNN_SERVER_NODE_BIN 入口，实际打开 SQLite 数据库验证；不指定入口仍使用 Electron。正式包独立 Node/SQLite 由安装包门禁验证。
+
+第二轮 3456 通过、3 个 Git 工作区夹具失败，因 TMPDIR 位于工作树内；移到仓库外专用路径后这 3 项通过。第三轮 3457 通过、2 个插件夹具失败，缺少复制后 ESM 插件的依赖解析入口；夹具显式链接本工作树 node_modules，不依赖全局 /tmp 环境。Windows b10153 固定运行时校验通过；专用公证钥匙串按现有配置解锁后 profile 可访问。

@@ -37,6 +37,9 @@ describe("v0.77 Plugin + Desk Integration", () => {
 
   beforeEach(() => {
     tempRoot = makeTempDir("lynn-v077-test-");
+    // Copied ESM plugins resolve packages from the fixture, not this test file.
+    // Keep the test independent of global /tmp/node_modules or repository ancestry.
+    fs.symlinkSync(path.join(process.cwd(), "node_modules"), path.join(tempRoot, "node_modules"), "junction");
     builtinPluginsDir = path.join(tempRoot, "plugins");
     dataDir = path.join(tempRoot, "plugin-data");
     fs.mkdirSync(builtinPluginsDir, { recursive: true });
