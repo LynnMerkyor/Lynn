@@ -367,7 +367,8 @@
     },
     "modeSend": "发送",
     "modeSteer": "插话",
-    "contextGit": "Git 上下文"
+    "contextGit": "Git 上下文",
+    "attachmentUploadFailed": "附件上传失败，请重新添加。"
   },
   "slash": {
     "diary": "写今日日记",

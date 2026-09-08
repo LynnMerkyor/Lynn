@@ -215,7 +215,8 @@
     "contextHeldBack": "下書きに保持",
     "modeSend": "送信",
     "modeSteer": "操舵",
-    "contextGit": "Git コンテキスト"
+    "contextGit": "Git コンテキスト",
+    "attachmentUploadFailed": "添付ファイルをアップロードできませんでした。もう一度追加してください。"
   },
   "slash": {
     "diary": "今日の日記を書く",

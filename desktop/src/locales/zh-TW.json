@@ -276,7 +276,8 @@
     "contextHeldBack": "草稿裡暫存",
     "modeSend": "傳送",
     "modeSteer": "插話",
-    "contextGit": "Git 上下文"
+    "contextGit": "Git 上下文",
+    "attachmentUploadFailed": "附件上傳失敗，請重新加入。"
   },
   "slash": {
     "diary": "寫今日日記",

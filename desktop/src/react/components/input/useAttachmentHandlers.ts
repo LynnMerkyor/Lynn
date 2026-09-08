@@ -1,6 +1,7 @@
 import { useCallback, type ChangeEvent, type ClipboardEvent } from 'react';
 import { useStore } from '../../stores';
 import { isImageLikeFile } from './multimodal-guard';
+import { hanaFetch } from '../../hooks/use-hana-fetch';
 
 interface AttachedFilePayload {
   path: string;
@@ -8,6 +9,7 @@ interface AttachedFilePayload {
   isDirectory?: boolean;
   base64Data?: string;
   mimeType?: string;
+  uploadId?: string;
 }
 
 interface UseAttachmentHandlersArgs {
@@ -40,7 +42,25 @@ export function useAttachmentHandlers({
       }
       const filePath = await window.platform?.getFilePath?.(file);
       if (filePath) {
-        addAttachedFile({ path: filePath, name: file.name });
+        if (file.size > 50 * 1024 * 1024) {
+          addAttachedFile({ path: filePath, name: file.name });
+          continue;
+        }
+        try {
+          const response = await hanaFetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paths: [filePath] }),
+          });
+          const data = await response.json();
+          const uploaded = data.uploads?.find((item: { src: string }) => item.src === filePath);
+          if (!response.ok || !uploaded?.dest || !uploaded.uploadId) {
+            throw new Error(uploaded?.error || data.error || t('input.attachmentUploadFailed'));
+          }
+          addAttachedFile({ path: uploaded.dest, name: file.name, uploadId: uploaded.uploadId });
+        } catch (error) {
+          useStore.getState().addToast(error instanceof Error ? error.message : t('input.attachmentUploadFailed'), 'error');
+        }
       } else if (isImageLikeFile(file)) {
         const reader = new FileReader();
         reader.onload = () => {
@@ -61,7 +81,7 @@ export function useAttachmentHandlers({
       }
     }
     e.target.value = '';
-  }, [addAttachedFile, supportsVision, warnVisionUnsupported]);
+  }, [addAttachedFile, supportsVision, warnVisionUnsupported, t]);
 
   const handlePaste = useCallback((e: ClipboardEvent) => {
     const items = e.clipboardData?.items;

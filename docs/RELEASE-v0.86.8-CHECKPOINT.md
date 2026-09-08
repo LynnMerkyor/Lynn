@@ -48,3 +48,15 @@ Windows 严格视觉比较：GitHub Actions `34190445399`，提交 `35609b0cf8ae
 CLI100：`reports/cli-50-results-2026-09-08T05-16-57-990Z.json`，100/100 ok，22 次工具调用，平均 4303ms。GUI100 与夜间链仍在执行。Intel Node v22.16.0 / ABI 127 实际 SQLite 查询返回 42。
 
 离线缓存源在清理输出前检查别名/包含关系，3 项真实入口回归通过，确认同路径、输出内嵌套和符号链接场景不会删除原数据。远端验证支持 `npm run release:verify-remotes -- --expected-commit HEAD`，只读比较远端 main 与发布工作树，不修改本地主工作目录。两个 GitHub 仓库的 LYNN_ACTIONS_PUBLISH_RELEASE 均 unset。Gitee 凭据通过原有 Git credential helper 验证为 merkyor，旧 GitHub 仓库使用现存 LynnMerkyor 的 per-process GH_TOKEN，不切换全局登录账号。
+
+## 安装包验收阶段的修正
+
+最终在线回归在 919477ac 全部通过，CLI100 / GUI100 均 100/100；CLI 效率门禁通过。此前 BRIDGE-01 暴露“不要暴露内部工具格式”被误判为禁用工具，已收紧禁用规则，并修正概念问答条件优先级；41 项相关回归和完整在线复测通过。跨平台 CI 34192438821 与 Windows 三档视觉回归 34192438795 全绿。
+
+第一批双架构 Mac App/DMG 已签名、公证、装订及 Gatekeeper 通过，Windows Build 34192964336 从最终 NSIS 验证 23 个运行时文件、包内 CLI 和两次实际生成。ARM 安装包自动门禁与三路 Hanako 并发复查通过，Intel 包内 Node/SQLite/CLI 通过。这批包仅作验收证据，后续修正必须重打包，未上传任何正式出口。
+
+人工检查补齐了 MCP 与朗读按钮的缺失文案，并将提醒/插件任务卡片改为显示实际执行方式（c1329312）。99 个界面场景复测通过。进一步用真实原生文件选择器发现该入口绕过上传绑定：附件可读但没有会话副本。选择器现复用 /api/upload 获得上传 ID，发送时绑定真实会话；暂存失败会明确提示，超过 50 MB 的本地文件保留原路径。新增 5 项选择器回归；选择器与发送共 22 项、移动/会话文件 6 项、两项类型检查通过。真实 UI 选择并发送后，删除本次暂存副本仍能 HTTP 200 下载 203 字节原文，SHA256 为 16d13bffaba6569a5c1ed7a4c1b4cc1b823a0a8c8c5f045af6ce30c15ce383e5。证据：output/release-v0.86.8/native-picker-durable-download.json。
+
+其他实际入口验证：Kimi 官方设备授权二维码可生成并取消；OAuth 表单切换；正文搜索命中标题外的正文片段；手机访问默认关闭，二维码可生成且测试后关闭；提醒创建/执行/暂停；插件动作必填限制；默认模型真实短答、翻译、编辑重发和停止操作。短确认句的一次人工 Hanako 复查返回明确的服务降级提示，未将它记为模型复查成功。没有完成真实 Kimi 账号授权、实体手机安装或此次未配置的 MiMo 视觉测试。
+
+验收实例曾尝试启动默认语音隧道，与现有端口冲突；已停止该任务实例，并使用 LYNN_SKIP_VOICE_TUNNEL=1 隔离后续检查，未修改或终止原有服务。

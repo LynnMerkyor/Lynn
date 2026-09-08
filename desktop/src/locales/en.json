@@ -354,7 +354,8 @@
     "contextHeldBack": "Kept in draft",
     "modeSend": "Send",
     "modeSteer": "Steer",
-    "contextGit": "Git context"
+    "contextGit": "Git context",
+    "attachmentUploadFailed": "Attachment upload failed. Add the file again."
   },
   "slash": {
     "diary": "Write today's diary",
