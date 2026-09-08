@@ -60,6 +60,29 @@ describe("tool-use behavior resolver", () => {
     expect(decision.disableTools).toBe(false);
   });
 
+  it("keeps tools available when only their internal syntax must stay hidden", () => {
+    for (const prompt of [
+      "【BRIDGE-01】微信群里有人问“明天下午三点会不会下雨”，请用一句自然中文回复，必要时调用工具，不要暴露内部工具格式。",
+      "查一下深圳明天天气，不要展示工具调用细节。",
+      "Look up tomorrow's weather; do not expose tool syntax.",
+      "给我解释这个工具的最新版本，使用搜索查询官方资料。",
+    ]) {
+      expect(resolveInitialToolUseBehavior(prompt).disableTools, prompt).toBe(false);
+    }
+  });
+
+  it("preserves explicit tool prohibitions with intervening instructions", () => {
+    for (const prompt of [
+      "不要调用工具，直接回答。",
+      "不要在这个回答里使用任何工具，只回复收到。",
+      "无需工具，只回复收到。",
+      "不要联网，直接回答。",
+      "Do not use any tools; reply only OK.",
+    ]) {
+      expect(shouldDisableToolsForTurn(prompt), prompt).toBe(true);
+    }
+  });
+
   it("disables tools when the user asks for a shell command snippet, not execution", () => {
     const decision = resolveInitialToolUseBehavior("写一个 bash 命令统计当前目录下所有 .ts 文件行数");
 

@@ -51,7 +51,9 @@ export function shouldDisableToolsForTurn(promptText: unknown): boolean {
   if (!text) return false;
   if (buildBudgetCalculationContext(text)) return true;
   const compact = text.replace(/\s+/g, "");
-  const explicitNoTools = /(?:不要|不用|不必|无需|禁止).{0,12}(?:调用|使用|启用|走|打开)?(?:任何)?(?:工具|tool|tools|联网|搜索|网页|浏览器)|(?:do\s+not|don't|without|no)\s+(?:call\s+|use\s+)?(?:any\s+)?(?:tools?|web|browser|search)/iu.test(text);
+  // A restriction on exposing tool syntax is not a restriction on tool use.
+  // Require an actual use verb when words intervene after the prohibition.
+  const explicitNoTools = /(?:不要|不用|不必|无需|禁止)(?:[^\n，。；!?！？;]{0,12}(?:调用|使用|启用|走|打开))?\s*(?:任何)?\s*(?:工具|tools?|联网|搜索|网页|浏览器)|(?:do\s+not|don't|without|no)\s+(?:call\s+|use\s+)?(?:any\s+)?(?:tools?|web|browser|search)/iu.test(text);
   if (explicitNoTools) return true;
 
   const shortAnswerOnly = /(?:只|仅)(?:需要)?(?:回复|输出|回答)|请(?:只|仅|直接)(?:回复|输出|回答)|最后一行不能有其他字|only\s+(?:reply|respond|output|answer)|reply\s+only|respond\s+only/iu.test(text);
@@ -63,9 +65,9 @@ export function shouldDisableToolsForTurn(promptText: unknown): boolean {
   if (sameConversationRecallOnly) return true;
 
   const conceptualProductOrWorkflowQuestion =
-    /(?:为什么|如何|怎么|怎样|给(?:出|一个)?|写|改写|设计(?:一个)?|解释|拟定|(?:应该)?避免什么).{0,120}(?:模型|工具|产品|展示|UI|输入框|窄屏|流程|门禁|测试|原因|区别|检查清单|冲突|用户|任务|文案|按钮|tooltip|状态|节点|Session\s*Map|工作地图|右侧工作台|左侧会话列表|数字徽标|长会话|7GB|健康检查|会话\s*digest|信息架构|草案|Agent|搜索\s*Agent|证据优先|失败策略|搜索策略|git\s*commit|commit\s*message|提交信息|提交消息|提交规范)/iu.test(text)
+    (/(?:为什么|如何|怎么|怎样|给(?:出|一个)?|写|改写|设计(?:一个)?|解释|拟定|(?:应该)?避免什么).{0,120}(?:模型|工具|产品|展示|UI|输入框|窄屏|流程|门禁|测试|原因|区别|检查清单|冲突|用户|任务|文案|按钮|tooltip|状态|节点|Session\s*Map|工作地图|右侧工作台|左侧会话列表|数字徽标|长会话|7GB|健康检查|会话\s*digest|信息架构|草案|Agent|搜索\s*Agent|证据优先|失败策略|搜索策略|git\s*commit|commit\s*message|提交信息|提交消息|提交规范)/iu.test(text)
     || /(?:模型|工具|产品|展示|UI|输入框|窄屏|流程|门禁|测试|原因|区别|检查清单|冲突|用户|任务|文案|按钮|tooltip|状态|节点|Session\s*Map|工作地图|右侧工作台|左侧会话列表|数字徽标|长会话|7GB|健康检查|会话\s*digest|信息架构|草案|Agent|搜索\s*Agent|证据优先|失败策略|搜索策略|git\s*commit|commit\s*message|提交信息|提交消息|提交规范).{0,120}(?:为什么|如何|怎么|怎样|给(?:出|一个)?|写|改写|设计(?:一个)?|解释|拟定|(?:应该)?避免什么|规范|规则)/iu.test(text)
-    && !explicitToolAsk
+    ) && !explicitToolAsk
     && !/(?:最新|今天|今晚|现在|实时|查一下|查询|股价|天气|金价|汇率|世界杯|NBA|OpenAI\s*最近|发布)/iu.test(text);
   if (conceptualProductOrWorkflowQuestion) return true;
 
