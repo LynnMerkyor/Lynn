@@ -30,7 +30,7 @@ export function AutomationEditor({
   const [actionsError, setActionsError] = useState('');
   useEffect(() => {
     let live = true;
-    void hanaFetch('/api/desk/cron/actions').then(res => res.json()).then(data => { if (live) setActions(data.actions || []); }).catch(error => { if (live) setActionsError(String(error)); });
+    void (window.__lynnAutomationSmokeRequest || hanaFetch)('/api/desk/cron/actions').then(res => res.json()).then(data => { if (live) setActions(data.actions || []); }).catch(error => { if (live) setActionsError(String(error)); });
     return () => { live = false; };
   }, []);
   let inputValid = true;
@@ -59,7 +59,7 @@ export function AutomationEditor({
       <div className={styles.automationComposerFields}>
         <label className={styles.automationField}>
           <span className={styles.automationFieldLabel}>{isZh ? '执行方式' : 'Execution'}</span>
-          <select className={styles.automationFieldSelect} value={draft.executorKind} onChange={event => draft.setExecutorKind(event.target.value as typeof draft.executorKind)}>
+          <select name="executor-kind" className={styles.automationFieldSelect} value={draft.executorKind} onChange={event => draft.setExecutorKind(event.target.value as typeof draft.executorKind)}>
             <option value="agent_session">{isZh ? 'Agent 任务' : 'Agent task'}</option>
             <option value="reminder">{isZh ? '直接提醒（不调用模型）' : 'Reminder (no model call)'}</option>
             <option value="plugin_action">{isZh ? '插件动作' : 'Plugin action'}</option>
@@ -73,7 +73,7 @@ export function AutomationEditor({
         )}
         <label className={styles.automationField}>
           <span className={styles.automationFieldLabel}>{isZh ? '项目' : 'Project'}</span>
-          <select className={styles.automationFieldSelect} value={draft.project} onChange={(event) => draft.setProject(event.target.value)}>
+          <select name="project" className={styles.automationFieldSelect} value={draft.project} onChange={(event) => draft.setProject(event.target.value)}>
             {draft.project && !projectOptions.some((option) => option.value === draft.project) && <option value={draft.project}>{draft.project}</option>}
             {projectOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -93,7 +93,7 @@ export function AutomationEditor({
         </label>}
         {draft.executorKind === 'agent_session' && <label className={styles.automationField}>
           <span className={styles.automationFieldLabel}>{isZh ? '模型' : 'Model'}</span>
-          <select className={styles.automationFieldSelect} value={draft.model} onChange={(event) => draft.setModel(event.target.value)}>
+          <select name="model" className={styles.automationFieldSelect} value={draft.model} onChange={(event) => draft.setModel(event.target.value)}>
             <option value="">{defaultModelLabel}</option>
             {availableModels.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
@@ -110,7 +110,7 @@ export function AutomationEditor({
       {draft.executorKind === 'plugin_action' && <div className={styles.automationComposerFields}>
         <label className={styles.automationField}>
           <span className={styles.automationFieldLabel}>{isZh ? '插件工具' : 'Plugin tool'}</span>
-          <select className={styles.automationFieldSelect} value={draft.pluginTool} onChange={event => draft.setPluginTool(event.target.value)}>
+          <select name="plugin-tool" className={styles.automationFieldSelect} value={draft.pluginTool} onChange={event => draft.setPluginTool(event.target.value)}>
             <option value="">{isZh ? '选择已启用的插件工具' : 'Choose an enabled plugin tool'}</option>
             {draft.pluginTool && !actions.some(action => action.toolName === draft.pluginTool) && <option value={draft.pluginTool}>{draft.pluginTool} ({isZh ? '不可用' : 'unavailable'})</option>}
             {actions.map(action => <option key={action.toolName} value={action.toolName}>{action.toolName}</option>)}
@@ -118,7 +118,7 @@ export function AutomationEditor({
         </label>
         <label className={`${styles.automationField} ${styles.automationFieldGrow}`}>
           <span className={styles.automationFieldLabel}>{isZh ? '工具参数（JSON 对象）' : 'Tool arguments (JSON object)'}</span>
-          <textarea className={styles.automationFieldTextarea} rows={4} value={draft.pluginInput} onChange={event => draft.setPluginInput(event.target.value)} aria-invalid={!inputValid} />
+          <textarea className={styles.automationFieldTextarea} name="plugin-input" rows={4} value={draft.pluginInput} onChange={event => draft.setPluginInput(event.target.value)} aria-invalid={!inputValid} />
         </label>
         {actions.find(action => action.toolName === draft.pluginTool) && <details><summary>{isZh ? '工具说明与参数格式' : 'Tool description and argument schema'}</summary>
           <p>{actions.find(action => action.toolName === draft.pluginTool)?.description}</p>

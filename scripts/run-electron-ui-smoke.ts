@@ -629,12 +629,38 @@ async function main(): Promise<void> {
       await cdp.evaluate(`window.__lynnSetUiSmokeScenario('automation-long-path')`);
       await waitForExpression(cdp, `!!document.querySelector('[class*="automationJobGrid"]')`);
       await clickText('编辑');
-      await captureState('long-project', ['长期维护与自动任务验收', '保存修改'], `document.querySelector('[class*="automationComposer"] select').value.includes('very-long-project-name')`);
+      await captureState('long-project', ['长期维护与自动任务验收', '保存修改'], `document.querySelector('[class*="automationComposer"] select[name="project"]').value.includes('very-long-project-name')`);
 
       await cdp.evaluate(`document.querySelector('[role="dialog"] button').focus({ preventScroll: true })`);
       await cdp.call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
       await cdp.call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
       await captureState('keyboard-focus', ['自动任务'], `document.activeElement.matches('button:focus-visible') && parseFloat(getComputedStyle(document.activeElement).outlineWidth) >= 2 && getComputedStyle(document.activeElement).outlineStyle !== 'none'`, true);
+
+      const selectExecution = async (value: string) => {
+        await cdp!.evaluate(`(() => {
+          const select = document.querySelector('select[name="executor-kind"]');
+          select.value = ${JSON.stringify(value)}; select.dispatchEvent(new Event('change', { bubbles: true }));
+        })()`);
+        await wait(100);
+      };
+      await selectExecution('reminder');
+      await captureState('reminder', ['直接提醒（不调用模型）', '保存修改'], `!document.querySelector('select[name="model"]')`);
+      await clickText('保存修改');
+      await waitForExpression(cdp, `window.__lynnAutomationRequests.filter(r => r.action === 'update').at(-1)?.executor?.kind === 'reminder'`);
+      await clickText('编辑');
+      await selectExecution('plugin_action');
+      await waitForExpression(cdp, `!!document.querySelector('select[name="plugin-tool"] option[value="smoke-plugin.record"]')`);
+      await captureState('plugin-action-invalid', ['插件工具', '工具参数（JSON 对象）'], `[...document.querySelectorAll('[class*="automationComposer"] button')].find(b => b.textContent.trim() === '保存修改').disabled && !document.querySelector('select[name="model"]')`);
+      await cdp.evaluate(`(() => {
+        const select = document.querySelector('select[name="plugin-tool"]');
+        select.value = 'smoke-plugin.record'; select.dispatchEvent(new Event('change', { bubbles: true }));
+        const input = document.querySelector('textarea[name="plugin-input"]');
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, JSON.stringify({title: '自动任务验收'}));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      })()`);
+      await captureState('plugin-action', ['工具说明与参数格式', '保存修改'], `document.querySelector('textarea[name="plugin-input"]').getAttribute('aria-invalid') === 'false'`);
+      await clickText('保存修改');
+      await waitForExpression(cdp, `(() => { const e = window.__lynnAutomationRequests.filter(r => r.action === 'update').at(-1)?.executor; return e?.kind === 'plugin_action' && e.pluginId === 'smoke-plugin' && e.toolName === 'smoke-plugin.record' && e.input.title === '自动任务验收'; })()`);
 
       await cdp.evaluate(`window.__lynnSetUiSmokeScenario('home')`);
       await wait(50);

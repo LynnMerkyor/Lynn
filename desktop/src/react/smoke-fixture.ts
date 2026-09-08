@@ -243,7 +243,11 @@ function applyScenario(scenario: SmokeScenario): void {
   }
   window.__lynnAutomationRequests = [];
   window.__lynnAutomationFailNextRun = false;
-  window.__lynnAutomationSmokeRequest = isAutomation ? async (_url, options) => {
+  window.__lynnAutomationSmokeRequest = isAutomation ? async (url, options) => {
+    if (url === '/api/desk/cron/actions') return Response.json({ actions: [{
+      pluginId: 'smoke-plugin', toolName: 'smoke-plugin.record', description: '记录自动任务结果',
+      schema: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'] },
+    }] });
     const data = window.__lynnAutomationSmokeData!;
     const payload = options?.body ? JSON.parse(String(options.body)) : {};
     window.__lynnAutomationRequests!.push(payload);
