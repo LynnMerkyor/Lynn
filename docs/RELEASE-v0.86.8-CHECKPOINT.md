@@ -30,3 +30,7 @@
 本次只复用 Mac 上已有的 Node/Electron/依赖缓存，不下载模型、数据集或新运行时到 Mac。隐藏 UI 测试设置 `LYNN_UI_HEADLESS=1` 和独立 `LYNN_HOME`，不改变个人使用窗口。
 
 `LYNN_GATE_CLEAN_SCOPE` 将旧测试清理限制到本次证据目录，保留其他任务测试数据；本次使用全新隔离目录。
+
+## 阻断与修正记录
+
+第一次 overnight 在 prerelease:preflight 失败：共享 better-sqlite3 为 Node ABI 127，旧前置脚本只允许 Electron ABI 139。脚本在探测前刷新了共享模块的 ad-hoc 签名；未替换模块代码或版本，但该签名写入超出隔离预期，已向用户披露。后续 root node_modules 改为本任务独立副本。前置检查遵循 desktop/server-process.cjs 已有 LYNN_SERVER_NODE_BIN 入口，实际打开 SQLite 数据库验证；不指定入口仍使用 Electron。正式包独立 Node/SQLite 由安装包门禁验证。

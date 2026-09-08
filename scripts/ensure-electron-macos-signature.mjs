@@ -41,7 +41,8 @@ if (!isValid()) {
 
 // macOS can retain an invalid-page verdict for a native addon even after a
 // bundle-level verification succeeds. Refresh the addon signature and verify
-// the exact Electron Node ABI that the GUI gate and packaged app will load.
+// the selected development-server ABI. Packaged servers ship their own Node
+// and are verified separately by the installed-app gate.
 const nativeRepair = runCodesign(["--force", "--sign", "-", betterSqliteAddon]);
 if (nativeRepair.status !== 0) {
   throw new Error(`[electron-signature] better-sqlite3 signature refresh failed: ${nativeRepair.stderr || nativeRepair.stdout}`);
@@ -51,14 +52,20 @@ if (nativeVerify.status !== 0) {
   throw new Error("[electron-signature] better-sqlite3 signature remains invalid after refresh");
 }
 
-const nativeProbe = spawnSync(electronBin, ["-e", "const D=require('better-sqlite3'); const db=new D(':memory:'); db.close();"], {
+// Match desktop/server-process.cjs: GUI tests can explicitly pin host Node.
+const externalNode = process.env.LYNN_SERVER_NODE_BIN;
+const nativeRuntime = externalNode && existsSync(externalNode) ? externalNode : electronBin;
+const nativeEnv = { ...process.env };
+if (nativeRuntime === electronBin) nativeEnv.ELECTRON_RUN_AS_NODE = "1";
+else delete nativeEnv.ELECTRON_RUN_AS_NODE;
+const nativeProbe = spawnSync(nativeRuntime, ["-e", "const D=require('better-sqlite3'); const db=new D(':memory:'); db.close();"], {
   cwd: ROOT,
-  env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+  env: nativeEnv,
   encoding: "utf8",
   timeout: 15_000,
 });
 if (nativeProbe.status !== 0) {
-  throw new Error(`[electron-signature] Electron cannot load better-sqlite3: ${nativeProbe.stderr || nativeProbe.error?.message || "probe failed"}`);
+  throw new Error(`[electron-signature] Selected server runtime cannot load better-sqlite3: ${nativeProbe.stderr || nativeProbe.error?.message || "probe failed"}`);
 }
 
 console.log("[electron-signature] refreshed local ad-hoc signature for better-sqlite3 (electron-builder applies the release signature later)");
