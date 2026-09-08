@@ -571,7 +571,10 @@
       "serifFont": "명조 글꼴",
       "serifFontHint": "본문에 명조 글꼴을 사용해요",
       "leavesOverlay": "창가의 나뭇잎",
-      "leavesOverlayHint": "부드러운 창빛과 천천히 흔들리는 나뭇잎. 백그라운드에서는 일시 정지하며, 동작 줄이기에서는 정지하고 어두운 테마와 고대비에서는 꺼져요."
+      "leavesOverlayHint": "자연스럽게 흔들리는 나무 그림자가 기본으로 켜집니다. 백그라운드에서는 일시 정지하며, 동작 줄이기에서는 정지하고 어두운 테마와 고대비에서는 꺼져요.",
+      "leavesOverlayShort": "나무 그림자",
+      "leavesOverlayAction": "나무 그림자 설정 열기",
+      "leavesOverlayCloseHint": "나무 그림자가 켜져 있어요. 끄려면 설정 → 인터페이스 → 외관 → 창가의 나뭇잎으로 이동하세요. 클릭하면 설정이 열려요."
     },
     "locale": {
       "title": "언어 및 지역",

@@ -637,7 +637,10 @@
       "serifFont": "襯線字體",
       "serifFontHint": "使用襯線體顯示正文內容",
       "leavesOverlay": "窗邊樹影",
-      "leavesOverlayHint": "柔和窗光與緩慢搖曳的枝葉。背景執行時暫停；減少動態效果時靜止；深色和高對比主題停用。"
+      "leavesOverlayHint": "預設開啟自然搖曳的樹影。背景執行時暫停；減少動態效果時靜止；深色和高對比主題停用。",
+      "leavesOverlayShort": "樹影",
+      "leavesOverlayAction": "開啟窗邊樹影設定",
+      "leavesOverlayCloseHint": "窗邊樹影已開啟。關閉位置：設定 → 介面 → 外觀 → 窗邊樹影。點擊可開啟設定。"
     },
     "locale": {
       "title": "語言和地區",

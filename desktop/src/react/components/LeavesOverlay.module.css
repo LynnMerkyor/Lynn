@@ -1,4 +1,4 @@
-/* Window light on paper: cool willow silhouettes with a warm, open centre. */
+/* One local video layer; no frame timers, animated filters or pointer tracking. */
 .overlay {
   position: fixed;
   inset: 0;
@@ -6,38 +6,82 @@
   pointer-events: none;
   user-select: none;
   z-index: 4;
-  mask-image: linear-gradient(#000 45%, transparent 91%);
+  mask-image: linear-gradient(#000 35%, rgba(0, 0, 0, 0.7) 65%, transparent 96%);
 }
 .windowLight {
   position: absolute;
-  inset: -12%;
-  background:
-    linear-gradient(119deg, transparent 40%, rgba(255, 231, 180, 0.12) 41%, rgba(255, 250, 226, 0.28) 53%, transparent 54%),
-    linear-gradient(119deg, transparent 55%, rgba(255, 248, 218, 0.2) 56%, transparent 68%);
-  filter: blur(14px);
+  inset: 0;
+  background: radial-gradient(ellipse at 72% 12%, rgba(255, 245, 215, 0.12), transparent 65%);
 }
-.canopy {
-  width: 100%;
-  height: 100%;
-  color: #496a69;
-  opacity: 0.13;
-  filter: blur(5px);
+.video {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100vh;
+  height: 100vw;
+  max-width: none;
+  transform: translate(-50%, -50%) rotate(90deg);
+  object-fit: cover;
+  object-position: center;
+  opacity: 0.28;
   mix-blend-mode: multiply;
-  mask-image: radial-gradient(ellipse 43% 60% at 48% 51%, transparent 25%, #000 100%);
 }
-.branch {
-  transform-origin: 0 0;
-  animation: breeze 28s ease-in-out infinite alternate;
+.settingsHint {
+  position: absolute;
+  left: 120px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary, #707f7b);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
 }
-.stem { fill: none; stroke: currentColor; stroke-width: 2.5; }
-.leaf { fill: currentColor; }
-@keyframes breeze {
-  from { transform: rotate(-3deg) skewX(-1deg); }
-  to { transform: rotate(4deg) skewX(2deg); }
+.settingsHint:hover,
+.settingsHint:focus-visible {
+  background: var(--bg-card, #faf8f2);
+  border-color: var(--border, #dddcd6);
+  color: var(--accent, #698888);
 }
-.overlay[data-paused="true"] .branch { animation-play-state: paused; }
+.settingsHint:focus-visible { outline: 2px solid var(--accent, #698888); outline-offset: 2px; }
+.tooltip {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  width: max-content;
+  max-width: min(290px, calc(100vw - 160px));
+  padding: 10px 12px;
+  border: 1px solid var(--border, #dddcd6);
+  border-radius: 10px;
+  background: var(--bg-card, #faf8f2);
+  color: var(--text, #3d4745);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  font-size: 12px;
+  font-weight: normal;
+  line-height: 1.65;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+}
+.settingsHint:hover .tooltip,
+.settingsHint:focus-visible .tooltip { visibility: visible; opacity: 1; }
+:global([data-platform="win32"]) .settingsHint,
+:global([data-platform="linux"]) .settingsHint { left: 56px; }
 :global([data-theme="midnight"]) .overlay,
-:global([data-theme="high-contrast"]) .overlay { display: none; }
-@media (prefers-reduced-motion: reduce) {
-  .branch { animation: none; }
+:global([data-theme="high-contrast"]) .overlay,
+:global([data-theme="midnight"]) .settingsHint,
+:global([data-theme="high-contrast"]) .settingsHint { display: none; }
+@media (max-width: 680px) {
+  .hintLabel { display: none; }
+  .settingsHint { padding: 5px; }
 }

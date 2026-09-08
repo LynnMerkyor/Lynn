@@ -570,7 +570,10 @@
       "serifFont": "明朝体",
       "serifFontHint": "本文に明朝体を使用する",
       "leavesOverlay": "窓辺の木陰",
-      "leavesOverlayHint": "柔らかな窓の光と、ゆっくり揺れる枝葉。バックグラウンドでは一時停止し、動きを減らす設定では静止。ダーク・高コントラストでは無効。"
+      "leavesOverlayHint": "自然に揺れる木陰を標準で表示します。バックグラウンドでは一時停止し、動きを減らす設定では静止。ダーク・高コントラストでは無効。",
+      "leavesOverlayShort": "木陰",
+      "leavesOverlayAction": "木陰の設定を開く",
+      "leavesOverlayCloseHint": "木陰を表示中です。オフにするには、設定 → インターフェース → 外観 → 窓辺の木陰。クリックで設定を開きます。"
     },
     "locale": {
       "title": "言語と地域",

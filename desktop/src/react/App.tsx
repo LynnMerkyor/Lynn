@@ -39,7 +39,7 @@ import { JarvisRuntimeOverlay } from './components/voice/JarvisRuntimeOverlay';
 import { initTheme, initDragPrevention } from './bootstrap';
 import { initApp } from './app-init';
 import { MainContent } from './MainContent';
-import { LeavesOverlay } from './components/LeavesOverlay';
+import { LeavesOverlay, LeavesOverlayHint } from './components/LeavesOverlay';
 import { pathDisplayName } from './utils/path-label';
 
 declare function t(key: string, vars?: Record<string, string | number>): string;
@@ -346,6 +346,7 @@ function App() {
           )}
           {titleSecondary ? <span className="tb-title-secondary">{titleSecondary}</span> : null}
         </div>
+        <LeavesOverlayHint />
         <button
           className={`tb-toggle tb-toggle-right${jianOpen ? ' active' : ''}`}
           id="tbToggleRight"

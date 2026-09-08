@@ -800,7 +800,10 @@
       "serifFont": "衬线字体",
       "serifFontHint": "使用衬线体显示正文内容",
       "leavesOverlay": "窗边树影",
-      "leavesOverlayHint": "柔和窗光与缓慢摇曳的枝叶，为纸张界面留一点自然光。后台暂停；减少动态效果时静止；深色和高对比主题停用。"
+      "leavesOverlayHint": "默认开启自然摇曳的树影。后台暂停；减少动态效果时静止；深色和高对比主题停用。",
+      "leavesOverlayShort": "树影",
+      "leavesOverlayAction": "打开窗边树影设置",
+      "leavesOverlayCloseHint": "窗边树影已开启。要关闭：设置 → 界面 → 外观 → 窗边树影。点击可打开设置。"
     },
     "locale": {
       "title": "语言和地区",

@@ -1,6 +1,7 @@
-/** Lynn's window-side canopy. Code-native decoration; no video or avatar assets. */
-import { memo, useEffect, useState } from 'react';
+/** Natural tree-shadow footage from openhanako (Apache-2.0); see asset NOTICE. */
+import { memo, useEffect, useRef, useState } from 'react';
 import { useLeavesOverlayEnabled } from '../hooks/use-leaves-overlay';
+import leavesSrc from '../../assets/textures/leaves-overlay.mp4';
 import styles from './LeavesOverlay.module.css';
 
 function themeAllowsLeaves(): boolean {
@@ -8,54 +9,92 @@ function themeAllowsLeaves(): boolean {
   return theme !== 'midnight' && theme !== 'high-contrast';
 }
 
-// Asymmetric branches leave the centre of the page open for reading.
-const branches = [
-  { x: 980, y: -50, angle: 33, scale: 1.35 },
-  { x: 1240, y: 70, angle: 71, scale: 1.15 },
-  { x: 1150, y: -100, angle: -12, scale: 1.2 },
-  { x: -100, y: 200, angle: -62, scale: 0.85 },
-];
-const leaves = [
-  [4, 46, -54, 0.7], [-10, 84, 52, 0.95], [0, 130, -60, 1],
-  [-18, 169, 49, 1.1], [-12, 218, -56, 1.05], [-29, 263, 51, 0.9],
-  [-30, 311, -39, 0.75], [-44, 351, 18, 0.6],
-];
-
 export const LeavesOverlay = memo(function LeavesOverlay() {
   const enabled = useLeavesOverlayEnabled();
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [themeAllowed, setThemeAllowed] = useState(themeAllowsLeaves);
   const [hidden, setHidden] = useState(() => document.hidden);
+  const [reducedMotion, setReducedMotion] = useState(
+    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  );
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onMotion = () => setReducedMotion(motion.matches);
     const onTheme = () => setThemeAllowed(themeAllowsLeaves());
     const onVisibility = () => setHidden(document.hidden);
     const observer = new MutationObserver(onTheme);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    motion.addEventListener('change', onMotion);
     document.addEventListener('visibilitychange', onVisibility);
+    onMotion();
     onTheme();
     return () => {
       observer.disconnect();
+      motion.removeEventListener('change', onMotion);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 
-  if (!enabled || !themeAllowed) return null;
+  useEffect(() => { setFailed(false); }, [enabled]);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const updatePlayback = () => {
+      if (hidden || reducedMotion) video.pause();
+      else void video.play().catch(() => { /* A blocked decoration must not interrupt work. */ });
+    };
+    video.addEventListener('canplay', updatePlayback);
+    updatePlayback();
+    return () => {
+      video.removeEventListener('canplay', updatePlayback);
+      video.pause();
+    };
+  }, [enabled, themeAllowed, hidden, reducedMotion, failed]);
+
+  if (!enabled || !themeAllowed || failed) return null;
   return (
-    <div className={styles.overlay} data-lynn-leaves-overlay="true" data-paused={hidden} aria-hidden="true">
+    <div className={styles.overlay} data-lynn-leaves-overlay="true" aria-hidden="true">
       <div className={styles.windowLight} />
-      <svg className={styles.canopy} viewBox="0 0 1440 900" preserveAspectRatio="xMidYMin slice" focusable="false">
-        {branches.map((branch, index) => (
-          <g key={index} transform={`translate(${branch.x} ${branch.y}) rotate(${branch.angle}) scale(${branch.scale})`}>
-            <g className={styles.branch} style={{ animationDelay: `${index * -7}s`, animationDuration: `${28 + index * 5}s` }}>
-              <path className={styles.stem} d="M0 0 C12 96 -2 185 -23 272 Q-31 328 -46 372" />
-              {leaves.map(([x, y, angle, scale], leaf) => (
-                <path key={leaf} className={styles.leaf} transform={`translate(${x} ${y}) rotate(${angle}) scale(${scale})`}
-                  d="M0 0 C-22 12 -27 44 -5 77 C15 62 28 30 0 0Z" />
-              ))}
-            </g>
-          </g>
-        ))}
-      </svg>
+      <video
+        ref={videoRef}
+        className={styles.video}
+        src={leavesSrc}
+        loop
+        muted
+        playsInline
+        preload="auto"
+        disablePictureInPicture
+        disableRemotePlayback
+        tabIndex={-1}
+        onError={() => setFailed(true)}
+      />
     </div>
   );
 });
+
+export function LeavesOverlayHint() {
+  const enabled = useLeavesOverlayEnabled();
+  if (!enabled) return null;
+  const t = (key: string) => window.t?.(key) ?? key;
+  return (
+    <button
+      type="button"
+      className={styles.settingsHint}
+      data-lynn-leaves-settings="true"
+      aria-label={t('settings.appearance.leavesOverlayAction')}
+      aria-describedby="leaves-settings-tooltip"
+      onClick={() => window.platform?.openSettings?.('interface')}
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M20 4C9 2 3 7 5 14c2 7 12 6 15-10Z" />
+        <path d="M4 21C7 14 10 11 15 8" />
+      </svg>
+      <span className={styles.hintLabel}>{t('settings.appearance.leavesOverlayShort')}</span>
+      <span className={styles.tooltip} role="tooltip" id="leaves-settings-tooltip">
+        {t('settings.appearance.leavesOverlayCloseHint')}
+      </span>
+    </button>
+  );
+}

@@ -787,7 +787,10 @@
       "serifFont": "Serif Font",
       "serifFontHint": "Use serif font for body text",
       "leavesOverlay": "Window-side leaves",
-      "leavesOverlayHint": "Soft window light and a gently swaying canopy on paper. Pauses in the background; stays still with reduced motion; disabled in dark and high-contrast themes."
+      "leavesOverlayHint": "Natural moving tree shadows, on by default. Pauses in the background; stays still with reduced motion; disabled in dark and high-contrast themes.",
+      "leavesOverlayShort": "Shadows",
+      "leavesOverlayAction": "Open tree-shadow settings",
+      "leavesOverlayCloseHint": "Tree shadows are on. To turn them off: Settings → Interface → Appearance → Window-side leaves. Click to open settings."
     },
     "locale": {
       "title": "Language & Region",

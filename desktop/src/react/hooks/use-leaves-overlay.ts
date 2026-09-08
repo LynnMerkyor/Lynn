@@ -5,7 +5,7 @@ const CHANGE_EVENT = 'lynn-leaves-overlay-changed';
 
 function readPreference(): boolean {
   try {
-    return localStorage.getItem(LEAVES_OVERLAY_STORAGE_KEY) === '1';
+    return localStorage.getItem(LEAVES_OVERLAY_STORAGE_KEY) !== '0';
   } catch {
     return false;
   }
@@ -33,5 +33,5 @@ function subscribe(onChange: () => void): () => void {
 }
 
 export function useLeavesOverlayEnabled(): boolean {
-  return useSyncExternalStore(subscribe, readPreference, () => false);
+  return useSyncExternalStore(subscribe, readPreference, () => true);
 }
