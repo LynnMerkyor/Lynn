@@ -955,6 +955,9 @@ async function runLiveCase(testCase, config) {
     } catch {
       return;
     }
+    // The server broadcasts concurrent sessions to every socket. Collect only
+    // this case's session before touching timers, text or tool evidence.
+    if (sessionPath && message.sessionPath && message.sessionPath !== sessionPath) return;
     if (active.finishedNormally && active.endTimer) {
       clearTimeout(active.endTimer);
       active.endTimer = null;
