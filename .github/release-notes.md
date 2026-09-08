@@ -19,7 +19,7 @@ Lynn --version
 
 ## 中文重点
 
-- **Lynn 窗边树影**：原创 SVG 枝叶与柔和窗光替代视频，保留原来的 Lynn 头像。设置 → 界面中按需开启；后台暂停，减少动态效果时静止，深色和高对比主题停用。
+- **Lynn 窗边树影**：原创 SVG 枝叶与柔和窗光。设置 → 界面中按需开启；后台暂停，减少动态效果时静止，深色和高对比主题停用。
 - **输入栏精简**：移除常驻任务模式，小说、长文、社媒、代码、商务、翻译、研究和笔记改为可编辑的斜杠模板。保留深度调研、写作布局与执行权限选择。
 - **编辑会话隔离**：编辑历史消息后切换或新建对话，会清空旧消息的编辑目标，避免下一条消息被错误当成历史重发。
 - **停止及时生效**：检索预处理和本地模型直连都支持取消，停止后的迟到结果不会继续生成回答；结束后清除停止提示。
@@ -33,7 +33,7 @@ Lynn --version
 
 ## English highlights
 
-- Replace the tree-shadow video with Lynn's original SVG canopy and soft window light. Preserve the Lynn portrait. Opt in under Settings → Interface; animation pauses in the background and stays still with reduced motion. Dark and high-contrast themes disable the effect.
+- Add original SVG foliage and soft window light. Opt in under Settings → Interface; animation pauses in the background and stays still with reduced motion. Dark and high-contrast themes disable the effect.
 - Replace persistent task modes with explicit, editable slash templates. Keep deep research, writing layout and security controls.
 - Clear pending history-edit targets when switching or starting conversations so new messages cannot accidentally edit an old session.
 - Cancel pending research and direct local-model requests promptly; ignore late research results and clear the stopping notice when the turn ends.
