@@ -17,13 +17,13 @@ Lynn --version
 
 2026-09-08 · 窗边树影与更简洁的工作界面
 
-2026-09-09 GUI 更新：动态树影默认开启，悬停顶部“树影”可查看关闭路径。已安装 V0.87 的用户可使用原下载链接重新下载安装。
+2026-09-11 GUI 更新：小叶影收拢至右上角，轻微摇曳，默认开启；悬停左上角“树影”可查看关闭路径。已安装 V0.87 的用户可使用原下载链接重新下载安装。
 
-GUI refresh · September 9: moving tree shadows are enabled by default, with a hover guide to their settings. Existing V0.87 users can reinstall from the same download links.
+GUI refresh · September 11: smaller leaves sway gently in the upper-right corner, enabled by default, with the same hover guide to their settings. Existing V0.87 users can reinstall from the same download links.
 
 ## 中文重点
 
-- **Lynn 窗边树影**：自然摇曳的枝叶投影与柔和窗光，默认开启。悬停顶部“树影”查看关闭路径，点击直达设置；后台暂停，减少动态效果时静止，深色和高对比主题停用。
+- **Lynn 窗边树影**：约 16 片小叶影集中在右上角四分之一区域，轻微摇曳，默认开启。悬停顶部“树影”查看关闭路径，点击直达设置；后台暂停，减少动态效果时静止，深色和高对比主题停用。
 - **输入栏精简**：移除常驻任务模式，小说、长文、社媒、代码、商务、翻译、研究和笔记改为可编辑的斜杠模板。保留深度调研、写作布局与执行权限选择。
 - **编辑会话隔离**：编辑历史消息后切换或新建对话，会清空旧消息的编辑目标，避免下一条消息被错误当成历史重发。
 - **停止及时生效**：检索预处理和本地模型直连都支持取消，停止后的迟到结果不会继续生成回答；结束后清除停止提示。
@@ -37,7 +37,7 @@ GUI refresh · September 9: moving tree shadows are enabled by default, with a h
 
 ## English highlights
 
-- Natural moving tree shadows and soft window light, enabled by default. Hover over Shadows for the off switch location, or click it to open Settings → Interface; animation pauses in the background and stays still with reduced motion. Dark and high-contrast themes disable the effect.
+- About 16 small leaf shadows sway gently within the upper-right quarter, enabled by default. Hover over Shadows for the off switch location, or click it to open Settings → Interface; animation pauses in the background and stays still with reduced motion. Dark and high-contrast themes disable the effect.
 - Replace persistent task modes with explicit, editable slash templates. Keep deep research, writing layout and security controls.
 - Clear pending history-edit targets when switching or starting conversations so new messages cannot accidentally edit an old session.
 - Cancel pending research and direct local-model requests promptly; ignore late research results and clear the stopping notice when the turn ends.

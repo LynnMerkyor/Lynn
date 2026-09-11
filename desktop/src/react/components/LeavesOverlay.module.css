@@ -1,30 +1,58 @@
-/* One local video layer; no frame timers, animated filters or pointer tracking. */
+/* Two small composited leaf clusters share one texture with baked soft edges. */
 .overlay {
   position: fixed;
-  inset: 0;
+  top: var(--titlebar-height, 52px);
+  right: 0;
+  width: 50vw;
+  height: max(0px, calc(50vh - var(--titlebar-height, 52px)));
+  max-width: 760px;
+  max-height: 460px;
+  contain: strict;
   overflow: hidden;
   pointer-events: none;
   user-select: none;
   z-index: 4;
-  mask-image: linear-gradient(#000 35%, rgba(0, 0, 0, 0.7) 65%, transparent 96%);
-}
-.windowLight {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at 72% 12%, rgba(255, 245, 215, 0.12), transparent 65%);
-}
-.video {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 100vh;
-  height: 100vw;
-  max-width: none;
-  transform: translate(-50%, -50%) rotate(90deg);
-  object-fit: cover;
-  object-position: center;
-  opacity: 0.28;
   mix-blend-mode: multiply;
+  mask-image: radial-gradient(ellipse at top right, #000 58%, transparent 95%);
+}
+.leaves {
+  position: absolute;
+  max-width: none;
+  object-fit: contain;
+  object-position: top right;
+  opacity: 0.22;
+  mix-blend-mode: multiply;
+  transform-origin: 90% 8%;
+  animation: cornerBreeze 11s ease-in-out infinite alternate;
+  will-change: transform;
+}
+.upperLeaves {
+  top: -6%;
+  right: 15%;
+  width: 72%;
+  height: 72%;
+  animation-duration: 13s;
+}
+.lowerLeaves {
+  top: 30%;
+  right: -2%;
+  width: 66%;
+  height: 66%;
+  opacity: 0.19;
+  animation-duration: 17s;
+  animation-delay: -6s;
+}
+@keyframes cornerBreeze {
+  0% { transform: translate3d(0, 0, 0) rotate(-1.4deg); }
+  45% { transform: translate3d(-4px, 3px, 0) rotate(0.3deg); }
+  100% { transform: translate3d(2px, -1px, 0) rotate(1.6deg); }
+}
+.overlay[data-paused="true"] .leaves {
+  animation-play-state: paused;
+  will-change: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .leaves { animation: none; will-change: auto; }
 }
 .settingsHint {
   position: absolute;

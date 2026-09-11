@@ -1,7 +1,7 @@
-/** Natural tree-shadow footage from openhanako (Apache-2.0); see asset NOTICE. */
-import { memo, useEffect, useRef, useState } from 'react';
+/** Soft leaf shadows confined to the upper-right corner. */
+import { memo, useEffect, useState } from 'react';
 import { useLeavesOverlayEnabled } from '../hooks/use-leaves-overlay';
-import leavesSrc from '../../assets/textures/leaves-overlay.mp4';
+import leavesSrc from '../../assets/textures/leaves-corner.png';
 import styles from './LeavesOverlay.module.css';
 
 function themeAllowsLeaves(): boolean {
@@ -11,7 +11,6 @@ function themeAllowsLeaves(): boolean {
 
 export const LeavesOverlay = memo(function LeavesOverlay() {
   const enabled = useLeavesOverlayEnabled();
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [themeAllowed, setThemeAllowed] = useState(themeAllowsLeaves);
   const [hidden, setHidden] = useState(() => document.hidden);
   const [reducedMotion, setReducedMotion] = useState(
@@ -38,36 +37,28 @@ export const LeavesOverlay = memo(function LeavesOverlay() {
   }, []);
 
   useEffect(() => { setFailed(false); }, [enabled]);
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const updatePlayback = () => {
-      if (hidden || reducedMotion) video.pause();
-      else void video.play().catch(() => { /* A blocked decoration must not interrupt work. */ });
-    };
-    video.addEventListener('canplay', updatePlayback);
-    updatePlayback();
-    return () => {
-      video.removeEventListener('canplay', updatePlayback);
-      video.pause();
-    };
-  }, [enabled, themeAllowed, hidden, reducedMotion, failed]);
-
   if (!enabled || !themeAllowed || failed) return null;
   return (
-    <div className={styles.overlay} data-lynn-leaves-overlay="true" aria-hidden="true">
-      <div className={styles.windowLight} />
-      <video
-        ref={videoRef}
-        className={styles.video}
+    <div
+      className={styles.overlay}
+      data-lynn-leaves-overlay="true"
+      data-paused={hidden || reducedMotion}
+      aria-hidden="true"
+    >
+      <img
+        className={`${styles.leaves} ${styles.upperLeaves}`}
         src={leavesSrc}
-        loop
-        muted
-        playsInline
-        preload="auto"
-        disablePictureInPicture
-        disableRemotePlayback
-        tabIndex={-1}
+        alt=""
+        draggable={false}
+        decoding="async"
+        onError={() => setFailed(true)}
+      />
+      <img
+        className={`${styles.leaves} ${styles.lowerLeaves}`}
+        src={leavesSrc}
+        alt=""
+        draggable={false}
+        decoding="async"
         onError={() => setFailed(true)}
       />
     </div>

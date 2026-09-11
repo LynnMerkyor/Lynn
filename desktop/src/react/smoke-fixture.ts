@@ -273,7 +273,7 @@ function applyScenario(scenario: SmokeScenario): void {
     locale: 'zh',
     agentName: 'Lynn',
     userName: 'Smoke Tester',
-    agentYuan: 'hanako',
+    agentYuan: 'lynn',
     currentModel: { id: 'ui-smoke-model', provider: 'smoke' },
     sidebarOpen: true,
     jianOpen: false,

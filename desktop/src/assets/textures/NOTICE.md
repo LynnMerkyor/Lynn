@@ -1,6 +1,22 @@
-# Tree-shadow asset attribution
+# Tree-shadow assets
 
-Lynn uses `leaves-overlay.mp4`, copied without modification from
+## Corner leaf texture
+
+`leaves-corner.png` was generated for Lynn with the built-in image generation
+tool on September 11, 2026. It contains eight soft leaf shadows on a clean white
+background. Two small, independently swaying clusters share this texture to
+place approximately sixteen leaves in the upper-right quarter of the window.
+White is removed visually through CSS multiply blending; soft edges are baked
+into the image, with no per-frame blur or JavaScript animation loop.
+
+The final edit prompt preserved the approved diagonal eight-leaf arrangement
+along the top and right edges and replaced the preview checkerboard, ghost
+shapes and background texture with flat white (RGB 255,255,255). On-screen
+scaling makes individual leaves smaller than the approved size reference.
+
+## Archived upstream footage
+
+`leaves-overlay.mp4`, previously used by Lynn, was copied without modification from
 [liliMozi/openhanako](https://github.com/liliMozi/openhanako/blob/1d3ef308299e9f630786384e77de45444ea59196/desktop/src/assets/textures/leaves-overlay.mp4),
 commit `1d3ef308299e9f630786384e77de45444ea59196`.
 
