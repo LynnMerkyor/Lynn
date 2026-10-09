@@ -128,9 +128,11 @@ describe("realtime market/weather tools", () => {
       ].join(""));
     }));
 
-    expect(extractWeatherLocation("查一下深圳今天有没有暴雨预警")).toBe("深圳");
+    expect(extractWeatherLocation("查一下深圳今天有没有暴雨预警", "深圳")).toBe("深圳");
+    expect(extractWeatherLocation("明天晚上顺德大良区会不会下雨")).toBe("");
     const result = await createWeatherTool().execute("test", {
       query: "查一下深圳今天有没有暴雨预警",
+      location: "深圳",
     });
     const text = result.content.map((item) => item.text).join("\n");
     const answer = buildDirectResearchAnswer("weather", text, "查一下深圳今天有没有暴雨预警");
@@ -294,7 +296,7 @@ describe("realtime market/weather tools", () => {
     });
 
     const prompt = "查询 AAPL 和腾讯控股 0700.HK 最新股价，只要价格和涨跌幅。";
-    const result = await createStockMarketTool().execute("test", { query: prompt });
+    const result = await createStockMarketTool().execute("test", { query: prompt, symbol: "AAPL", symbols: ["AAPL", "00700.HK"] });
     const text = result.content[0].text;
 
     expect(inferReportResearchKind(prompt)).toBe("market");
@@ -343,7 +345,7 @@ describe("realtime market/weather tools", () => {
     });
 
     const prompt = "恒生科技成分股今天表现";
-    const result = await createStockMarketTool().execute("test", { query: prompt });
+    const result = await createStockMarketTool().execute("test", { query: prompt, symbols: ["00700.HK", "09988.HK", "03690.HK", "01810.HK", "01024.HK", "09618.HK"] });
     const text = result.content[0].text;
 
     expect(inferReportResearchKind(prompt)).toBe("market");
@@ -407,7 +409,7 @@ describe("realtime market/weather tools", () => {
       results: [],
     });
 
-    const aResult = await createStockMarketTool().execute("test", { query: "创业板科技股今天表现" });
+    const aResult = await createStockMarketTool().execute("test", { query: "创业板科技股今天表现", symbols: ["688629", "300308", "300502", "002230", "000977"] });
     const aText = aResult.content[0].text;
     expect(aResult.details.directQuotes.length).toBeGreaterThanOrEqual(5);
     expect(aText).toContain("688629.SH 最近可用行情");
@@ -415,7 +417,7 @@ describe("realtime market/weather tools", () => {
     expect(aText).toContain("300308.SZ 最近可用行情");
     expect(searchMock.runSearchQuery).not.toHaveBeenCalled();
 
-    const usResult = await createStockMarketTool().execute("test", { query: "美股七姐妹今天表现" });
+    const usResult = await createStockMarketTool().execute("test", { query: "美股七姐妹今天表现", symbols: ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA"] });
     const usText = usResult.content[0].text;
     expect(usResult.details.directQuotes.length).toBe(7);
     expect(usText).toContain("AAPL");
@@ -589,6 +591,7 @@ describe("realtime market/weather tools", () => {
       })));
 
       const pending = createSportsScoreTool().execute("test", {
+        league: "fifa.world",
         query: "今晚世界杯有几场比赛",
         maxResults: 5,
       });
@@ -619,6 +622,7 @@ describe("realtime market/weather tools", () => {
 
       const prompt = "今天世界杯赛程发我一下";
       const result = await createSportsScoreTool().execute("test", {
+        league: "fifa.world",
         query: prompt,
         maxResults: 5,
       });
@@ -661,6 +665,7 @@ describe("realtime market/weather tools", () => {
       vi.stubGlobal("fetch", fetchMock);
 
       const pending = createSportsScoreTool().execute("test", {
+        league: "fifa.world",
         query: "今晚世界杯有几场比赛？",
         maxResults: 5,
       });
@@ -748,6 +753,7 @@ describe("realtime market/weather tools", () => {
       const prompt = "今晚世界杯几场比赛帮我查一下";
       expect(inferReportResearchKind(prompt)).toBe("sports");
       const result = await createSportsScoreTool().execute("test", {
+        league: "fifa.world",
         query: prompt,
         maxResults: 5,
       });
@@ -842,6 +848,7 @@ describe("realtime market/weather tools", () => {
       vi.stubGlobal("fetch", fetchMock);
 
       const result = await createSportsScoreTool().execute("test", {
+        league: "fifa.world",
         query: "2026世界杯 6月25日 赛程 今晚比赛 比分 赛果",
         maxResults: 5,
       });
@@ -868,6 +875,7 @@ describe("realtime market/weather tools", () => {
       }));
 
       const pending = createSportsScoreTool().execute("test", {
+        league: "fifa.world",
         query: "2026世界杯 6月30日 赛程",
         maxResults: 5,
       });
@@ -912,6 +920,7 @@ describe("realtime market/weather tools", () => {
       const prompt = "查一下今晚英格兰与克罗地亚是否有比赛";
       expect(inferReportResearchKind(prompt)).toBe("sports");
       const result = await createSportsScoreTool().execute("test", {
+        league: "fifa.world",
         query: prompt,
         maxResults: 5,
       });
@@ -954,6 +963,7 @@ describe("realtime market/weather tools", () => {
     })));
 
     const result = await createSportsScoreTool().execute("test", {
+      league: "fifa.world",
       query: "世界杯半决赛在哪一天？",
       maxResults: 5,
     });
@@ -972,6 +982,7 @@ describe("realtime market/weather tools", () => {
     }));
 
     const result = await createSportsScoreTool().execute("test", {
+      league: "fifa.world",
       query: "世界杯半决赛在哪一天？",
       maxResults: 5,
     });
@@ -995,6 +1006,7 @@ describe("realtime market/weather tools", () => {
       }));
 
       const pending = createSportsScoreTool().execute("test", {
+        league: "fifa.world",
         query: "今晚世界杯有几场比赛",
         maxResults: 5,
       });
@@ -1012,6 +1024,9 @@ describe("realtime market/weather tools", () => {
   });
 
   it("does not inject weak HTML fallback results as sports score evidence", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("espn unavailable");
+    }));
     searchMock.runSearchQuery.mockResolvedValue({
       provider: "bing-html",
       plan: { scene: "sports" },
@@ -1023,6 +1038,7 @@ describe("realtime market/weather tools", () => {
     });
 
     const result = await createSportsScoreTool().execute("test", {
+      league: "fifa.world",
       query: "中超今天有什么比赛吗",
       maxResults: 5,
     });
@@ -1038,6 +1054,9 @@ describe("realtime market/weather tools", () => {
   });
 
   it("does not expose or fetch search-result page urls from Brain sports summaries", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("espn unavailable");
+    }));
     searchMock.runSearchQuery.mockResolvedValue({
       provider: "lynn-brain/glm",
       plan: { scene: "sports" },
@@ -1049,6 +1068,7 @@ describe("realtime market/weather tools", () => {
     });
 
     const result = await createSportsScoreTool().execute("test", {
+      league: "fifa.world",
       query: "中超今天有什么比赛吗",
       maxResults: 5,
     });
@@ -1101,6 +1121,7 @@ describe("realtime market/weather tools", () => {
 
     const result = await createWeatherTool().execute("test", {
       query: "深圳明天天气如何？给温度区间和降雨概率",
+      location: "深圳",
     });
     const text = result.content[0].text;
 
@@ -1143,6 +1164,7 @@ describe("realtime market/weather tools", () => {
 
     const result = await createWeatherTool().execute("test", {
       query: "北京今天空气质量怎么样？",
+      location: "北京",
     });
     const text = result.content[0].text;
 
@@ -1159,7 +1181,8 @@ describe("realtime market/weather tools", () => {
   });
 
   it("extracts the city from spoken ASR filler before weather lookup", async () => {
-    expect(extractWeatherLocation("嗯，我要查的是什我要查的是深圳天气。")).toBe("深圳");
+    expect(extractWeatherLocation("嗯，我要查的是什我要查的是深圳天气。", "深圳")).toBe("深圳");
+    expect(extractWeatherLocation("嗯，我要查的是什我要查的是深圳天气。")).toBe("");
     vi.stubGlobal("fetch", vi.fn(async (url) => {
       const href = String(url);
       if (href.includes("wttr.in")) throw new Error("wttr unavailable");
@@ -1199,6 +1222,7 @@ describe("realtime market/weather tools", () => {
 
     const result = await createWeatherTool().execute("test", {
       query: "嗯，我要查的是什我要查的是深圳天气。",
+      location: "深圳",
     });
 
     expect(result.details.location).toBe("深圳");
@@ -1241,6 +1265,7 @@ describe("realtime market/weather tools", () => {
 
     const result = await createWeatherTool().execute("test", {
       query: "上海明天天气",
+      location: "上海",
     });
     const text = result.content[0].text;
 
@@ -1286,6 +1311,7 @@ describe("realtime market/weather tools", () => {
 
     const result = await createWeatherTool().execute("test", {
       query: "杭州未来两天的天气",
+      location: "杭州",
     });
     const text = result.content[0].text;
 
@@ -1336,6 +1362,7 @@ describe("realtime market/weather tools", () => {
 
     const result = await createWeatherTool().execute("test", {
       query: "上海明天下雨吗？",
+      location: "上海",
     });
 
     expect(result.details.provider).toBe("open-meteo");
@@ -1384,6 +1411,7 @@ describe("realtime market/weather tools", () => {
 
     const result = await createWeatherTool().execute("test", {
       query: "和田明天天气",
+      location: "和田",
     });
 
     expect(result.details.location).toBe("和田");
@@ -1408,6 +1436,7 @@ describe("realtime market/weather tools", () => {
 
     const result = await createWeatherTool().execute("test", {
       query: "今天上海天气如何",
+      location: "上海",
     });
     const text = result.content[0].text;
 
@@ -1425,3 +1454,73 @@ describe("realtime market/weather tools", () => {
     expect(normalized).not.toMatch(/(?:无法|不能|没法|不支持).{0,24}(?:实时|在线|联网|访问网页|查询天气|查询股价|查询汇率|查询比分|查询赛程)/u);
   });
 });
+
+  it("geocodes the complete place without slicing it into a parent city", async () => {
+    const names = [];
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      const href = String(url);
+      if (href.includes("geocoding-api.open-meteo.com")) {
+        const name = new URL(href).searchParams.get("name");
+        names.push(name);
+        if (name !== "顺德大良") return jsonResponse({ results: [] });
+        return jsonResponse({
+          results: [{
+            name: "顺德大良",
+            admin1: "广东",
+            country: "中国",
+            latitude: 22.8404,
+            longitude: 113.2505,
+            timezone: "Asia/Shanghai",
+          }],
+        });
+      }
+      if (href.includes("api.open-meteo.com")) {
+        return jsonResponse({
+          current: {
+            temperature_2m: 27,
+            apparent_temperature: 29,
+            relative_humidity_2m: 80,
+            precipitation: 0.1,
+            weather_code: 51,
+            wind_speed_10m: 6,
+          },
+          daily: {
+            time: ["2026-10-02", "2026-10-03"],
+            weather_code: [51, 51],
+            temperature_2m_min: [24, 24],
+            temperature_2m_max: [30, 29],
+            precipitation_probability_max: [70, 83],
+            precipitation_sum: [0.4, 0.3],
+          },
+        });
+      }
+      throw new Error(`unexpected fetch ${href}`);
+    }));
+
+    const result = await createWeatherTool().execute("test", {
+      query: "明天晚上顺德大良区会不会下雨",
+      location: "顺德大良",
+    });
+
+    expect(names).toContain("顺德大良");
+    expect(names).not.toContain("顺德");
+    expect(names).not.toContain("大良");
+    expect(result.details.location).toBe("顺德大良");
+    expect(result.content[0].text).toContain("顺德大良");
+    expect(result.content[0].text).not.toContain("未检索到明确天气数据");
+  });
+
+  it("does not parse place names out of the user sentence", () => {
+    expect(extractWeatherLocation("明天顺德会下雨吗？")).toBe("");
+    expect(extractWeatherLocation("顺德大良明天晚上天气如何")).toBe("");
+    expect(extractWeatherLocation("明天晚上顺德大良区会不会下雨")).toBe("");
+    expect(extractWeatherLocation("明天晚上顺德大良区会不会下雨", "顺德大良")).toBe("顺德大良");
+  });
+
+  it("asks the model for a place instead of geocoding the whole sentence", async () => {
+    const result = await createWeatherTool().execute("test", {
+      query: "明天晚上顺德大良区会不会下雨",
+    });
+    expect(result.details.error).toBe("missing_location");
+    expect(result.content[0].text).toContain("location");
+  });

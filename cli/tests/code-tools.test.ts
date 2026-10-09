@@ -572,7 +572,7 @@ describe("code tools", () => {
       process.stdout.write = original;
     }
     expect(output).toContain("\"type\":\"assistant.delta\"");
-    expect(output).toContain("模型路由:StepFun 3.7 Flash");
+    expect(output).toContain("模型路由:Step 5 Preview");
     expect(output).toContain("\"local\":true");
     expect(output).not.toContain("fetch failed");
   });
@@ -581,8 +581,7 @@ describe("code tools", () => {
     const intro = renderCodeIntro({ approval: "ask", sandbox: "workspace-write" });
 
     expect(intro).toContain("Lynn Code");
-    expect(intro).toContain("StepFun");
-    expect(intro).toContain("StepFun");
+    expect(intro).toContain("Step 5 Preview");
     expect(intro).toContain("directory:");
     expect(intro).toContain("/fast");
     expect(intro).toContain("/think");
@@ -638,7 +637,7 @@ describe("code tools", () => {
       maxSteps: 8,
     });
 
-    expect(header).toContain("StepFun 3.7 Flash");
+    expect(header).toContain("Step 5 Preview");
     expect(header).toContain("/repo");
     expect(header).toContain("ask / workspace-write");
     expect(header).toContain("think:");

@@ -27,6 +27,7 @@
   ],
 
   "brain": [
+    "step-5-preview",
     "lynn-brain-router",
     "glm-z1-9b-0414",
     "glm-4-9b-0414",
@@ -34,10 +35,9 @@
   ],
 
   "local-qwen35-9b-q4km-imatrix": [
-    "qwen38-27b-efficientthink-q3-lynnstyle",
-    "qwen38-27b-efficientthink-q2-lynnstyle",
-    "qwen36-27b-dsv4pro-coding-q4-mtp",
-    "qwen35-9b-q4km-imatrix"
+    "qwen38-27b-coder390-q3-lynnstyle",
+    "qwen38-27b-coder390-q2-lynnstyle",
+    "qwen36-27b-dsv4pro-coding-q4-mtp"
   ],
 
   "local-qwen35-4b-q4km": [

@@ -17,7 +17,7 @@ export interface ReasoningOptions {
 }
 
 /**
- * Fast mode = the real low-latency profile on a reasoning-always head (StepFun 3.7 Flash has no
+ * Fast mode = the real low-latency profile on a reasoning-always head (Step 5 Preview has no
  * true "off"): pin reasoning to low AND cap the output budget at 8K. Switching to any explicit
  * effort level clears the cap.
  */

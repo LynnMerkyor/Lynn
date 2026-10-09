@@ -3,7 +3,6 @@
 // CMA official weather + Open-Meteo + wttr.in, with validated web-search fallback.
 const CITY_EN_MAP = {
   '北京': 'Beijing', '上海': 'Shanghai', '广州': 'Guangzhou', '深圳': 'Shenzhen',
-  '深圳南山': 'Shenzhen', '深圳福田': 'Shenzhen', '深圳罗湖': 'Shenzhen', '深圳宝安': 'Shenzhen',
   '杭州': 'Hangzhou', '成都': 'Chengdu', '重庆': 'Chongqing', '武汉': 'Wuhan',
   '南京': 'Nanjing', '天津': 'Tianjin', '苏州': 'Suzhou', '西安': "Xi'an",
   '长沙': 'Changsha', '沈阳': 'Shenyang', '青岛': 'Qingdao', '大连': 'Dalian',
@@ -145,50 +144,18 @@ async function fetchShenzhenWeatherAlert(location, query = '') {
   }
 }
 
-function cleanWeatherLocationCandidate(value) {
+function normalizeExplicitPlace(value) {
   return compactLine(value)
-    .replace(/^(?:嗯|呃|啊|请问|请|帮我|麻烦|给我|替我|查一下|查下|查查|查询|查|搜一下|搜索|看看|看一下|看下|告诉我|用工具)\s*/gi, '')
-    .replace(/^(?:今天|今日|明天|后天|今晚|今夜|明早|现在|实时|未来\d*天)\s*/gi, '')
-    .replace(/\s*(?:今天|今日|明天|后天|今晚|今夜|明早|现在|实时|未来\d*天|白天|早上|上午|下午|晚上|夜间|夜里)\s*$/gi, '')
-    .replace(/\s*(?:的)?(?:天气|气温|温度|预报|多少度|几度|weather|forecast|temperature)\s*$/gi, '')
-    .replace(/(?:呢|吗|如何|怎么样|please)$/gi, '')
-    .replace(/[，,。？?、:：；;]/g, '')
+    .replace(/[，,。？?、:：；;!！]+$/g, '')
+    .replace(/^(?:the|a|an)\s+/i, '')
     .trim();
 }
 
 function resolveDisplayCity(value) {
-  const text = compactLine(value);
-  const district = text.match(/(?:今天|今日|明天|后天|今晚|今夜|明早|现在|实时)?\s*([\u4e00-\u9fa5]{2,20}(?:区|县|旗))(?:今天|今日|明天|后天|今晚|今夜|明早)?(?:会不会|会|是否|有没有|要不要)?(?:的)?(?:下雨|降雨|降水|下雪|降雪|天气|气温|温度|预报|预警)/i);
-  if (district?.[1]) {
-    const cleaned = cleanWeatherLocationCandidate(district[1]);
-    if (cleaned) return cleaned;
-  }
-  const known = Object.keys(CITY_EN_MAP)
-    .sort((a, b) => b.length - a.length)
-    .find((city) => text.includes(city));
-  if (known) return known;
-
-  const rainOrTemp = text.match(/(?:今天|今日|明天|后天|今晚|今夜|明早|现在|实时)?\s*([\u4e00-\u9fa5A-Za-z .-]{2,32}?)(?:今天|今日|明天|后天|今晚|今夜|明早)?(?:会不会|会|是否|有没有|要不要)?(?:下雨|降雨|降水|下雪|降雪|温度|气温|多少度|几度|预警|暴雨|雷暴|雷电|台风|高温|酷热|强季风)/i);
-  if (rainOrTemp?.[1]) {
-    const cleaned = cleanWeatherLocationCandidate(rainOrTemp[1]);
-    if (cleaned) return cleaned;
-  }
-
-  const zhWeather = text.match(/(?:明天|今天|后天|今晚|今夜|未来\d*天|未来)?\s*([\u4e00-\u9fa5A-Za-z .-]{2,32}?)(?:的)?(?:天气|气温|预报|预警)/i);
-  if (zhWeather?.[1]) {
-    const cleaned = cleanWeatherLocationCandidate(zhWeather[1]);
-    if (cleaned) return cleaned;
-  }
-
-  const enAfter = text.match(/(?:weather|forecast|rain|temperature)\s+(?:in|for)\s+([A-Za-z .-]{2,40}?)(?:\s+(?:today|tomorrow|tonight))?$/i);
-  const enBefore = text.match(/([A-Za-z .-]{2,40}?)(?:'s)?\s+(?:weather|forecast|rain|temperature)(?:\s+(?:today|tomorrow|tonight))?/i);
-  const english = enAfter?.[1] || enBefore?.[1];
-  if (english) {
-    const cleaned = cleanWeatherLocationCandidate(english);
-    if (cleaned) return cleaned;
-  }
-
-  return cleanWeatherLocationCandidate(text) || '北京';
+  // The model analyzes the user sentence and passes the place. Do not parse
+  // locations back out of the original question; that is what turned
+  // "顺德会下雨" into a geocode miss.
+  return normalizeExplicitPlace(value);
 }
 
 function airQualityLevelText(aqi) {
@@ -202,42 +169,74 @@ function airQualityLevelText(aqi) {
   return '危险';
 }
 
-async function resolveGeo(displayCity, queryCity) {
-  if (CITY_GEO_MAP[displayCity]) return CITY_GEO_MAP[displayCity];
-  const knownParent = Object.keys(CITY_EN_MAP)
-    .sort((a, b) => b.length - a.length)
-    .find((city) => displayCity.startsWith(city));
-  if (knownParent && CITY_GEO_MAP[knownParent]) return CITY_GEO_MAP[knownParent];
+function samePlaceVariant(location) {
+  const cleaned = compactLine(location).replace(/(?:街道|镇|市|区|县|旗)$/u, '').trim();
+  if (!cleaned || cleaned === location || cleaned.length < 2) return '';
+  return cleaned;
+}
+
+function placeCandidates(location, fallbacks = []) {
+  const primary = compactLine(location);
+  const values = [primary, samePlaceVariant(primary)];
+  for (const item of Array.isArray(fallbacks) ? fallbacks : []) values.push(compactLine(item));
+  return [...new Set(values.filter((item) => item.length >= 2))];
+}
+
+function weatherGeocodeCandidates(location) {
+  // Never slice a compound place. "顺德大良" must stay intact; parent places
+  // belong in model-supplied fallback_locations.
+  return placeCandidates(location);
+}
+
+async function geocodeWeatherName(name, signal) {
+  const params = new URLSearchParams({
+    name,
+    count: '5',
+    language: 'zh',
+    format: 'json',
+  });
+  const resp = await fetch('https://geocoding-api.open-meteo.com/v1/search?' + params.toString(), {
+    headers: { 'User-Agent': 'lobster-brain-v2/0.0' },
+    signal,
+  });
+  if (!resp.ok) throw new Error('open-meteo geocode ' + resp.status);
+  const data = await resp.json();
+  const results = Array.isArray(data.results) ? data.results : [];
+  return results.find((item) => /中国|China/i.test(String(item?.country || ''))) || results[0];
+}
+
+async function resolveGeo(displayCity, queryCity, fallbacks = []) {
+  if (CITY_GEO_MAP[displayCity]) return { ...CITY_GEO_MAP[displayCity], requested: displayCity, matched: displayCity };
   const ctrl = new AbortController();
-  const timeout = setTimeout(() => ctrl.abort(), 5000);
+  const timeout = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const params = new URLSearchParams({
-      name: (knownParent || displayCity || queryCity || 'Beijing').replace(/[市区县旗]$/u, ''),
-      count: '1',
-      language: 'zh',
-      format: 'json',
-    });
-    const resp = await fetch('https://geocoding-api.open-meteo.com/v1/search?' + params.toString(), {
-      headers: { 'User-Agent': 'lobster-brain-v2/0.0' },
-      signal: ctrl.signal,
-    });
-    if (!resp.ok) throw new Error('open-meteo geocode ' + resp.status);
-    const data = await resp.json();
-    const geo = data.results?.[0];
-    if (!geo?.latitude || !geo?.longitude) throw new Error('open-meteo geocode empty');
-    return {
-      latitude: geo.latitude,
-      longitude: geo.longitude,
-      timezone: geo.timezone || 'Asia/Shanghai',
-      name: geo.name || displayCity,
-    };
+    let lastError = 'open-meteo geocode empty';
+    const candidates = placeCandidates(displayCity, [queryCity, ...fallbacks].filter((item) => item && item !== displayCity));
+    for (const candidate of candidates) {
+      try {
+        const geo = await geocodeWeatherName(candidate, ctrl.signal);
+        if (geo?.latitude && geo?.longitude) {
+          return {
+            latitude: geo.latitude,
+            longitude: geo.longitude,
+            timezone: geo.timezone || 'Asia/Shanghai',
+            name: geo.name || candidate,
+            requested: displayCity,
+            matched: candidate,
+          };
+        }
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+      }
+    }
+    throw new Error(lastError);
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function fetchOpenMeteoAirQuality(displayCity, queryCity) {
-  const geo = await resolveGeo(displayCity, queryCity);
+async function fetchOpenMeteoAirQuality(displayCity, queryCity, fallbacks = []) {
+  const geo = await resolveGeo(displayCity, queryCity, fallbacks);
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 7000);
   try {
@@ -277,33 +276,35 @@ async function fetchOpenMeteoAirQuality(displayCity, queryCity) {
   }
 }
 
-async function fetchCmaWeather(displayCity, queryCity, rawQuery = '') {
-  const parentCity = Object.keys(CITY_EN_MAP)
-    .sort((a, b) => b.length - a.length)
-    .find((city) => displayCity.startsWith(city));
-  const lookupCity = parentCity || displayCity;
+async function fetchCmaWeather(displayCity, queryCity, rawQuery = '', fallbacks = []) {
   const searchCtrl = new AbortController();
   const searchTimeout = setTimeout(() => searchCtrl.abort(), 5000);
   let station;
+  let matchedName = '';
   try {
-    const params = new URLSearchParams({ q: lookupCity || queryCity || '北京', limit: '10' });
-    const resp = await fetch('https://weather.cma.cn/api/autocomplete?' + params.toString(), {
-      headers: { 'User-Agent': 'Mozilla/5.0 Lynn/Brain-v2', Referer: 'https://weather.cma.cn/' },
-      signal: searchCtrl.signal,
-    });
-    if (!resp.ok) throw new Error('cma autocomplete ' + resp.status);
-    const data = await resp.json();
-    const candidates = Array.isArray(data.data) ? data.data : [];
-    const rows = candidates.map((item) => String(item || '').split('|'));
-    const normalizedLookup = String(lookupCity || '').replace(/[市区县]$/u, '');
-    const normalizedQuery = String(queryCity || '').toLowerCase();
-    const exact = rows.find((parts) => {
-      const name = String(parts[1] || '');
-      const pinyin = String(parts[2] || '').toLowerCase();
-      return name === lookupCity || name.replace(/[市区县]$/u, '') === normalizedLookup || (normalizedQuery && pinyin === normalizedQuery);
-    });
-    station = exact?.[0];
-    if (!station || !/^[A-Za-z0-9]+$/.test(station)) throw new Error('cma station empty');
+    const lookups = placeCandidates(displayCity, fallbacks);
+    if (!lookups.length) throw new Error('cma station empty');
+    let rows = [];
+    for (const lookupCity of lookups) {
+      const params = new URLSearchParams({ q: lookupCity, limit: '10' });
+      const resp = await fetch('https://weather.cma.cn/api/autocomplete?' + params.toString(), {
+        headers: { 'User-Agent': 'Mozilla/5.0 Lynn/Brain-v2', Referer: 'https://weather.cma.cn/' },
+        signal: searchCtrl.signal,
+      });
+      if (!resp.ok) throw new Error('cma autocomplete ' + resp.status);
+      const data = await resp.json();
+      rows = (Array.isArray(data.data) ? data.data : []).map((item) => String(item || '').split('|'));
+      const exact = rows.find((parts) => {
+        const name = String(parts[1] || '');
+        return name === lookupCity || name.replace(/(?:街道|镇|市|区|县|旗)$/u, '') === lookupCity;
+      });
+      if (exact && /^[A-Za-z0-9]+$/.test(exact[0] || '')) {
+        station = exact[0];
+        matchedName = exact[1] || lookupCity;
+        break;
+      }
+    }
+    if (!station) throw new Error('cma station empty');
   } finally {
     clearTimeout(searchTimeout);
   }
@@ -322,7 +323,7 @@ async function fetchCmaWeather(displayCity, queryCity, rawQuery = '') {
     const now = data.now || {};
     const daily = Array.isArray(data.daily) ? data.daily.slice(0, 3) : [];
     if (!Number.isFinite(Number(now.temperature)) && !daily.length) throw new Error('cma weather empty');
-    const location = data.location?.name || lookupCity || displayCity;
+    const location = data.location?.name || matchedName || displayCity;
     const today = daily[0];
     const tomorrow = daily[1];
     const target = /明天|tomorrow/i.test(rawQuery) && tomorrow
@@ -350,8 +351,8 @@ async function fetchCmaWeather(displayCity, queryCity, rawQuery = '') {
   }
 }
 
-async function fetchOpenMeteoWeather(displayCity, queryCity, rawQuery = '') {
-  const geo = await resolveGeo(displayCity, queryCity);
+async function fetchOpenMeteoWeather(displayCity, queryCity, rawQuery = '', fallbacks = []) {
+  const geo = await resolveGeo(displayCity, queryCity, fallbacks);
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 7000);
   try {
@@ -411,7 +412,10 @@ async function fetchWttr(displayCity, queryCity) {
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const url = 'https://wttr.in/' + encodeURIComponent(queryCity) + '?format=j1&lang=zh';
+    const english = CITY_EN_MAP[displayCity] || '';
+    const target = english || queryCity;
+    if (!/^[A-Za-z0-9 ,.'-]+$/.test(target)) throw new Error('wttr requires a resolved latin place or coordinates');
+    const url = 'https://wttr.in/' + encodeURIComponent(target) + '?format=j1&lang=zh';
     const resp = await fetch(url, {
       headers: { 'User-Agent': 'lobster-brain-v2/0.0' },
       signal: ctrl.signal,
@@ -422,7 +426,8 @@ async function fetchWttr(displayCity, queryCity) {
     if (!cur) throw new Error('no current condition');
 
     const weatherText = cur.lang_zh?.[0]?.value || cur.weatherDesc?.[0]?.value || '未知';
-    let summary = '【' + displayCity + '实时天气】\n';
+    const area = data.nearest_area?.[0]?.areaName?.[0]?.value || target;
+    let summary = '【' + area + '实时天气】\n请求地点: ' + displayCity + '\n';
     summary += 'provider: wttr.in\n';
     summary += 'source: ' + url + '\n';
     summary += '🌡 温度:' + cur.temp_C + '°C(体感 ' + cur.FeelsLikeC + '°C)\n';
@@ -446,13 +451,31 @@ async function fetchWttr(displayCity, queryCity) {
   }
 }
 
-export async function weather(city, { log, webSearchFn } = {}) {
-  const rawCity = String(city || '').trim() || '北京';
-  const displayCity = resolveDisplayCity(rawCity);
+export async function weather(input, options = {}) {
+  const opts = options && typeof options === 'object' ? options : {};
+  const { log, webSearchFn } = opts;
+  const explicit = typeof input === 'object' && input
+    ? (input.location || input.city || input.place || '')
+    : input;
+  const rawQuery = typeof input === 'object' && input
+    ? String(input.query || input.question || '')
+    : (opts.query || '');
+  const rawCity = normalizeExplicitPlace(explicit);
+  const fallbacks = typeof input === 'object' && input && Array.isArray(input.fallback_locations)
+    ? input.fallback_locations.map(normalizeExplicitPlace).filter(Boolean)
+    : [];
+  if (!rawCity) {
+    return JSON.stringify({
+      ok: false,
+      error: 'missing_location',
+      guidance: '天气地点必须由模型分析后填入 location。不要把整句用户问题传给天气工具。',
+    });
+  }
+  const displayCity = rawCity;
   const queryCity = CITY_EN_MAP[displayCity] || displayCity;
-  if (isWeatherAlertQuery(rawCity) && /深圳|深汕/.test(rawCity + displayCity)) {
+  if (isWeatherAlertQuery(rawQuery || rawCity) && /深圳|深汕/.test(displayCity)) {
     try {
-      const r = await fetchShenzhenWeatherAlert(displayCity || '深圳', rawCity);
+      const r = await fetchShenzhenWeatherAlert(displayCity || '深圳', rawQuery || rawCity);
       log && log('info', 'tool-exec/weather alert OK ' + displayCity);
       return r;
     } catch (e) {
@@ -467,9 +490,9 @@ export async function weather(city, { log, webSearchFn } = {}) {
       ].join('\n');
     }
   }
-  if (isAirQualityQuery(rawCity)) {
+  if (isAirQualityQuery(rawQuery || rawCity)) {
     try {
-      const r = await fetchOpenMeteoAirQuality(displayCity, queryCity);
+      const r = await fetchOpenMeteoAirQuality(displayCity, queryCity, fallbacks);
       log && log('info', 'tool-exec/weather air quality OK ' + displayCity);
       return r;
     } catch (e) {
@@ -482,8 +505,8 @@ export async function weather(city, { log, webSearchFn } = {}) {
     }
   }
   const providers = [
-    { name: 'cma', run: () => fetchCmaWeather(displayCity, queryCity, rawCity) },
-    { name: 'open-meteo', run: () => fetchOpenMeteoWeather(displayCity, queryCity, rawCity) },
+    { name: 'cma', run: () => fetchCmaWeather(displayCity, queryCity, rawQuery || rawCity, fallbacks) },
+    { name: 'open-meteo', run: () => fetchOpenMeteoWeather(displayCity, queryCity, rawQuery || rawCity, fallbacks) },
     { name: 'wttr.in', run: () => fetchWttr(displayCity, queryCity) },
   ];
   let lastErrors = [];
@@ -502,7 +525,7 @@ export async function weather(city, { log, webSearchFn } = {}) {
   }
   if (webSearchFn) {
     try {
-      const rawFallback = await webSearchFn(`site:weather.cma.cn ${displayCity} ${rawCity} 温度 降水 天气预报`);
+      const rawFallback = await webSearchFn(`site:weather.cma.cn ${displayCity} ${rawQuery || ''} 温度 降水 天气预报`);
       const fallback = weatherSearchFallbackText(rawFallback);
       if (fallback) {
         log && log('info', 'tool-exec/weather validated web_search fallback OK ' + displayCity);
@@ -515,11 +538,13 @@ export async function weather(city, { log, webSearchFn } = {}) {
   }
   return JSON.stringify({
     ok: false,
-    error: 'all weather sources failed',
+    error: 'location_not_found',
     location: displayCity,
+    tried: placeCandidates(displayCity, fallbacks),
     sources: ['cma', 'open-meteo', 'wttr.in'],
     details: lastErrors,
+    guidance: '保留原地名。若需要上级行政区，由模型放入 fallback_locations 后重试，不要把地名切成残片。',
   });
 }
 
-export const __testing__ = { CITY_EN_MAP, resolveDisplayCity, weatherSearchFallbackText, weatherCodeText };
+export const __testing__ = { CITY_EN_MAP, resolveDisplayCity, normalizeExplicitPlace, weatherGeocodeCandidates, placeCandidates, weatherSearchFallbackText, weatherCodeText };

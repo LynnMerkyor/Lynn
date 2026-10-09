@@ -34,20 +34,16 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('detectLocalModelHardware');
     expect(source).toContain('detected.recommended_model_id');
     expect(source).toContain('can_enable: usable');
-    // 9B remains visible only as a low-config downgrade.
-    expect(source).toContain('qwen35-9b-q4km-imatrix');
-    expect(source).toContain('Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf');
-    // 4B remains visible only as a low-config downgrade with explicit thinking-on risk.
-    expect(source).toContain('qwen35-4b-q4km');
-    expect(source).toContain('低配降级');
-    expect(source).toContain('thinking-on 可能长思考后无正文');
+    expect(source).not.toContain('id: "qwen35-9b-q4km-imatrix"');
+    expect(source).not.toContain('id: "qwen35-4b-q4km"');
+    expect(source).not.toContain('低配降级');
     // 35B = 32GB+ DS-V4-Pro thinking distilled orchestrator with objective metrics.
     expect(source).toContain('qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix');
     expect(source).toContain('DSV4Pro Thinking Distill');
     expect(source).toContain('GPQA-Diamond 80.3%');
     expect(source).toContain('端到端编排 26.6s');
     expect(source).toContain('32GB 显存/统一内存+ 可选');
-    expect(source).toContain('默认推荐 Qwen3.8-27B Q3/Q2 + Q4 DFlash2');
+    expect(source).toContain('默认推荐 Qwen3.8-27B Coder390：16GB 及以上 Q3，16GB 以下 Q2。');
     expect(source).not.toContain('默认仍首推 27B Q4');
     expect(source).not.toContain('Spark/远端兜底');
     expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF');
@@ -83,8 +79,9 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('定位当前模型文件');
     expect(source).not.toContain('下载/查看');
     expect(source).toContain('chooseGgufModel');
-    expect(source).toContain('9B、4B 仅作为低配降级');
-    expect(renderedSource).toContain('thinking-on 可能长思考后无正文');
+    expect(source).toContain('16GB 及以上是 Q3，16GB 以下是 Q2');
+    expect(source).not.toContain('9B、4B 仅作为低配降级');
+    expect(renderedSource).not.toContain('thinking-on 可能长思考后无正文');
     expect(source).toContain('localModelActionErrorText');
   });
 
@@ -143,7 +140,7 @@ describe('Local Qwen provider UX guards', () => {
     const onboardingStep = read('desktop/src/react/onboarding/steps/LocalModelDownloadStep.tsx');
     const badge = read('desktop/src/react/components/ProviderStatusBadge.tsx');
     expect(constants).toContain("providerName: 'local-qwen35-9b-q4km-imatrix'");
-    expect(constants).toContain("defaultModelId: 'qwen38-27b-efficientthink-q3-lynnstyle'");
+    expect(constants).toContain("defaultModelId: 'qwen38-27b-coder390-q3-lynnstyle'");
     expect(onboardingStep).toContain('/api/local-qwen35-9b/status');
     expect(onboardingStep).toContain('llamaState.startDownload');
     expect(onboardingStep).not.toContain('/api/local-qwen35-9b/setup');
@@ -263,8 +260,8 @@ describe('Local Qwen provider UX guards', () => {
     expect(profiles).toContain('supersedesFileNames');
     expect(profiles).toContain('Qwen3.5-9B-Q4_K_M-imatrix.gguf');
     expect(profiles).toContain('0f292ba0d1058065a6624883a76a2adf00b266d07b9396ed67b155ff522e18d4');
-    expect(route).toContain('Qwen3.5-9B Q4_K_M imatrix MTP');
-    expect(route).toContain('Qwen3.5-4B Q4_K_M imatrix (低配降级)');
+    expect(route).not.toContain('Qwen3.5-9B Q4_K_M imatrix MTP');
+    expect(route).not.toContain('Qwen3.5-4B Q4_K_M imatrix (低配降级)');
     expect(route).not.toContain('Qwen3.5-4B Q4_K_M (unsloth)');
   });
 
@@ -274,9 +271,10 @@ describe('Local Qwen provider UX guards', () => {
     const setup = read('scripts/local_qwen35_9b_setup.sh');
     expect(panel).toContain("modelFileName === selectedTier.fileName.split('/').pop()");
     expect(panel).toContain('needs_model_upgrade');
-    expect(panel).toContain('安装 ${selectedTier.quantization} + Q4 DFlash2');
-    expect(panel).toContain('旧版 9B');
-    expect(panel).toContain('新版 27B Q3/Q2 + Q4 DFlash2 待下载');
+    expect(panel).toContain('安装 ${selectedTier.quantization} 并启动');
+    expect(panel).toContain('旧版模型');
+    expect(panel).toContain('Coder390 Q3/Q2 待下载');
+    expect(panel).not.toContain('9B 或 4B');
     expect(panel).toContain('llamacppStartDownload');
     expect(bootstrap).toContain('LEGACY_MODEL_FILE_NAMES');
     expect(setup).toContain('find_legacy_gguf');

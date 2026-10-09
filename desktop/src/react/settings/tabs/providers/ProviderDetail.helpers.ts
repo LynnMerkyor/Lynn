@@ -7,10 +7,10 @@
  */
 
 export const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-export const LOCAL_QWEN_PROVIDER_LABEL = '本地 Qwen3.8-27B EfficientThink';
-export const LOCAL_QWEN_DEFAULT_MODEL_ID = 'qwen38-27b-efficientthink-q3-lynnstyle';
-export const LOCAL_QWEN_DEFAULT_MODEL_FILE = 'Qwen3.8-27B-EfficientThink-SimPO-Q3-LynnStyle.gguf';
-export const LOCAL_QWEN_DEFAULT_EXPECTED_SIZE = 18_175_191_680;
+export const LOCAL_QWEN_PROVIDER_LABEL = '本地 Qwen3.8-27B Coder390';
+export const LOCAL_QWEN_DEFAULT_MODEL_ID = 'qwen38-27b-coder390-q3-lynnstyle';
+export const LOCAL_QWEN_DEFAULT_MODEL_FILE = 'Qwen3.8-27B-Coder390-EfficientThink-Q3LynnStyle-MTP.gguf';
+export const LOCAL_QWEN_DEFAULT_EXPECTED_SIZE = 17_303_770_432;
 export const LOCAL_QWEN_COMPAT_PROVIDER_IDS = new Set([
   LOCAL_QWEN_PROVIDER_ID,
   'local-qwen35-4b-q4km',
@@ -48,70 +48,30 @@ export type LocalUpgradeOption = {
   file_name?: string;
 };
 
-export const LOCAL_QWEN35_4B_DOWNGRADE: LocalUpgradeOption = {
-  id: 'qwen35-4b-q4km',
-  label: 'Qwen3.5-4B Q4_K_M imatrix (低配降级)',
-  profile: '8~16GB 显存/统一内存可选 · 建议 thinking-off',
-  metrics: ['2.6 GB', 'MMLU thinking-off 73.00%', 'GPQA thinking-off 16.67%', 'thinking-on 可能长思考后无正文'],
-  reason: '仅推荐给跑不动 27B / 9B 的低配设备。4B 只作为降级档；thinking-on 可能长思考后无正文，默认不要作为引导模型。',
-  modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix',
-  download_label: '下载到本机',
-  file_name: 'Qwen3.5-4B-Q4_K_M-imatrix.gguf',
-};
-
-export const LOCAL_QWEN35_9B_DOWNGRADE: LocalUpgradeOption = {
-  id: 'qwen35-9b-q4km-imatrix',
-  label: 'Qwen3.5-9B Q4_K_M imatrix MTP (低配降级)',
-  profile: '16~24GB 显存/统一内存可选 · 比 27B 更轻',
-  metrics: ['5.78GB / 5.38GiB', '32K 上下文', 'MTP 加速', '低配降级'],
-  reason: '为无法运行 27B 的设备保留的旧版兼容选项，不是当前默认推荐。',
-  modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP',
-  download_label: '下载到本机',
-  file_name: 'Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf',
-};
-
 export const LOCAL_QWEN36_35B_UPGRADE: LocalUpgradeOption = {
   id: 'qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix',
   label: 'Qwen3.6-35B-A3B DSV4Pro Thinking Distill MTP Q5_K_M imatrix',
   profile: '32GB 显存/统一内存+ 可选 · 更高配本地编排器',
   metrics: ['25.3 GB Q5_K_M imatrix', 'MTP 原生头', 'GPQA-Diamond 80.3%', '端到端编排 26.6s'],
-  reason: '35B-A3B Q5_K_M 是手动可选的旧版模型，文件和缓存占用更大。默认推荐 Qwen3.8-27B Q3/Q2 + Q4 DFlash2。',
+  reason: '35B-A3B Q5_K_M 是手动可选的旧版模型，文件和缓存占用更大。默认推荐 Qwen3.8-27B Coder390：16GB 及以上 Q3，16GB 以下 Q2。',
   modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF',
   download_label: '下载到本机',
   file_name: 'Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf',
 };
 
 export function normalizeLocalUpgradeOptions(options: LocalUpgradeOption[] = [], memoryGib?: number | null) {
-  // Preserve legacy optional tiers separately from the hardware-adaptive default.
-  // 2026-06-27: 接 hardware.total_memory_gib 做 memory-adaptive 显示 —
-  //   - memoryGib > 32:藏 4B 降级,保留 9B 与 35B
-  //   - memoryGib < 24:藏 35B 高端,展示 9B/4B
-  //   - 中间(24~32GB):9B + 4B 都显示,35B 隐藏
-  //   - memoryGib 未知(null/undefined):全显示(保留 v0.79.1 之前行为)
-  let server4b: LocalUpgradeOption | null = null;
-  let server9b: LocalUpgradeOption | null = null;
+  // 9B and 4B are no longer offered. 35B stays a manual high-memory option.
   let server35b: LocalUpgradeOption | null = null;
   const others: LocalUpgradeOption[] = [];
   for (const option of options) {
     const haystack = `${option.id || ''} ${option.label || ''}`.toLowerCase();
-    if (haystack.includes('27b')) continue;
-    if (haystack.includes('4b')) { server4b = option; continue; }
-    if (haystack.includes('9b')) { server9b = option; continue; }
+    if (haystack.includes('27b') || haystack.includes('9b') || haystack.includes('4b')) continue;
     if (haystack.includes('35b')) { server35b = option; continue; }
     others.push(option);
   }
   const mem = typeof memoryGib === 'number' && Number.isFinite(memoryGib) ? memoryGib : null;
-  const show4b = mem === null || mem <= 32;
-  const show9b = true;
   const show35b = mem === null || mem >= 32;
-  const normalized: LocalUpgradeOption[] = [];
-  if (show9b) {
-    normalized.push({ ...LOCAL_QWEN35_9B_DOWNGRADE, ...(server9b || {}), ...LOCAL_QWEN35_9B_DOWNGRADE });
-  }
-  if (show4b) {
-    normalized.push({ ...LOCAL_QWEN35_4B_DOWNGRADE, ...(server4b || {}), ...LOCAL_QWEN35_4B_DOWNGRADE });
-  }
-  normalized.push(...others);
+  const normalized: LocalUpgradeOption[] = [...others];
   if (show35b) {
     normalized.push({ ...LOCAL_QWEN36_35B_UPGRADE, ...(server35b || {}), ...LOCAL_QWEN36_35B_UPGRADE });
   }

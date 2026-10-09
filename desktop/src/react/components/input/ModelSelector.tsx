@@ -26,7 +26,7 @@ interface SelectorModel {
 }
 
 const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN35_MODEL_ID = 'qwen38-27b-efficientthink-q3-lynnstyle';
+const LOCAL_QWEN35_MODEL_ID = 'qwen38-27b-coder390-q3-lynnstyle';
 
 function formatProviderLabel(provider?: string): string {
   if (!provider) return '';

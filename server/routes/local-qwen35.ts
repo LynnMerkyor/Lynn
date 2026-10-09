@@ -644,40 +644,13 @@ async function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): Pro
         },
         warnings: detected.warnings,
         blockers: [],
-        // 三档全部 surface:默认 27B,低配 9B / 4B downgrade,32GB+ 35B。
         upgrade_options: [
-          {
-            id: "qwen35-9b-q4km-imatrix",
-            label: "Qwen3.5-9B Q4_K_M imatrix MTP (低配降级)",
-            profile: "16~24GB 设备可选 · 比 27B 更轻",
-            metrics: ["5.78GB / 5.38GiB", "32K 上下文", "MTP 加速", "低配降级"],
-            reason: "为无法运行 27B 的设备保留的旧版兼容选项，不是当前默认推荐。",
-            modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP",
-            download_label: "下载到本机",
-            file_name: "Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf",
-            requires_memory_gib: 16,
-            can_run: (detected.accelerator_memory_gib || 0) >= 16,
-          },
-          // 4B 低配降级档
-          {
-            id: "qwen35-4b-q4km",
-            label: "Qwen3.5-4B Q4_K_M imatrix (低配降级)",
-            profile: "8~16GB 设备可选 · thinking-off 建议",
-            metrics: ["2.6 GB", "MMLU thinking-off 73.00%", "GPQA thinking-off 16.67%", "thinking-on 可能长思考后无正文"],
-            reason: "只建议低配机器降级使用;请保持 thinking-off 或让 Lynn 自动关闭轻任务 thinking。",
-            modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix",
-            download_label: "下载到本机",
-            file_name: "Qwen3.5-4B-Q4_K_M-imatrix.gguf",
-            requires_memory_gib: 8,
-            can_run: (detected.accelerator_memory_gib || 0) >= 8,
-          },
-          // 35B 高端编排器档 (32GB+ 可选) — 2026-06-27 切到 DS-V4-Pro thinking distill Q5_K_M MTP。
           {
             id: "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix",
             label: "Qwen3.6-35B-A3B DSV4Pro Thinking Distill MTP Q5_K_M imatrix",
             profile: "32GB 显存/统一内存+ 可选 · 更高配本地编排器",
             metrics: ["25.3 GB Q5_K_M imatrix", "MTP 原生头", "GPQA-Diamond 80.3%", "端到端编排 26.6s"],
-            reason: "35B-A3B Q5_K_M 是手动可选的旧版模型，文件和缓存占用更大。默认推荐 Qwen3.8-27B Q3/Q2 + Q4 DFlash2。",
+            reason: "35B-A3B Q5_K_M 是手动可选的旧版模型，文件和缓存占用更大。默认推荐 Qwen3.8-27B Coder390：16GB 及以上 Q3，16GB 以下 Q2。",
             modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF",
             download_label: "下载到本机",
             file_name: "Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf",
@@ -876,7 +849,7 @@ async function registerProvider(engine: LocalQwen35RouteEngine, options: Registe
   const tier = localCatalog.tiers.find(item => actual.model_ids?.includes(item.modelId));
   if (!tier || !actual.endpoint_running) return false;
   engine.providerRegistry.saveProvider(PROVIDER_ID, {
-    display_name: "本地 Qwen3.8-27B EfficientThink",
+    display_name: "本地 Qwen3.8-27B Coder390",
     base_url: `http://${state.host}:${state.port}/v1`,
     api: "openai-completions",
     auth_type: "none",

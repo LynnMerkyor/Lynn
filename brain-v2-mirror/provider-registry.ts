@@ -99,7 +99,7 @@ const PROVIDER_DEFS = {
     id: providerId('step-3.7-flash'),
     endpoint: env('STEP37_BASE', 'https://api.stepfun.com/step_plan/v1'),
     apiKey: env('STEP37_KEY', ''),
-    model: envModel('STEP37_MODEL', 'step-3.7-flash'),
+    model: envModel('STEP37_MODEL', 'step-5-preview'),
     // StepFun covers vision too: text → model (step-3.7-flash), images → vision_model
     // (step-1o-turbo-vision) via the openai-compat adapter switch on image content.
     vision_model: env('STEP_VISION_MODEL', '') || env('STEP37_VISION_MODEL', ''),

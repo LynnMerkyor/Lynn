@@ -29,6 +29,7 @@ interface BasicToolParams {
 interface WeatherToolParams {
   query?: string;
   location?: string;
+  fallback_locations?: string[];
 }
 
 interface ForecastWindow {
@@ -696,32 +697,8 @@ function mergeSearchResultsBalancedByWindow(
   return balanced;
 }
 
-function cleanWeatherLocationCandidate(value: unknown): string {
-  const normalized = normalizeWeatherLocationToken(value)
-    .replace(/^(?:嗯|呃|啊|那个|就是|请问|我想问(?:一下)?|我想查(?:一下)?|我要查(?:一下)?|我要问(?:一下)?|我查(?:一下)?|我问(?:一下)?|查的是|问的是|要查的是|想查的是|要问的是|想问的是)\s*/g, "")
-    .replace(/^(?:用工具\s*)?(?:帮我|请|麻烦|给我|替我)?\s*(?:查一下|查下|查查|查询|查|搜一下|搜索|看看|看一下|看下|告诉我)\s*/, "")
-    .replace(/^(?:用工具|工具)\s*/, "")
-    .replace(/(?:今天|今日|明天|后天|今晚|明早|未来\d*天|天气|气温|温度|预报|如何|怎么样|会不会|是否|有没有|下雨|降雨|降水|多少度|几度|区间|概率)+/g, "")
-    .replace(/^(?:什么|啥|什)+/g, "")
-    .replace(/(?:呢|吗)$/g, "")
-    .replace(/[，,。？?、:：；;]/g, "")
-    .replace(/(?:给|和)+$/g, "")
-    .trim();
-  if (!normalized) return "";
-  if (/^(?:温度|气温|区间|概率|降雨|降水|天气|预报|今天|明天|后天|给|和)$/.test(normalized)) return "";
-  return normalized;
-}
 
-const COMMON_WEATHER_LOCATIONS = [
-  "北京", "上海", "广州", "深圳", "杭州", "南京", "苏州", "成都", "重庆", "天津",
-  "武汉", "西安", "长沙", "郑州", "青岛", "济南", "厦门", "福州", "宁波", "无锡",
-  "佛山", "东莞", "珠海", "中山", "惠州", "汕头", "南宁", "海口", "三亚", "昆明",
-  "贵阳", "南昌", "合肥", "太原", "石家庄", "沈阳", "大连", "长春", "哈尔滨",
-  "呼和浩特", "银川", "兰州", "西宁", "乌鲁木齐", "拉萨", "香港", "澳门", "台北",
-  "和田", "喀什", "伊犁", "桂林", "丽江", "大理", "张家界", "黄山",
-];
-
-const COMMON_WEATHER_COORDS = new Map([
+const COMMON_WEATHER_COORDS = new Map<string, WeatherGeo>([
   ["北京", { name: "北京", admin1: "北京", latitude: 39.9042, longitude: 116.4074, timezone: "Asia/Shanghai" }],
   ["上海", { name: "上海", admin1: "上海", latitude: 31.2304, longitude: 121.4737, timezone: "Asia/Shanghai" }],
   ["广州", { name: "广州", admin1: "广东", latitude: 23.1291, longitude: 113.2644, timezone: "Asia/Shanghai" }],
@@ -744,49 +721,13 @@ const COMMON_WEATHER_COORDS = new Map([
   ["珠海", { name: "珠海", admin1: "广东", latitude: 22.2707, longitude: 113.5767, timezone: "Asia/Shanghai" }],
   ["香港", { name: "香港", admin1: "香港", latitude: 22.3193, longitude: 114.1694, timezone: "Asia/Hong_Kong" }],
   ["澳门", { name: "澳门", admin1: "澳门", latitude: 22.1987, longitude: 113.5439, timezone: "Asia/Macau" }],
+  ["和田", { name: "和田", admin1: "新疆", latitude: 37.1142, longitude: 79.9222, timezone: "Asia/Shanghai" }],
 ]);
-
-function extractKnownWeatherLocation(text: unknown): string {
-  const value = compactLine(text);
-  if (!value) return "";
-  const hits: Array<{ city: string; index: number }> = [];
-  for (const city of COMMON_WEATHER_LOCATIONS) {
-    let index = value.indexOf(city);
-    while (index >= 0) {
-      hits.push({ city, index });
-      index = value.indexOf(city, index + city.length);
-    }
-  }
-  if (!hits.length) return "";
-  const weatherIndex = value.search(/天气|气温|温度|预报|下雨|降雨|降水|多少度|几度|预警|暴雨|雷暴|雷电|台风|高温|酷热|强季风/);
-  hits.sort((a, b) => {
-    if (weatherIndex >= 0) {
-      const da = Math.abs((a.index + a.city.length) - weatherIndex);
-      const db = Math.abs((b.index + b.city.length) - weatherIndex);
-      if (da !== db) return da - db;
-    }
-    return b.index - a.index;
-  });
-  return hits[0].city;
-}
 
 export function extractWeatherLocation(query: unknown, location?: unknown): string {
   const explicit = normalizeWeatherLocationToken(location);
-  if (explicit) return explicit;
-  const text = compactLine(query);
-  const knownLocation = extractKnownWeatherLocation(text);
-  if (knownLocation) return knownLocation;
-  const rainOrTempMatch = text.match(/(?:今天|今日|明天|后天|今晚|明早)?\s*([\u4e00-\u9fa5A-Za-z .-]{2,16}?)(?:今天|今日|明天|后天|今晚|明早)?(?:会不会|是否|有没有)?(?:下雨|降雨|降水|温度|气温|多少度|几度|预警|暴雨|雷暴|雷电|台风|高温|酷热|强季风)/);
-  if (rainOrTempMatch?.[1]) {
-    const normalized = cleanWeatherLocationCandidate(rainOrTempMatch[1]);
-    if (normalized) return normalized;
-  }
-  const match = text.match(/(?:明天|今天|后天|未来\d*天|未来)?\s*([\u4e00-\u9fa5A-Za-z .-]{2,32}?)(?:的)?(?:天气|气温|预报|预警)/);
-  if (match?.[1]) {
-    const normalized = cleanWeatherLocationCandidate(match[1]);
-    if (normalized) return normalized;
-  }
-  return cleanWeatherLocationCandidate(text) || "深圳";
+  if (explicit && !/[?？]|天气|下雨|会不会|会下雨/.test(explicit)) return explicit;
+  return "";
 }
 
 function isAirQualityQuery(query: unknown): boolean {
@@ -797,28 +738,59 @@ function isWeatherAlertQuery(query: unknown): boolean {
   return /预警|暴雨|雷暴|雷电|台风|高温|酷热|强季风|warning|alert/i.test(String(query || ""));
 }
 
-async function resolveWeatherGeo(location: string): Promise<WeatherGeo> {
-  const safeLocation = compactLine(location) || "深圳";
-  const geoTimer = timeoutSignal(5000);
-  let geo: WeatherGeo | undefined = COMMON_WEATHER_COORDS.get(safeLocation);
+function samePlaceVariant(location: string): string {
+  const cleaned = compactLine(location).replace(/(?:街道|镇|市|区|县|旗)$/u, "").trim();
+  if (!cleaned || cleaned === compactLine(location) || cleaned.length < 2) return "";
+  return cleaned;
+}
+
+function weatherPlaceCandidates(location: string, fallbacks: unknown = []): string[] {
+  const primary = compactLine(location);
+  const values = [primary, samePlaceVariant(primary)];
+  const extra = Array.isArray(fallbacks) ? fallbacks : [];
+  for (const item of extra) values.push(compactLine(item));
+  return [...new Set(values.filter((item) => item.length >= 2))];
+}
+
+function weatherGeocodeCandidates(location: string): string[] {
+  return weatherPlaceCandidates(location);
+}
+
+async function geocodeWeatherName(name: string, signal: AbortSignal): Promise<WeatherGeo | undefined> {
+  const params = new URLSearchParams({
+    name,
+    count: "5",
+    language: "zh",
+    format: "json",
+  });
+  const resp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params.toString()}`, {
+    signal,
+    headers: { "User-Agent": "Lynn/OpenMeteoWeather" },
+  });
+  if (!resp.ok) throw new Error(`open-meteo geocode ${resp.status}`);
+  const data = await resp.json() as LooseRecord;
+  const results = Array.isArray(data.results) ? data.results : [];
+  const china = results.find((item) => /中国|China/i.test(String(item?.country || "")));
+  return (china || results[0]) as WeatherGeo | undefined;
+}
+
+async function resolveWeatherGeo(location: string, fallbacks: unknown = []): Promise<WeatherGeo> {
+  const safeLocation = compactLine(location);
+  if (!safeLocation) throw new Error("missing_location");
+  const cached = COMMON_WEATHER_COORDS.get(safeLocation);
+  if (cached) return cached;
+  const geoTimer = timeoutSignal(8000);
   try {
-    if (!geo) {
-      const params = new URLSearchParams({
-        name: safeLocation,
-        count: "1",
-        language: "zh",
-        format: "json",
-      });
-      const resp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params.toString()}`, {
-        signal: geoTimer.signal,
-        headers: { "User-Agent": "Lynn/OpenMeteoWeather" },
-      });
-      if (!resp.ok) throw new Error(`open-meteo geocode ${resp.status}`);
-      const data = await resp.json() as LooseRecord;
-      geo = data.results?.[0];
-      if (!geo?.latitude || !geo?.longitude) throw new Error("open-meteo geocode empty");
+    let lastError = "open-meteo geocode empty";
+    for (const candidate of weatherPlaceCandidates(safeLocation, fallbacks)) {
+      try {
+        const geo = await geocodeWeatherName(candidate, geoTimer.signal);
+        if (geo?.latitude && geo?.longitude) return geo;
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+      }
     }
-    return geo;
+    throw new Error(lastError);
   } finally {
     geoTimer.clear();
   }
@@ -835,9 +807,10 @@ function airQualityLevelText(aqi: unknown): string {
   return zhOrEn("危险", "Hazardous");
 }
 
-async function fetchOpenMeteoAirQuality(location: string): Promise<string> {
-  const safeLocation = compactLine(location) || "北京";
-  const geo = await resolveWeatherGeo(safeLocation);
+async function fetchOpenMeteoAirQuality(location: string, fallbacks: unknown = []): Promise<string> {
+  const safeLocation = compactLine(location);
+  if (!safeLocation) throw new Error("missing_location");
+  const geo = await resolveWeatherGeo(safeLocation, fallbacks);
   const timer = timeoutSignal(7000);
   try {
     const params = new URLSearchParams({
@@ -874,9 +847,10 @@ async function fetchOpenMeteoAirQuality(location: string): Promise<string> {
   }
 }
 
-async function fetchOpenMeteoWeather(location: string, query = ""): Promise<string> {
-  const safeLocation = compactLine(location) || "深圳";
-  const geo = await resolveWeatherGeo(safeLocation);
+async function fetchOpenMeteoWeather(location: string, query = "", fallbacks: unknown = []): Promise<string> {
+  const safeLocation = compactLine(location);
+  if (!safeLocation) throw new Error("missing_location");
+  const geo = await resolveWeatherGeo(safeLocation, fallbacks);
 
   const weatherTimer = timeoutSignal(7000);
   try {
@@ -926,7 +900,8 @@ async function fetchOpenMeteoWeather(location: string, query = ""): Promise<stri
 }
 
 async function fetchWttrWeather(location: string, query = ""): Promise<string> {
-  const safeLocation = compactLine(location) || "深圳";
+  const safeLocation = compactLine(location);
+  if (!safeLocation) throw new Error("missing_location");
   const timer = timeoutSignal(8000);
   try {
     const url = `https://wttr.in/${encodeURIComponent(safeLocation)}?format=j1&lang=zh`;
@@ -1036,7 +1011,8 @@ function formatAlarmEntry(entry: LooseRecord, prefix = "深圳"): string {
 }
 
 async function fetchShenzhenWeatherAlert(location: string, query = ""): Promise<string> {
-  const safeLocation = compactLine(location || "深圳");
+  const safeLocation = compactLine(location);
+  if (!safeLocation) throw new Error("missing_location");
   const url = "https://weather.121.com.cn/data_cache/szWeather/alarm/szAlarm.js";
   const timer = timeoutSignal(7000);
   try {
@@ -1104,16 +1080,28 @@ export function createWeatherTool() {
     name: "weather",
     label: zhOrEn("天气查询", "Weather"),
     description: zhOrEn(
-      "查询实时天气和未来几天天气预报。适合“深圳天气如何”“明天北京天气”等问题。",
-      "Look up current weather and short forecasts.",
+      "查询实时天气和未来几天预报。你必须自己分析用户问题，把地名填进 location，例如顺德大良、顺德、巴黎。不要把整句问题传给工具。",
+      "Look up current weather and a short forecast. You must analyze the question and pass only the place in location, for example Shunde Daliang or Paris. Do not pass the whole sentence.",
     ),
     parameters: Type.Object({
-      query: Type.String({ description: zhOrEn("原始天气问题", "Original weather query") }),
-      location: Type.Optional(Type.String({ description: zhOrEn("城市或地区", "City or location") })),
+      location: Type.String({ description: zhOrEn("你分析出的完整地名，例如顺德大良。不要切成上级城市。", "Complete place you identified, for example Shunde Daliang. Do not shorten it.") }),
+      fallback_locations: Type.Optional(Type.Array(Type.String(), { description: zhOrEn("完整地名未命中时再试的上级地名，由你填写", "Parent places to try only after the complete place misses") })),
+      query: Type.Optional(Type.String({ description: zhOrEn("原问题，只用于判断今天/明天/晚上或预警", "Original question, only for today/tomorrow/tonight or alerts") })),
     }),
     execute: async (_toolCallId: string, params: WeatherToolParams): Promise<ToolTextResult> => {
       const query = compactLine(params.query);
       const location = extractWeatherLocation(query, params.location);
+      const fallbacks = Array.isArray(params.fallback_locations) ? params.fallback_locations : [];
+      if (!location) {
+        const text = zhOrEn(
+          "天气地点必须由模型分析后填入 location。不要把整句用户问题交给天气工具。",
+          "The model must pass a place in location. Do not send the whole user question to the weather tool.",
+        );
+        return {
+          content: [{ type: "text", text }],
+          details: { ok: false, error: "missing_location", location: "" },
+        };
+      }
       if (isWeatherAlertQuery(query) && /深圳|深汕/.test(location || query)) {
         try {
           const text = await fetchShenzhenWeatherAlert(location, query);
@@ -1155,7 +1143,7 @@ export function createWeatherTool() {
       }
       if (isAirQualityQuery(query)) {
         try {
-          const text = await fetchOpenMeteoAirQuality(location);
+          const text = await fetchOpenMeteoAirQuality(location, fallbacks);
           return {
             content: [{ type: "text", text }],
             details: {
@@ -1196,7 +1184,7 @@ export function createWeatherTool() {
         },
         {
           name: "open-meteo",
-          run: () => fetchOpenMeteoWeather(location, query),
+          run: () => fetchOpenMeteoWeather(location, query, fallbacks),
         },
       ];
       const runProviderRound = (): Promise<{ provider: string; text: string }> => {
@@ -1388,18 +1376,20 @@ export function createSportsScoreTool() {
     name: "sports_score",
     label: zhOrEn("体育比分", "Sports scores"),
     description: zhOrEn(
-      "查询体育比分、赛程、排名和比赛结果。适合 NBA、CBA、中超、英超等比分赛程问题。",
-      "Look up sports scores, schedules, standings, and match results.",
+      "查询比分或赛程。你必须自己判断联赛并填 league：fifa.world、nba、mlb、nhl。不要把队名交给工具猜联赛。",
+      "Look up scores or fixtures. You must identify the league and pass league: fifa.world, nba, mlb, or nhl.",
     ),
     parameters: Type.Object({
-      query: Type.String({ description: zhOrEn("体育比分或赛程问题", "Sports score or schedule query") }),
+      league: Type.String({ description: zhOrEn("你判断的联赛：fifa.world | nba | mlb | nhl", "League you identified: fifa.world | nba | mlb | nhl") }),
+      query: Type.String({ description: zhOrEn("原问题，只用于日期和球队过滤", "Original question, only for date and team filters") }),
       maxResults: Type.Optional(Type.Number({ default: 5 })),
     }),
-    execute: async (_toolCallId: string, params: BasicToolParams): Promise<ToolTextResult> => {
+    execute: async (_toolCallId: string, params: BasicToolParams & { league?: string }): Promise<ToolTextResult> => {
       const query = compactLine(params.query);
+      const league = compactLine(params.league);
       let directError = "";
       try {
-        const direct = await fetchSportsScoreboardEvidence(query);
+        const direct = await fetchSportsScoreboardEvidence(query, { league });
         if (direct) {
           return {
             content: [{ type: "text", text: direct.text }],

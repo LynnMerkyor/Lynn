@@ -16,7 +16,11 @@
 
 ---
 
-## New in v0.87.0
+## New in v0.87.1
+
+GUI and CLI use Step 5 Preview by default and restore stepaudio-2.5-realtime voice. The model supplies weather, sports, market and currency parameters rather than whole-question entity guessing. Local tiers are Qwen3.8-27B Coder390 Q3 / Q2 with built-in Q4 MTP, no separate DFlash2 draft, and no vision component downloaded by this installation.
+
+## Previous release: v0.87.0
 
 <details open>
 <summary><strong>Lynn v0.87.0</strong> · 2026-09-08 · Window light and a simpler workspace</summary>
@@ -38,7 +42,7 @@
 
 - **Source and app**: [Primary GitHub repository · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn) · [GitHub mirror · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases) · [download mirror](https://download.merkyorlynn.com/download.html)
 - **Models and GGUF mirrors**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
-- **Recommended edge model**: [Qwen3.8-27B EfficientThink Q3 / Q2 + Q4 DFlash2](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF)
+- **Recommended edge model**: [Qwen3.8-27B Coder390 EfficientThink Q3 / Q2 with built-in Q4 MTP](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer)
 
 ---
 
@@ -1026,17 +1030,15 @@ Memory and skill distillation work together: the more you use Lynn, the more acc
 
 ## Local models — hardware ladder
 
-Qwen3.8-27B EfficientThink SimPO: Q3 + Q4 DFlash2 for 24GB+ dedicated VRAM (18.18GB of model files), or Q2 + Q4 DFlash2 for 16GB dedicated VRAM (14.14GB). Q3 starts at 8K context and Q2 at 4K, with one slot. KV cache, compute buffers and the operating system need additional memory. Apple unified memory is evaluated separately; 16GB unified memory is not treated as 16GB dedicated VRAM. Installation and startup require explicit user action. Older models remain available as manual choices.
+Qwen3.8-27B Coder390 EfficientThink: Q3 is the default at 16GB and above (17.30 GB main model). Below 16GB uses Q2 (13.28 GB). Both GGUF files include built-in Q4 MTP. This install does not download a separate DFlash2 draft or a vision component. Q3 starts at 8K context and Q2 at 4K, with one slot. KV cache, compute buffers and the operating system need additional memory. Installation and startup require explicit user action. Older downloaded files remain until the user deletes them.
 
 | Tier | Model | Size | Recommended hardware | Context | Capability signal |
 |------|-------|:----:|---------------------|:-------:|-------------------|
-| **24GB+** | **Qwen3.8-27B EfficientThink Q3 + Q4 DFlash2** | 18.18 GB | Dedicated VRAM 24GB+ | 8K | Main + separate draft; one slot |
-| **16GB** | **Qwen3.8-27B EfficientThink Q2 + Q4 DFlash2** | 14.14 GB | Dedicated VRAM 16GB | 4K | Smaller memory budget; buffers still required |
-| Downgrade | Qwen3.5-9B Q4_K_M imatrix MTP | 5.38 GB | 16~24GB optional | 32K | Low-config explicit downgrade · tool-call gate 14/15 · MTP acceleration |
-| Low-config downgrade | Qwen3.5-4B Q4_K_M imatrix (Lynn) | 2.6 GB | 8~16GB optional | 32K | **Q4_K_M imatrix** · MMLU thinking-off 73.00% · GPQA thinking-off 16.67% · thinking-on may think for a long time and return no visible answer |
+| **16GB and above** | **Qwen3.8-27B Coder390 EfficientThink Q3** | 17.30 GB | Default at 16GB and above | 8K | Built-in Q4 MTP; one slot |
+| **Below 16GB** | **Qwen3.8-27B Coder390 EfficientThink Q2** | 13.28 GB | Below 16GB | 4K | Built-in Q4 MTP; tighter memory budget |
 | Legacy option | Qwen3.6-35B-A3B DSV4Pro Distill Q5_K_M imatrix MTP | 25.3 GB | 32GB VRAM/unified memory+ | 32K | Legacy 35B orchestrator path kept for existing users and comparison tests |
 
-> See the [model card](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF) for model details. Model-file sizes are not runtime memory guarantees. Old model files are never silently deleted or relabeled.
+> See the [model card](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer) for model details. Model-file sizes are not runtime memory guarantees. Old model files are never silently deleted.
 
 | Universal | Details |
 |---|---|
@@ -1046,18 +1048,18 @@ Qwen3.8-27B EfficientThink SimPO: Q3 + Q4 DFlash2 for 24GB+ dedicated VRAM (18.1
 
 ### Downloads and mirrors
 
-**Recommended Qwen3.8-27B EfficientThink**:
+**Recommended Qwen3.8-27B Coder390 EfficientThink**:
 
-- [Model card and GGUF files](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF)
-- Q3-LynnStyle or Q2-LynnStyle main file, paired with the same tier's dflash2-qwen38-27b-Q4_K_M.gguf.
-- Main and draft are independently size/SHA-256 checked; no vision component is included in this install.
+- [Model card and GGUF files](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer)
+- Download `GGUF/Qwen3.8-27B-Coder390-EfficientThink-Q3LynnStyle-MTP.gguf` or `GGUF/Qwen3.8-27B-Coder390-EfficientThink-Q2LynnStyle-MTP.gguf`. Both include built-in Q4 MTP; no separate DFlash2 draft is downloaded.
+- Each GGUF file is checked against its pinned byte size and SHA-256; no vision component is included in this install.
 
 **Low-config 9B / 4B and high-end 35B** (explicit hardware choices):
 - 9B: [Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.5-9B-GGUF-imatrix) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`, **5.38 GB**) — low-config downgrade
 - 4B: [Merkyor/Qwen3.5-4B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix) (`Qwen3.5-4B-Q4_K_M-imatrix.gguf`, **2.6 GB**) — lower-config downgrade; thinking-off recommended
 - 35B legacy: [Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) (`Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf`, **25.3 GB**) — legacy orchestrator path for existing users and comparison tests
 
-In the app: **Settings → Models → Local Qwen3.8-27B → Select a tier → Install and start**. Qwen3.8-27B EfficientThink SimPO: Q3 + Q4 DFlash2 for 24GB+ dedicated VRAM (18.18GB of model files), or Q2 + Q4 DFlash2 for 16GB dedicated VRAM (14.14GB). Q3 starts at 8K context and Q2 at 4K, with one slot. KV cache, compute buffers and the operating system need additional memory. Apple unified memory is evaluated separately; 16GB unified memory is not treated as 16GB dedicated VRAM. Use **Let Lynn help me deploy** to bring a diagnostic draft into chat. Existing models and manual GGUF import remain available.
+In the app: **Settings → Models → Local Qwen3.8-27B → Select a tier → Install and start**. Qwen3.8-27B Coder390 EfficientThink uses Q3 at 16GB and above (17.30 GB) and Q2 below 16GB (13.28 GB), with built-in Q4 MTP. Q3 starts at 8K context and Q2 at 4K, with one slot. Use **Let Lynn help me deploy** to bring a diagnostic draft into chat. Existing models and manual GGUF import remain available.
 
 ## Install and Go
 
@@ -1196,7 +1198,7 @@ Linux builds are planned.
 Two paths on first launch:
 
 - **Quick Start**: Enter your name → set permissions → jump right in. A built-in default model works out of the box — no API key required.
-- **Local model**: Settings → Models → Local Qwen3.8-27B. Qwen3.8-27B EfficientThink SimPO: Q3 + Q4 DFlash2 for 24GB+ dedicated VRAM (18.18GB of model files), or Q2 + Q4 DFlash2 for 16GB dedicated VRAM (14.14GB). Q3 starts at 8K context and Q2 at 4K, with one slot. KV cache, compute buffers and the operating system need additional memory. Apple unified memory is evaluated separately; 16GB unified memory is not treated as 16GB dedicated VRAM. [Full model card](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF).
+- **Local model**: Settings → Models → Local Qwen3.8-27B. Qwen3.8-27B Coder390 EfficientThink uses Q3 at 16GB and above (17.30 GB) and Q2 below 16GB (13.28 GB), with built-in Q4 MTP. Q3 starts at 8K and Q2 at 4K, one slot. [Full model card](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer).
 - **Advanced Setup**: Enter your name → connect your own provider (API key + base URL) → choose a **chat model** and a **utility model** → pick a theme → set permissions → enter.
 
 Lynn uses the OpenAI-compatible protocol, so any provider that supports it will work (OpenAI, DeepSeek, Qwen, local models via Ollama, SiliconFlow, etc.). Some providers (e.g. MiniMax) also support OAuth login. All model settings can be adjusted later in Settings.

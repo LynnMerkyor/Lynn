@@ -35,7 +35,7 @@ export const DUAL_BRAIN_ROUTE = Object.freeze({
   worker: Object.freeze({
     role: "worker",
     id: "step-3.7-flash-worker",
-    displayName: "StepFun 3.7 Flash",
+    displayName: "Step 5 Preview",
     providerPreset: "stepfun",
     apiModel: DUAL_BRAIN_WORKER_MODEL,
     local: false,

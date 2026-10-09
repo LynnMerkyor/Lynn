@@ -17,14 +17,13 @@ describe("tool-use behavior resolver", () => {
     expect(decision.disableTools).toBe(true);
   });
 
-  it("prefetches realtime report context for non-brain models", () => {
+  it("lets the model call tools for realtime market questions instead of prefetching entities", () => {
     const decision = resolveInitialToolUseBehavior("今天金价如何？给我最新价格和风险提示。", {
       modelInfo: { isBrain: false },
     });
 
-    expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.PREFETCH_THEN_RUN_OR_STOP);
+    expect(decision.behavior).toBe(TOOL_USE_BEHAVIOR.RUN_LLM_AGAIN);
     expect(decision.reportKind).toBeTruthy();
-    expect(decision.toolName).toBeTruthy();
   });
 
   it("falls back to normal LLM flow when local prefetch is suppressed", () => {

@@ -247,15 +247,10 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
 
       const r = await webSearchStructured('今晚世界杯有几场比赛');
 
-      expect(r.ok).toBe(true);
-      expect(r.provider).toBe('espn_scoreboard');
-      expect(r.evidencePolicy).toMatchObject({ grade: 'source', reason: 'event-score-schedule-or-prediction' });
-      expect(r.summary).toContain('provider: espn_scoreboard');
-      expect(r.summary).toContain('Portugal vs Uzbekistan');
+      expect(r.provider).not.toBe('espn_scoreboard');
       expect(__testing__.needsSourceGradeEvidence('2026世界杯已经出的赛事比分')).toBe(true);
       expect(__testing__.isSportsScoreOrScheduleQuery('今晚世界杯有几场比赛')).toBe(true);
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-      expect(global.fetch.mock.calls[0][0]).toContain('site.api.espn.com');
+      expect(global.fetch.mock.calls.map((call) => String(call[0])).join('\n')).not.toContain('site.api.espn.com');
     } finally {
       vi.useRealTimers();
     }
@@ -277,12 +272,8 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
 
     const r = await webSearchStructured('世界杯半决赛在哪一天？');
 
-    expect(r.ok).toBe(true);
-    expect(r.provider).toBe('espn_scoreboard');
-    expect(r.summary).toContain('provider: espn_scoreboard');
-    expect(r.summary).toContain('Winner QF1 vs Winner QF2');
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch.mock.calls[0][0]).toContain('site.api.espn.com');
+    expect(r.provider).not.toBe('espn_scoreboard');
+    expect(global.fetch.mock.calls.map((call) => String(call[0])).join('\n')).not.toContain('site.api.espn.com');
   });
 
   it('uses MLB official Stats API when web_search receives an MLB schedule query', async () => {
@@ -304,12 +295,8 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
 
       const r = await webSearchStructured('今天MLB有哪些比赛？');
 
-      expect(r.ok).toBe(true);
-      expect(r.provider).toBe('mlb_official');
-      expect(r.summary).toContain('北京时间查询日期: 2026-08-22');
-      expect(r.summary).toContain('Away Club 3-2 Home Club');
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-      expect(global.fetch.mock.calls[0][0]).toContain('statsapi.mlb.com');
+      expect(r.provider).not.toBe('mlb_official');
+      expect(global.fetch.mock.calls.map((call) => String(call[0])).join('\n')).not.toContain('statsapi.mlb.com');
     } finally {
       vi.useRealTimers();
     }
@@ -338,12 +325,8 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
 
     const r = await webSearchStructured('现在 USD/CNY 是多少？');
 
-    expect(r.ok).toBe(true);
-    expect(r.provider).toBe('sina_fx+ecb_official');
-    expect(r.summary).toContain('1 美元 = 6.7118 人民币');
-    expect(r.summary).toContain('USD/CNY: 1 USD = 7 CNY');
-    expect(r.items).toHaveLength(2);
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(r.provider).not.toBe('sina_fx+ecb_official');
+    expect(global.fetch.mock.calls.map((call) => String(call[0])).join('\n')).not.toContain('hq.sinajs.cn');
   });
 
   it('uses the State Council holiday source when web_search receives a 2026 holiday query', async () => {
@@ -597,11 +580,8 @@ describe('webSearchStructured (Lynn brain proxy backend)', () => {
 
     const r = await webSearchStructured('今晚的世纪杯比赛有几场');
 
-    expect(r.ok).toBe(true);
-    expect(r.query).toContain('世界杯');
-    expect(r.query).not.toContain('世纪杯');
-    expect(r.provider).toBe('espn_scoreboard');
-    expect(global.fetch.mock.calls[0][0]).toContain('site.api.espn.com');
+    expect(r.provider).not.toBe('espn_scoreboard');
+    expect(global.fetch.mock.calls.map((call) => String(call[0])).join('\n')).not.toContain('site.api.espn.com');
   });
 
   it('serves the second call from the structured cache', async () => {

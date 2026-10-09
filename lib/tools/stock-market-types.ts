@@ -13,6 +13,10 @@ export interface StockMarketToolParams {
   kind?: string;
   market?: string;
   symbol?: string;
+  symbols?: string[];
+  name?: string;
+  base?: string;
+  quote?: string;
 }
 
 export interface MarketQuote {

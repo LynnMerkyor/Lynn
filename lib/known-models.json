@@ -1,6 +1,12 @@
 {
   "_comment": "模型参考词典。provider + model 为唯一键。model-sync.js 对表时查询。vision/reasoning 缺省为 false，quirks 缺省为 []。",
   "brain": {
+    "step-5-preview": {
+      "name": "默认模型",
+      "context": 128000,
+      "maxOutput": 8192,
+      "vision": true
+    },
     "lynn-brain-router": {
       "name": "默认模型",
       "context": 128000,
@@ -9,6 +15,22 @@
     }
   },
   "local-qwen35-9b-q4km-imatrix": {
+    "qwen38-27b-coder390-q3-lynnstyle": {
+      "name": "Qwen3.8-27B Coder390 EfficientThink Q3",
+      "context": 8192,
+      "maxOutput": 4096,
+      "reasoning": true,
+      "vision": false,
+      "quirks": ["enable_thinking"]
+    },
+    "qwen38-27b-coder390-q2-lynnstyle": {
+      "name": "Qwen3.8-27B Coder390 EfficientThink Q2",
+      "context": 4096,
+      "maxOutput": 2048,
+      "reasoning": true,
+      "vision": false,
+      "quirks": ["enable_thinking"]
+    },
     "qwen38-27b-efficientthink-q3-lynnstyle": {
       "name": "Qwen3.8-27B EfficientThink Q3 + Q4 DFlash2",
       "context": 8192,

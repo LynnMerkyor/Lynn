@@ -29,7 +29,7 @@ file node_modules/better-sqlite3/build/Release/better_sqlite3.node | grep arm64 
   || npm rebuild better-sqlite3      # ⚠ 事故记录 2026-06-10:x86_64 残留导致 GUI 启动连环崩(#72 同类)
 ```
 
-- ⛔ **`STEP_TEXT_MODEL` 必须 = `step-3.7-flash`**(CLAUDE.md 纪律;2026-06-07 曾被静默降到 3.5 跑了大半天)。
+- ⛔ **`STEP_TEXT_MODEL` 与 `STEP37_MODEL` 必须 = `step-5-preview`**(V0.87.1 默认工作模型；保留历史 provider ID，不以路由 ID 代替实际模型名验收)。
 - 本分支若含 `.github/workflows/*` 改动,**PAT 无 workflow scope 会 push 失败**——先隔离该 commit 或换有 scope 的凭证。
 
 ## 1. 版本号(一个数字,N 个落点)

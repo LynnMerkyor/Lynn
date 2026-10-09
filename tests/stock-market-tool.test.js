@@ -88,7 +88,7 @@ describe("stock market tool", () => {
     expect(detectKind("比特币现在价格大概多少？")).toBe("crypto");
 
     const tool = createStockMarketTool();
-    const res = await tool.execute("test", { query: "比特币现在价格大概多少？" });
+    const res = await tool.execute("test", { query: "比特币现在价格大概多少？", symbol: "BTC" });
     const text = res.content?.[0]?.text || "";
 
     expect(text).toContain("BTC 最近可用行情");
@@ -267,7 +267,7 @@ describe("stock market tool", () => {
     }));
 
     const tool = createStockMarketTool();
-    const res = await tool.execute("test", { query: "英伟达收盘价" });
+    const res = await tool.execute("test", { query: "英伟达收盘价", symbol: "NVDA" });
     const text = res.content?.[0]?.text || "";
 
     expect(webSearchMock.runSearchQuery).not.toHaveBeenCalled();
@@ -313,7 +313,7 @@ describe("stock market tool", () => {
 
   it("returns direct FX rates instead of fetching garbled forex pages", async () => {
     const tool = createStockMarketTool();
-    const res = await tool.execute("test", { query: "美元人民币汇率" });
+    const res = await tool.execute("test", { query: "美元人民币汇率", base: "USD", quote: "CNY" });
     const text = res.content?.[0]?.text || "";
 
     expect(webSearchMock.runSearchQuery).not.toHaveBeenCalled();

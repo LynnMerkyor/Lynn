@@ -3,10 +3,10 @@ import { shouldPrefetchReportContext } from "../server/chat/prefetch-context.js"
 
 describe("prefetch context policy", () => {
   it("keeps deterministic realtime prefetch context for Brain V2", () => {
-    expect(shouldPrefetchReportContext("market", { isBrain: true })).toBe(true);
-    expect(shouldPrefetchReportContext("weather", { isBrain: true })).toBe(true);
-    expect(shouldPrefetchReportContext("sports", { isBrain: true })).toBe(true);
-    expect(shouldPrefetchReportContext("market_weather_brief", { isBrain: true })).toBe(true);
+    expect(shouldPrefetchReportContext("market", { isBrain: true })).toBe(false);
+    expect(shouldPrefetchReportContext("weather", { isBrain: true })).toBe(false);
+    expect(shouldPrefetchReportContext("sports", { isBrain: true })).toBe(false);
+    expect(shouldPrefetchReportContext("market_weather_brief", { isBrain: true })).toBe(false);
     expect(shouldPrefetchReportContext("news", { isBrain: true })).toBe(true);
     expect(shouldPrefetchReportContext("public_data", { isBrain: true })).toBe(true);
   });
@@ -16,7 +16,7 @@ describe("prefetch context policy", () => {
   });
 
   it("keeps local prefetch for non-Brain realtime turns", () => {
-    expect(shouldPrefetchReportContext("market", { isBrain: false })).toBe(true);
-    expect(shouldPrefetchReportContext("weather", null)).toBe(true);
+    expect(shouldPrefetchReportContext("market", { isBrain: false })).toBe(false);
+    expect(shouldPrefetchReportContext("weather", null)).toBe(false);
   });
 });

@@ -11,7 +11,7 @@ describe("CLI runtime context", () => {
 
     expect(message.role).toBe("system");
     expect(message.content).toContain("Current model route shown to the user: StepFun 3.7 Flash");
-    expect(message.content).toContain("default online route is StepFun 3.7 Flash (256K context; high reasoning with a 48K reasoning/generation budget)");
+    expect(message.content).toContain("default online route is Step 5 Preview (256K context; high reasoning with a 48K reasoning/generation budget)");
     expect(message.content).toContain("answer from this runtime context");
     expect(message.content).toContain("Lynn CLI memory is layered");
     expect(message.content).toContain("Local models are explicit opt-in only");

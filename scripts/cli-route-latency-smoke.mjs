@@ -248,7 +248,7 @@ function summarize(report) {
     recommendation: null,
   };
   if (summary.stepfun.successes > 0 && summary.spark.successes === 0) {
-    summary.recommendation = "StepFun 3.7 Flash should remain the default critical path; Spark/A3B is opt-in/local fallback because it is not reachable in this run.";
+    summary.recommendation = "Step 5 Preview should remain the default critical path; Spark/A3B is opt-in/local fallback because it is not reachable in this run.";
   } else if (summary.stepfun.successes > 0 && summary.spark.successes > 0) {
     summary.recommendation = "Keep StepFun as default unless Spark is explicitly warm and materially better for this task class; local routes remain opt-in because they add an availability dependency.";
   } else {

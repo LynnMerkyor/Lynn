@@ -109,24 +109,18 @@ async function fetchFxRate(base = "USD", quote = "CNY"): Promise<{ base: string;
   };
 }
 
-function inferFxPair(query: unknown): { base: string; quote: string } {
-  const text = String(query || "").toLowerCase();
-  const hasCny = /人民币|cny|rmb/.test(text);
-  const pairs: Array<[RegExp, string]> = [
-    [/(美元|美金|\busd\b)/i, "USD"],
-    [/(欧元|\beur\b)/i, "EUR"],
-    [/(英镑|\bgbp\b)/i, "GBP"],
-    [/(日元|\bjpy\b)/i, "JPY"],
-    [/(港币|港元|\bhkd\b)/i, "HKD"],
-  ];
-  const found = pairs.filter(([re]) => re.test(text)).map(([, code]) => code);
-  if (found.length >= 2) return { base: found[0], quote: found[1] };
-  if (found.length === 1 && hasCny && found[0] !== "CNY") return { base: found[0], quote: "CNY" };
-  return { base: "USD", quote: "CNY" };
+function inferFxPair(query: unknown, explicit: { base?: unknown; quote?: unknown } = {}): { base: string; quote: string } {
+  const base = String(explicit.base || "").trim().toUpperCase();
+  const quote = String(explicit.quote || "").trim().toUpperCase();
+  if (/^[A-Z]{3}$/.test(base) && /^[A-Z]{3}$/.test(quote)) return { base, quote };
+  const pair = String(query || "").toUpperCase().match(/\b([A-Z]{3})\s*[\/-]\s*([A-Z]{3})\b/);
+  if (pair) return { base: pair[1], quote: pair[2] };
+  return { base: "", quote: "" };
 }
 
-async function fetchFxMarketSource(query: unknown): Promise<MarketSource | null> {
-  const { base, quote } = inferFxPair(query);
+async function fetchFxMarketSource(query: unknown, explicit: { base?: unknown; quote?: unknown } = {}): Promise<MarketSource | null> {
+  const { base, quote } = inferFxPair(query, explicit);
+  if (!base || !quote) return null;
   const fx = await fetchFxRate(base, quote);
   const inverse = fx.rate ? 1 / fx.rate : null;
   const lines = [
@@ -148,14 +142,16 @@ async function fetchFxMarketSource(query: unknown): Promise<MarketSource | null>
   };
 }
 
-function inferCryptoSymbol(query: unknown): { symbol: string; name: string } {
-  const text = String(query || "");
-  if (/以太坊|ethereum|\beth\b/i.test(text)) return { symbol: "ETH", name: "以太坊" };
-  return { symbol: "BTC", name: "比特币" };
+function inferCryptoSymbol(query: unknown, explicit = ""): { symbol: string; name: string } {
+  const symbol = String(explicit || "").trim().toUpperCase();
+  if (symbol === "ETH" || /\bETH\b|以太坊|ethereum/i.test(String(query || ""))) return { symbol: "ETH", name: "以太坊" };
+  if (symbol === "BTC" || /\bBTC\b|比特币|bitcoin/i.test(String(query || ""))) return { symbol: "BTC", name: "比特币" };
+  return { symbol: "", name: "" };
 }
 
-async function fetchCryptoQuote(query: unknown): Promise<MarketQuote | null> {
-  const { symbol, name } = inferCryptoSymbol(query);
+async function fetchCryptoQuote(query: unknown, explicit = ""): Promise<MarketQuote | null> {
+  const { symbol, name } = inferCryptoSymbol(query, explicit);
+  if (!symbol) return null;
   const url = `https://api.coinbase.com/v2/exchange-rates?currency=${encodeURIComponent(symbol)}`;
   const json = await fetchJsonWithTimeout(url, 4500);
   const usd = Number(json?.data?.rates?.USD);
@@ -298,17 +294,11 @@ function extractConceptSymbolsFromText(
 
   if (marketHint === "hk") {
     for (const match of source.matchAll(/\b(?:HK[:：]?)?(0\d{4})(?:\.HK)?\b/gi)) add(match[1]);
-    for (const [name, symbol] of HK_STOCK_NAME_TO_SYMBOL) {
-      if (source.includes(name)) add(symbol);
-    }
     return symbols.slice(0, 8);
   }
 
   if (marketHint === "us") {
-    for (const [name, symbol] of US_STOCK_NAME_TO_SYMBOL) {
-      if (source.toLowerCase().includes(name.toLowerCase())) add(symbol);
-    }
-    for (const match of source.matchAll(/\$?\b([A-Z]{1,5})(?:\.[A-Z]{1,3})?\b/g)) {
+    for (const match of source.matchAll(/\$([A-Z]{1,5})(?:\.[A-Z]{1,3})?\b/g)) {
       const raw = String(match[0] || "");
       const bare = String(match[1] || "").toUpperCase();
       if (TICKER_STOPWORDS.has(bare)) continue;
@@ -319,19 +309,6 @@ function extractConceptSymbolsFromText(
     return symbols.slice(0, 8);
   }
 
-  for (const [name, symbol] of A_STOCK_NAME_TO_SYMBOL) {
-    let index = source.indexOf(name);
-    while (index >= 0) {
-      const queryMentionsName = query.includes(name);
-      const hasCodeNearName = hasExplicitAStockCodeNearName(source, name, symbol);
-      const noisySourceBrand = NOISY_FINANCE_SOURCE_NAMES.has(name) && !queryMentionsName && !hasCodeNearName;
-      if (!noisySourceBrand && (queryMentionsName || hasCodeNearName || hasConceptListAnchorNear(source, index))) {
-        add(symbol);
-        break;
-      }
-      index = source.indexOf(name, index + name.length);
-    }
-  }
   for (const match of source.matchAll(/\b([0368]\d{5})\b/g)) add(match[1]);
   return symbols.slice(0, 8);
 }
@@ -698,7 +675,7 @@ function buildMarketEvidence(
     .slice(0, 12);
 }
 
-async function collectMarketSources(query: string, kind: MarketKind, market = "", symbol = ""): Promise<MarketCollection> {
+async function collectMarketSources(query: string, kind: MarketKind, market = "", symbol = "", explicit: { base?: unknown; quote?: unknown; name?: unknown } = {}): Promise<MarketCollection> {
   let conceptSources: MarketSource[] = [];
   let directQuotes: MarketQuote[] = [];
   let triedConceptResolution = false;
@@ -724,7 +701,7 @@ async function collectMarketSources(query: string, kind: MarketKind, market = ""
     directQuotes = await collectIndexDirectQuotes(query, symbol).catch(() => []);
   }
   if (kind === "crypto" && !directQuotes.length) {
-    const quote = await fetchCryptoQuote(query).catch(() => null);
+    const quote = await fetchCryptoQuote(query, symbol).catch(() => null);
     directQuotes = quote ? [quote] : [];
   }
   if (directQuotes.length) {
@@ -779,7 +756,7 @@ async function collectMarketSources(query: string, kind: MarketKind, market = ""
     }
   }
   if (kind === "fx") {
-    const fxSource = await fetchFxMarketSource(query).catch(() => null);
+    const fxSource = await fetchFxMarketSource(query, { base: explicit.base, quote: explicit.quote }).catch(() => null);
     if (fxSource) {
       return {
         provider: fxSource.source || "open.er-api.com",
@@ -866,14 +843,21 @@ export function createStockMarketTool() {
   return {
     name: "stock_market",
     label: t("toolDef.stockMarket.label"),
-    description: t("toolDef.stockMarket.description"),
+    description: `${t("toolDef.stockMarket.description")} You must identify the instrument and pass symbol or name. Do not rely on a hardcoded company dictionary.`,
     parameters: Type.Object({
       query: Type.String({ description: t("toolDef.stockMarket.queryDesc") }),
       kind: Type.Optional(Type.String({ description: t("toolDef.stockMarket.kindDesc") })),
       market: Type.Optional(Type.String({ description: t("toolDef.stockMarket.marketDesc") })),
       symbol: Type.Optional(Type.String({
-        description: t("toolDef.stockMarket.symbolDesc"),
-        pattern: "^(?:[A-Z]{2,5}|[0-9]{6})$",
+        description: "Ticker or index you identified, e.g. AAPL, 600519, 00700.HK, IXIC. Do not leave this empty and expect a hardcoded company list to guess.",
+      })),
+      symbols: Type.Optional(Type.Array(Type.String(), {
+        description: "Tickers you identified for a basket. The tool does not expand a sector nickname into a hardcoded basket.",
+      })),
+      base: Type.Optional(Type.String({ description: "ISO base currency you identified for FX, e.g. USD." })),
+      quote: Type.Optional(Type.String({ description: "ISO quote currency you identified for FX, e.g. CNY." })),
+      name: Type.Optional(Type.String({
+        description: "Company or instrument name you identified, e.g. 贵州茅台. The tool looks this up; it does not match a local nickname dictionary.",
       })),
     }),
     execute: async (_toolCallId: string, params: StockMarketToolParams): Promise<ToolTextResult> => {
@@ -898,7 +882,8 @@ export function createStockMarketTool() {
         };
       }
       try {
-        const { provider, plan, sources, directQuotes } = await collectMarketSources(query, kind, params.market, params.symbol);
+        const requestedSymbols = [params.symbol, ...(Array.isArray(params.symbols) ? params.symbols : [])].filter(Boolean).join(" ");
+        const { provider, plan, sources, directQuotes } = await collectMarketSources(query + (requestedSymbols ? " " + requestedSymbols : ""), kind, params.market, params.symbol || params.name, { base: params.base, quote: params.quote, name: params.name });
         if (!sources.length && !directQuotes?.length) {
           return {
             content: [{

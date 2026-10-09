@@ -436,9 +436,9 @@ describe("worktree commit review helper", () => {
 });
 
 describe("FleetHub.dispatch", () => {
-  it("exposes StepFun 3.7 Flash as an enabled Lynn worker profile", () => {
+  it("exposes Step 5 Preview as an enabled Lynn worker profile", () => {
     expect(DEFAULT_FLEET_REGISTRY.find((agent) => agent.id === "stepfun-flash")).toMatchObject({
-      label: "StepFun 3.7 Flash (fast coding)",
+      label: "Step 5 Preview (fast coding)",
       bin: "lynn",
       supportsJsonl: true,
       enabled: true,

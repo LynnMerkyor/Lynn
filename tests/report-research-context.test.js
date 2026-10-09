@@ -20,8 +20,8 @@ describe("report research context intent", () => {
 
   it("extracts known stock target aliases for hidden prefetch", () => {
     expect(extractStockTargetForResearch("华丰科技怎么看")).toEqual({
-      name: "华丰科技",
-      code: "688629",
+      name: "",
+      code: "",
     });
   });
 
@@ -633,44 +633,20 @@ describe("report research context intent", () => {
     expect(answer).toContain("不构成投资建议");
   });
 
-  it("prefetches and answers weather for both ends of a flight route", async () => {
+  it("does not guess both ends of a flight route before the model fills locations", async () => {
     const calls = [];
     const prompt = "明天上海飞北京，帮我查天气风险并给穿衣和到机场建议";
     const context = await buildReportResearchContext(prompt, {
+      userPrompt: prompt,
       toolWrappers: {
         realtimeInfo: async (kind, _callId, params) => {
           calls.push({ kind, ...params });
-          const isShanghai = params.location === "上海";
-          return {
-            content: [{
-              type: "text",
-              text: [
-                `${params.location} 当前天气`,
-                "- 天气: Sunny",
-                "- 温度: 30°C",
-                "未来天气预报:",
-                `- 2026-08-22: Sunny ${isShanghai ? "28~35" : "25~35"}°C`,
-                `- 2026-08-23: ${isShanghai ? "Cloudy 28~35" : "Light rain 24~34"}°C`,
-              ].join("\n"),
-            }],
-            details: { provider: "fixture", location: params.location },
-          };
+          return { content: [{ type: "text", text: "unused" }], details: {} };
         },
       },
     });
 
-    expect(calls).toEqual([
-      { kind: "weather", query: "明天上海天气", location: "上海" },
-      { kind: "weather", query: "明天北京天气", location: "北京" },
-    ]);
-    expect(context).toContain("【出发地天气快照】");
-    expect(context).toContain("【目的地天气快照】");
-    const answer = buildDirectResearchAnswer("weather", context, prompt);
-    expect(answer).toContain("上海 → 北京 两地天气");
-    expect(answer).toContain("出发地 2026-08-23");
-    expect(answer).toContain("目的地 2026-08-23");
-    expect(answer).toContain("天气风险");
-    expect(answer).toContain("穿衣建议");
-    expect(answer).toContain("至少提前 2 小时到达");
+    expect(calls).toEqual([]);
+    expect(context).not.toContain("【出发地天气快照】");
   });
 });

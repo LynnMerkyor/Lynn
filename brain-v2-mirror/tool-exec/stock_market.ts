@@ -256,36 +256,28 @@ async function fetchCommodities({ log } = {}) {
 }
 
 // ── 文本解析 ─────────────────────────────────────────────
-const STOCK_NAME_MAP = {
-  '茅台': 'sh600519', '贵州茅台': 'sh600519',
-  '腾讯': 'hk00700', '阿里': 'hk09988', '阿里巴巴': 'hk09988',
-  '比亚迪': 'sz002594', '宁德时代': 'sz300750', '浪潮信息': 'sz000977', '东方财富': 'sz300059', '中芯国际': 'sh688981',
-  '中兵红箭': 'sz000519', '平安': 'sh601318', '中国平安': 'sh601318',
-  '招商银行': 'sh600036', '工商银行': 'sh601398',
-  '苹果': 'gb_aapl', 'apple': 'gb_aapl', 'aapl': 'gb_aapl',
-  '特斯拉': 'gb_tsla', 'tesla': 'gb_tsla', 'tsla': 'gb_tsla',
-  '英伟达': 'gb_nvda', 'nvidia': 'gb_nvda', 'nvda': 'gb_nvda',
-  '微软': 'gb_msft', 'microsoft': 'gb_msft', 'msft': 'gb_msft',
-  '谷歌': 'gb_goog', 'google': 'gb_goog', 'goog': 'gb_goog',
-  '亚马逊': 'gb_amzn', 'amazon': 'gb_amzn', 'amzn': 'gb_amzn',
-  '美团': 'hk03690', '小米': 'hk01810', '京东': 'hk09618',
-};
+function quoteFromExplicitSymbol(symbol) {
+  const raw = String(symbol || '').trim();
+  if (!raw) return null;
+  const aShare = raw.match(/^(?:sh|sz)?([0368]\d{5})$/i);
+  if (aShare) {
+    const code = aShare[1];
+    return { type: 'quote', code: (code.startsWith('6') || code.startsWith('9') ? 'sh' : 'sz') + code, name: raw };
+  }
+  const hk = raw.match(/^(?:hk)?(\d{4,5})(?:\.hk)?$/i);
+  if (hk && /hk|\.hk/i.test(raw)) {
+    return { type: 'quote', code: 'hk' + hk[1].padStart(5, '0'), name: raw };
+  }
+  const us = raw.match(/^\$?([A-Za-z]{1,5})$/);
+  if (us) return { type: 'quote', code: 'gb_' + us[1].toLowerCase(), name: us[1].toUpperCase() };
+  return null;
+}
 
-function extractStockTarget(text) {
-  const codeMatch = text.match(/\b(00\d{4}|30\d{4}|60\d{4}|68\d{4})\b/);
-  if (codeMatch) {
-    const c = codeMatch[1];
-    const prefix = c.startsWith('6') ? 'sh' : 'sz';
-    return { type: 'quote', code: prefix + c };
-  }
-  const usMatch = text.match(/\b([A-Z]{1,5})\b/);
-  if (usMatch && STOCK_NAME_MAP[usMatch[1].toLowerCase()]) {
-    return { type: 'quote', code: STOCK_NAME_MAP[usMatch[1].toLowerCase()] };
-  }
-  const lowerText = text.toLowerCase();
-  for (const [name, code] of Object.entries(STOCK_NAME_MAP)) {
-    if (lowerText.includes(name)) return { type: 'quote', code };
-  }
+function extractStockTarget(_text, explicit = {}) {
+  const fromSymbol = quoteFromExplicitSymbol(explicit.symbol);
+  if (fromSymbol) return fromSymbol;
+  const named = String(explicit.name || '').trim();
+  if (named) return { type: 'quote', name: named, lookupName: named };
   return null;
 }
 
@@ -298,17 +290,6 @@ function detectMarketType(text) {
     markets.push('us', 'cn', 'hk');
   }
   return markets;
-}
-
-function extractPotentialStockNames(text) {
-  const found = String(text || '').match(/[一-鿿]{2,8}/g) || [];
-  const exclude = /今天|昨天|明天|后天|现在|一下|一下子|帮我|看看|查询|分析|多少|怎么|如何|什么|股价|股票|股市|行情|收盘|开盘|昨收|前收|涨跌|报告|简报|日报|定时|提醒|天气|新闻/;
-  const result = [];
-  for (const item of found) {
-    if (item.length < 2 || exclude.test(item)) continue;
-    if (!result.includes(item)) result.push(item);
-  }
-  return result;
 }
 
 async function searchStockByName(name, { log } = {}) {
@@ -460,27 +441,21 @@ async function fetchBitcoinPrice({ log } = {}) {
 
 // ── 主入口 ───────────────────────────────────────────────
 export async function stockMarket(query, { log, webSearchFn } = {}) {
-  const text = String(query || '');
+  const source = query && typeof query === 'object' ? query : { query };
+  const text = [source.symbol, source.name, source.kind, source.query].filter(Boolean).join(' ');
   try {
     const results = [];
-    const markets = detectMarketType(text);
+    const markets = source.kind === 'index' ? detectMarketType(text) : (source.symbol || source.name ? [] : detectMarketType(text));
     const isCommodity = /金价|黄金|金条|白银|银价|油价|原油|期货|大宗|贵金属|gold|silver|oil|crude|commodity/i.test(text);
     const isCrypto = isCryptoQuery(text);
-    const isHKConnect = /港股通|港股|腾讯|阿里|美团|小米|网易|恒生/i.test(text);
+    const isHKConnect = /港股通|恒生/i.test(text) || source.kind === 'hk_connect';
     const isFund = /基金|净值|定投|ETF|指数基金|混合基金/i.test(text);
     const isTopList = /龙虎榜|游资|主力|大单|涨停|跌停/i.test(text);
-    let stockTarget = extractStockTarget(text);
-    if (!stockTarget) {
-      const candidates = extractPotentialStockNames(text);
-      for (const candidate of candidates) {
-        const searched = await searchStockByName(candidate, { log });
-        if (searched) {
-          stockTarget = searched;
-          break;
-        }
-      }
+    let stockTarget = extractStockTarget(text, source);
+    if (stockTarget?.lookupName && !stockTarget.code) {
+      const searched = await searchStockByName(stockTarget.lookupName, { log });
+      stockTarget = searched || null;
     }
-
     if (isCrypto) {
       try {
         results.push(await fetchBitcoinPrice({ log }));

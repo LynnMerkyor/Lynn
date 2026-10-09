@@ -373,7 +373,7 @@ export async function resolveMimoSecondOpinionConfig(
 
   const brainModel = (engine.availableModels || []).find((model) => (
     normalizeProviderId(model?.provider) === "brain"
-    && normalizeModelId(model?.id) === "lynn-brain-router"
+    && ["step-5-preview", "lynn-brain-router"].includes(normalizeModelId(model?.id))
   ));
   if (!brainModel) return null;
   const brain = await resolveDirectReviewModelConfig(engine, reviewer, brainModel, brainModel.id, brainModel.provider);

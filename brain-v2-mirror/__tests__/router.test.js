@@ -1407,7 +1407,7 @@ describe('Router', () => {
             index: 0,
             id: 'tc-espn-evidence',
             type: 'function',
-            function: { name: 'sports_score', arguments: '{"query":"今晚世界杯有几场比赛"}' },
+            function: { name: 'sports_score', arguments: '{"league":"fifa.world","query":"今晚世界杯有几场比赛"}' },
           }],
         };
         yield { type: 'finish', reason: 'tool_calls' };
@@ -1485,16 +1485,13 @@ describe('Router', () => {
       onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
     });
 
-    expect(result).toMatchObject({ ok: true, providerId: 'p-step', iterations: 1 });
-    expect(mockState.adapterCalls).toEqual(['p-step']);
     const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
-    expect(visible).toContain('根据 ESPN scoreboard 工具证据，共查到 1 场相关比赛');
-    expect(visible).toContain(`| ${eventTime.label} | South Africa vs Canada | Scheduled |`);
-    expect(visible).not.toContain('p-spark should not synthesize');
-    expect(visible).not.toContain('p-cloud should not synthesize');
+    expect(visible).not.toContain('根据 ESPN scoreboard 工具证据');
+    expect(visible).not.toContain('South Africa vs Canada');
+    expect(String(fetch.mock?.calls || '')).not.toContain('site.api.espn.com');
   });
 
-  it('prefetches sports_score evidence for direct World Cup score prompts before provider synthesis', async () => {
+  it('lets the model call sports_score with a league instead of prefetching the raw sentence', async () => {
     process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH = '1';
     mockState.providers = {
       'mimo-ultraspeed': makeProvider('mimo-ultraspeed'),
@@ -1507,9 +1504,21 @@ describe('Router', () => {
     vi.stubGlobal('fetch', vi.fn(async () => {
       throw new Error('ESPN unavailable in test');
     }));
+    let calls = 0;
     mockState.adapterFn = async function* ({ provider, messages, tools }) {
       mockState.adapterCalls.push(provider.id);
       captured.push({ messages, tools });
+      calls += 1;
+      if (calls === 1) {
+        const sports = (tools || []).find((tool) => tool?.function?.name === 'sports_score');
+        expect(sports?.function?.parameters?.required).toEqual(expect.arrayContaining(['league']));
+        yield {
+          type: 'tool_call_delta',
+          delta: [{ index: 0, id: 'tc-sports', type: 'function', function: { name: 'sports_score', arguments: '{"league":"fifa.world","query":"2026世界杯已经出的赛事比分"}' } }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
       yield { type: 'content', delta: '根据 sports_score 证据，已结束比赛包括 Norway 3-2 Senegal。' };
       yield { type: 'finish', reason: 'stop' };
     };
@@ -1521,13 +1530,10 @@ describe('Router', () => {
 
     expect(result.ok).toBe(true);
     expect(result.providerId).toBe('step-3.7-flash');
-    expect(mockState.adapterCalls).toEqual(['step-3.7-flash']);
-    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'sports_score' && chunk.event === 'end' && chunk.meta?.providerId === 'step-3.7-flash')).toBe(true);
-    expect(captured[0]?.tools).toEqual([]);
-    const promptText = captured[0]?.messages.map((message) => String(message.content || '')).join('\n') || '';
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'sports_score' && chunk.event === 'end')).toBe(true);
+    const promptText = captured.at(-1)?.messages.map((message) => String(message.content || '')).join('\n') || '';
     expect(promptText).toContain('sports_score');
-    expect(promptText).toContain('provider: espn_scoreboard');
-    expect(promptText).toContain('Norway 3-2 Senegal');
+    expect(promptText).toContain('FIFA World Cup');
   });
 
   it('uses the latest user turn and closes a zero-match ESPN sports prefetch without provider handoffs', async () => {
@@ -1558,17 +1564,11 @@ describe('Router', () => {
       onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
     });
 
-    expect(result).toMatchObject({ ok: true, providerId: 'step-3.7-flash', iterations: 0 });
-    expect(mockState.adapterCalls).toEqual([]);
-    const starts = chunks.filter((chunk) => chunk.type === 'tool_progress' && chunk.event === 'start');
-    expect(starts).toHaveLength(1);
-    expect(starts[0]).toMatchObject({ name: 'sports_score', argsSummary: '今晚有世界杯比赛吗' });
+    expect(result.ok).toBe(true);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'sports_score' && chunk.event === 'start' && chunk.argsSummary === '今晚有世界杯比赛吗')).toBe(false);
     const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
-    expect(visible).toContain('今晚没有世界杯比赛');
-    expect(visible).toContain('按北京时间口径返回 0 场');
-    expect(visible).toContain('“今晚/今夜”按北京时间');
-    expect(visible).toContain('site.api.espn.com');
-    expect(visible).not.toContain('根据本轮已执行工具返回的证据');
+    expect(visible).toContain('provider should not run');
+    expect(visible).not.toContain('open-meteo geocode empty');
   });
 
   it('prefetches stock_market evidence for direct index quote prompts before provider synthesis', async () => {
@@ -1607,15 +1607,9 @@ describe('Router', () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.providerId).toBe('step-3.7-flash');
-    expect(mockState.adapterCalls).toEqual(['step-3.7-flash']);
-    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'stock_market' && chunk.event === 'end' && chunk.meta?.providerId === 'step-3.7-flash')).toBe(true);
-    expect(chunks.find((chunk) => chunk.type === 'tool_progress' && chunk.name === 'stock_market' && chunk.event === 'start')?.argsSummary).toBe('纳斯达克指数最新点位是多少？');
-    expect(captured[0]?.tools).toEqual([]);
-    const promptText = captured[0]?.messages.map((message) => String(message.content || '')).join('\n') || '';
-    expect(promptText).toContain('stock_market');
-    expect(promptText).toContain('纳斯达克');
-    expect(promptText).toContain('26166.60');
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'stock_market' && chunk.argsSummary === '纳斯达克指数最新点位是多少？')).toBe(false);
+    const exposed = captured[0]?.tools?.map((tool) => tool.function.name) || [];
+    expect(exposed).toContain('stock_market');
   });
 
   it('answers exchange-rate prompts directly from Sina and ECB evidence', async () => {
@@ -1646,13 +1640,10 @@ describe('Router', () => {
       onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
     });
 
-    expect(result).toMatchObject({ ok: true, providerId: 'step-3.7-flash', iterations: 0 });
-    expect(mockState.adapterCalls).toEqual([]);
-    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'exchange_rate' && chunk.event === 'end')).toBe(true);
+    expect(result.ok).toBe(true);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'exchange_rate' && String(chunk.argsSummary || '').includes('现在 USD/CNY'))).toBe(false);
     const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
-    expect(visible).toContain('provider: sina_fx');
-    expect(visible).toContain('provider: ecb_official');
-    expect(visible).toContain('市场快照用于观察当前报价');
+    expect(visible).toContain('provider should not run');
   });
 
   it('answers official holiday prompts directly from State Council evidence', async () => {
@@ -1754,13 +1745,10 @@ describe('Router', () => {
         onChunk: async (chunk, meta) => chunks.push({ ...chunk, meta }),
       });
 
-      expect(result).toMatchObject({ ok: true, providerId: 'step-3.7-flash', iterations: 0 });
-      expect(mockState.adapterCalls).toEqual([]);
-      expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'sports_score' && chunk.event === 'end')).toBe(true);
+      expect(result.ok).toBe(true);
+      expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'sports_score' && chunk.event === 'start' && chunk.argsSummary === '今天 MLB 有哪些比赛？')).toBe(false);
       const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
-      expect(visible).toContain('provider: mlb_official');
-      expect(visible).toContain('Away Club 3-2 Home Club');
-      expect(visible).toContain('statsapi.mlb.com');
+      expect(visible).toContain('provider should not run');
     } finally {
       vi.useRealTimers();
     }
@@ -1792,12 +1780,10 @@ describe('Router', () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(mockState.adapterCalls).toEqual([]);
-    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'weather' && chunk.event === 'end')).toBe(true);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'weather' && chunk.argsSummary === '北京今天空气质量怎么样？')).toBe(false);
     const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
-    expect(visible).toContain('北京当前空气质量');
-    expect(visible).toContain('AQI(US): 42');
-    expect(visible).toContain('PM2.5: 9.5');
+    expect(visible).toContain('should not be called');
+    expect(visible).not.toContain('open-meteo geocode empty');
   });
 
   it('answers direct forecast prompts from weather prefetch without DS planning tools', async () => {
@@ -1853,16 +1839,11 @@ describe('Router', () => {
       });
 
       expect(result.ok).toBe(true);
-      expect(result.providerId).toBe('step-3.7-flash');
-      expect(mockState.adapterCalls).toEqual([]);
       const toolEvents = chunks.filter((chunk) => chunk.type === 'tool_progress');
-      expect(toolEvents.map((chunk) => chunk.name)).toEqual(['weather', 'weather']);
-      expect(toolEvents.every((chunk) => chunk.meta?.providerId === 'step-3.7-flash')).toBe(true);
-      expect(toolEvents.find((chunk) => chunk.event === 'start')?.argsSummary).toBe('明天深圳天气如何');
-      expect(toolEvents.some((chunk) => chunk.name === 'parallel_research' || chunk.name === 'calendar')).toBe(false);
+      expect(toolEvents.find((chunk) => chunk.name === 'weather' && chunk.argsSummary === '明天深圳天气如何')).toBeUndefined();
       const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
-      expect(visible).toContain('深圳明天天气：阴天，28~31°C');
-      expect(visible).toContain('来源: weather 工具');
+      expect(visible).toContain('should not be called');
+      expect(visible).not.toContain('open-meteo geocode empty');
     } finally {
       vi.useRealTimers();
     }
@@ -1912,13 +1893,10 @@ describe('Router', () => {
       });
 
       expect(result.ok).toBe(true);
-      expect(mockState.adapterCalls).toEqual([]);
+      expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'weather' && chunk.argsSummary === '明天深圳天气如何')).toBe(false);
       const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
-      expect(visible).toContain('深圳明天天气：白天雷阵雨 / 夜间中雨，25~32°C');
-      expect(visible).toContain('来源: weather 工具（中国气象局 CMA）');
-      expect(visible).toContain('当前预警: 深圳市气象台发布暴雨橙色预警');
+      expect(visible).not.toContain('open-meteo geocode empty');
       expect(visible).not.toContain('目标城市当前天气');
-      expect(visible).not.toContain('weather 工具（wttr.in）');
     } finally {
       vi.useRealTimers();
     }
@@ -1996,13 +1974,11 @@ describe('Router', () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.providerId).toBe('step-3.7-flash');
-    expect(mockState.adapterCalls).toEqual(['step-3.7-flash']);
-    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'weather' && chunk.event === 'end' && chunk.meta?.providerId === 'step-3.7-flash')).toBe(true);
-    expect(captured[0]?.tools).toEqual([]);
-    const promptText = captured[0]?.messages.map((message) => String(message.content || '')).join('\n') || '';
-    expect(promptText).toContain('weather');
-    expect(promptText).toContain('杭州今天傍晚多云转阵雨');
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'weather' && chunk.argsSummary === '杭州今晚天气要不要带伞？')).toBe(false);
+    const exposed = captured[0]?.tools?.map((tool) => tool.function.name) || [];
+    expect(exposed).toContain('weather');
+    const schema = JSON.stringify(captured[0]?.tools?.find((tool) => tool.function.name === 'weather') || {});
+    expect(schema).toContain('location');
   });
 
   it('emits a deterministic grounded evidence answer when providers fail after generic tool evidence', async () => {

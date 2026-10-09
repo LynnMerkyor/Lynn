@@ -14,6 +14,7 @@ export type ProviderIdLiteral =
 
 export type ModelIdLiteral =
   | 'p-fake'
+  | 'step-5-preview'
   | 'qwen36-35b-a3b-apex-mtp'
   | 'qwen36-35b-a3b-dsv4pro-distill-q4km-imatrix'
   | 'step-3.7-flash'   // StepFun 198B-MoE/11B-A text/coding fallback, step_plan 端点

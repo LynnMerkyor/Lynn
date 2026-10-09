@@ -900,7 +900,9 @@ async function structuredCalendarFallback(query, previousSources, { log } = {}) 
 }
 async function structuredSportsScoreFallback(query, previousSources, { log } = {}) {
   try {
-    const text = await sportsScore(query);
+    const parsed = typeof query === 'object' && query ? query : null;
+    if (!parsed?.league) return null;
+    const text = await sportsScore(parsed);
     const result = structuredKnownToolText(
       query,
       text,

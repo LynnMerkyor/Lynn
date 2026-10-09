@@ -668,7 +668,7 @@ function buildPromptFrameStatus(
   mode: ChatMode,
   effort: string,
 ): string {
-  const model = profile ? modelLabelWithId(profile.model) : "StepFun 3.7 Flash";
+  const model = profile ? modelLabelWithId(profile.model) : "Step 5 Preview";
   const think = effort === "off" ? "fast" : `think ${effort}`;
   return `Lynn · ${model} · ${renderMode(mode)} · ${think}`;
 }

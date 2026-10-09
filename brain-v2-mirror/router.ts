@@ -1634,6 +1634,20 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     }
   }
 
+  const modelAnalyzedToolArgs = async (toolName: string, query: string): Promise<string | null> => {
+    const direct = parseJsonObject(query);
+    if (direct && typeof direct === 'object' && (direct.location || direct.league || direct.symbol || direct.name || direct.base)) {
+      return JSON.stringify(direct);
+    }
+    // Production GUI/CLI calls already ask the model to fill location/league/symbol
+    // before executeServerTool. Prefetch must not invent those entities, and it must
+    // not spend a hidden model round that the release tests treat as the user-visible call.
+    if (toolName === 'weather' || toolName === 'exchange_rate' || toolName === 'sports_score' || toolName === 'stock_market') {
+      return null;
+    }
+    return JSON.stringify({ query });
+  };
+
   const prefetchDirectEvidenceTool = async ({
     toolName,
     providerId,
@@ -1646,7 +1660,9 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     buildDeterministicAnswer?: (query: string, toolResult: unknown) => string | null;
   }): Promise<RouterRunResult | null> => {
     const query = turnUserPrompt;
-    const argsText = JSON.stringify({ query });
+    const analyzed = await modelAnalyzedToolArgs(toolName, query);
+    if (!analyzed) return null;
+    const argsText = analyzed;
     const argsSummary = summarizeToolCallArgs(argsText);
     const started = Date.now();
     await onChunk(

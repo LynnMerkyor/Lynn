@@ -38,14 +38,14 @@ describe("runtime answer", () => {
 
   it("renders the local CLI version instead of asking the model", () => {
     const text = renderLocalRuntimeAnswer({
-      routeLabel: "StepFun 3.7 Flash",
+      routeLabel: "Step 5 Preview",
       brainUrl: "https://api.merkyorlynn.com/api/v2",
       cwd: "/tmp/project",
       mode: "ask / workspace-write",
       reasoning: "high",
     }, "zh");
     expect(text).toContain("Lynn CLI 版本:");
-    expect(text).toContain("模型路由:StepFun 3.7 Flash");
+    expect(text).toContain("模型路由:Step 5 Preview");
     expect(text).toContain("Brain:https://api.merkyorlynn.com/api/v2");
     expect(text).toContain("权限:ask / workspace-write");
     expect(text).toContain("前置缓存");
@@ -65,7 +65,7 @@ describe("runtime answer", () => {
 
   it("answers voice questions concisely", () => {
     const text = renderLocalRuntimeAnswer({
-      routeLabel: "StepFun 3.7 Flash",
+      routeLabel: "Step 5 Preview",
       brainUrl: "https://api.merkyorlynn.com/api/v2",
       cwd: "/tmp/project",
       question: "你有语音能力吗",

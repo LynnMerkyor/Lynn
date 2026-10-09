@@ -131,10 +131,10 @@ describe("LlamaCppManager path and spawn safety", () => {
 
     const args = manager.buildServerArgs();
 
-    expect(DEFAULT_CONFIG.modelId).toBe("qwen38-27b-efficientthink-q3-lynnstyle");
-    expect(DEFAULT_CONFIG.modelFileName).toBe("Q3-LynnStyle/Qwen3.8-27B-EfficientThink-SimPO-Q3-LynnStyle.gguf");
+    expect(DEFAULT_CONFIG.modelId).toBe("qwen38-27b-coder390-q3-lynnstyle");
+    expect(DEFAULT_CONFIG.modelFileName).toBe("GGUF/Qwen3.8-27B-Coder390-EfficientThink-Q3LynnStyle-MTP.gguf");
     expect(args).toEqual(expect.arrayContaining([
-      "-a", "qwen38-27b-efficientthink-q3-lynnstyle",
+      "-a", "qwen38-27b-coder390-q3-lynnstyle",
       "--ctx-size", "8192",
     ]));
     expect(args).not.toContain('draft-mtp');

@@ -9,14 +9,14 @@
     <title>Lynn 下载 | macOS 与 Windows 安装包</title>
     <meta
       name="description"
-      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.87.0,CLI 当前为 v0.87.0。"
+      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.87.1,CLI 当前为 v0.87.1。"
     />
     <meta name="theme-color" content="#f7f1e6" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Lynn 下载 | macOS 与 Windows 安装包" />
     <meta
       property="og:description"
-      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.87.0,CLI 当前为 v0.87.0。"
+      content="下载 Lynn 客户端 GUI 的 macOS Apple Silicon、macOS Intel、Windows 安装包,以及独立 Lynn CLI。客户端 GUI 当前为 v0.87.1,CLI 当前为 v0.87.1。"
     />
     <meta property="og:image" content="../.github/assets/screenshot-main-20260407-v3.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -47,9 +47,9 @@
             <span class="eyebrow">Lynn 下载页</span>
             <h1>选择适合你设备的版本</h1>
             <p class="lead">
-              客户端 GUI 当前为 <strong id="gui-release-version">0.87.0</strong>,
-              CLI 当前为 <strong id="cli-release-version">0.87.0</strong>。
-              GUI 下载后即可开始使用 Lynn 的默认 Brain 路由、桌面记忆、自动任务、多 Agent 协作和显式启用的本地模型；CLI 可独立安装,也可作为 Fleet worker 或 manager。V0.87.0 带来 右上角轻轻摇曳的小叶影、更简洁的输入栏、统一图片筛选与按需专家插件；Kimi 扫码、历史搜索和手机续聊继续保留。
+              客户端 GUI 当前为 <strong id="gui-release-version">0.87.1</strong>,
+              CLI 当前为 <strong id="cli-release-version">0.87.1</strong>。
+              GUI 与 CLI 默认使用 Step 5 Preview，实时语音使用 stepaudio-2.5-realtime。天气、体育、财经工具由模型分析参数；本地模型升级为 Coder390 Q3 / Q2，内置 Q4 MTP，不另下载 DFlash2。桌面记忆、自动任务、多 Agent 协作、Kimi 扫码和手机续聊继续保留。
             </p>
             <div class="platform-callout" id="platform-callout">
               系统识别中…
@@ -62,7 +62,7 @@
             <span class="eyebrow">Lynn CLI / Lynn Code</span>
             <h2>给开发者和其他智能体的安装方式</h2>
             <p>
-              Lynn CLI 当前最新为 <strong>v0.87.0</strong>。它是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、Markdown 渲染、流式输出、工具调用和长任务续跑。
+              Lynn CLI 当前最新为 <strong>v0.87.1</strong>。它是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、Markdown 渲染、流式输出、工具调用和长任务续跑。
               一行命令装好,不用克隆仓库、不用编译;也可以被 Claude Code、Codex CLI、Kimi Code、Qwen CLI、CI 或 Lynn GUI Fleet 以无交互方式调用。
             </p>
           </div>
@@ -94,7 +94,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
             </div>
             <div class="code-copy-block">
               <button class="copy-button" type="button" data-copy-target="cli-install">复制</button>
-              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.0.tgz</code></pre>
+              <pre><code id="cli-install">npm install -g --force https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.1.tgz</code></pre>
             </div>
           </div>
           <div class="cli-install-card">
@@ -108,7 +108,7 @@ winget install OpenJS.NodeJS.LTS</code></pre>
               <pre><code id="cli-start">Lynn                 # 交互式聊天 TUI
 Lynn code            # 编码 agent TUI
 Lynn manager run -p "拆分并验收这个长任务" --jsonl
-Lynn --version       # 应输出 0.87.0
+Lynn --version       # 应输出 0.87.1
 Lynn agents          # 输出可复制的 Fleet / 其他 CLI 调用方式
 
 # 无交互编码 worker 示例
@@ -138,7 +138,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="macArm"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.87.0-macOS-arm64.dmg"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.87.1-macOS-arm64.dmg"
               target="_blank"
               rel="noreferrer"
             >下载 Apple Silicon 版</a>
@@ -159,7 +159,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="macIntel"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.87.0-macOS-x64.dmg"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.87.1-macOS-x64.dmg"
               target="_blank"
               rel="noreferrer"
             >下载 Intel 版</a>
@@ -170,7 +170,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
               <span class="pill pill-warm">Windows 安装版</span>
               <h2>Windows</h2>
             </div>
-            <p>V0.87.0 Windows 安装包内置固定版本 llama.cpp CPU 运行时；导入本地 GGUF 不再需要手工安装 <code>llama-server.exe</code>。</p>
+            <p>V0.87.1 Windows 安装包内置固定版本 llama.cpp CPU 运行时；导入本地 GGUF 不再需要手工安装 <code>llama-server.exe</code>。</p>
             <ul>
               <li>文件格式：`.exe`</li>
               <li>安装方式：图形安装向导</li>
@@ -180,7 +180,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             <a
               class="button button-primary"
               data-download-key="windows"
-              href="https://download.merkyorlynn.com/downloads/Lynn-0.87.0-Windows-Setup.exe"
+              href="https://download.merkyorlynn.com/downloads/Lynn-0.87.1-Windows-Setup.exe"
               target="_blank"
               rel="noreferrer"
             >下载 Windows 版</a>
@@ -231,7 +231,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
 
         <section class="section release-summary">
           <div class="release-card">
-            <h2>V0.87.0：窗边树影与更简洁的工作界面</h2>
+            <h2>V0.87.1：窗边树影与更简洁的工作界面</h2>
             <p>9 月 11 日 GUI 更新：已安装 V0.87 的用户可使用本页原链接重新下载安装。</p>
             <p>让右上角的小叶影融入纸张界面。常用操作更集中，扩展能力按需出现。</p>
             <ul>
@@ -268,6 +268,6 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
       </footer>
     </div>
 
-    <script src="./app.js?v=0.87.0-cli"></script>
+    <script src="./app.js?v=0.87.1-cli"></script>
   </body>
 </html>

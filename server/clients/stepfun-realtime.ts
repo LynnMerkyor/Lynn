@@ -33,7 +33,7 @@ interface StepRealtimeResult {
 }
 
 const DEFAULT_ENDPOINT = "wss://api.stepfun.com/v1/realtime/stateless";
-const DEFAULT_MODEL = "step-overture-preview";
+const DEFAULT_MODEL = "stepaudio-2.5-realtime";
 const DEFAULT_VOICE = "jingdiannvsheng";
 const DEFAULT_TIMEOUT_MS = 30000;
 const STEP_SAMPLE_RATE = 24000;

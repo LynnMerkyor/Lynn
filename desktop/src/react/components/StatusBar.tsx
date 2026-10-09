@@ -11,7 +11,7 @@ import { useI18n } from '../hooks/use-i18n';
 declare function t(key: string, vars?: Record<string, string | number>): string;
 
 const LOCAL_QWEN_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_QWEN_MODEL_ID = 'qwen38-27b-efficientthink-q3-lynnstyle';
+const LOCAL_QWEN_MODEL_ID = 'qwen38-27b-coder390-q3-lynnstyle';
 
 type LocalQwenStatus = {
   runtime?: {

@@ -152,7 +152,7 @@ describe("chat mode controls", () => {
 
   it("surfaces CLI BYOK fallback in the chat startup route label", () => {
     expect(chatRouteLabel({ provider: "openai-compatible", model: "step-3.7-flash" })).toBe("CLI BYOK: StepFun 3.7 Flash (step-3.7-flash)");
-    expect(chatRouteLabel(null)).toBe("StepFun 3.7 Flash via Brain router (auto)");
+    expect(chatRouteLabel(null)).toBe("Step 5 Preview via Brain router (auto)");
   });
 
   it("renders CLI BYOK fallback in startup copy", () => {
@@ -878,7 +878,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
 
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("Lynn CLI");
-    expect(result.stdout).toContain("StepFun 3.7 Flash");
+    expect(result.stdout).toContain("Step 5 Preview");
     expect(result.stderr).toBe("");
   }, 75_000);
 });

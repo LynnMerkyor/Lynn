@@ -117,7 +117,7 @@ try {
     throw new Error(`Lynn -p exited ${headless.code}\n${headlessCombined}`);
   }
   assertIncludes("headless cache usage smoke", headlessCombined, "OK");
-  assertIncludes("headless cache usage smoke", headlessCombined, "route: StepFun 3.7 Flash");
+  assertIncludes("headless cache usage smoke", headlessCombined, "route: Step 5 Preview");
   assertIncludes("headless cache usage smoke", headlessCombined, "prefix-cache 800 hit");
   assertIncludes("headless cache usage smoke", headlessCombined, "miss 200");
   assertIncludes("headless cache usage smoke", headlessCombined, "(80%)");

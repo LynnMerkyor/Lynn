@@ -20,12 +20,7 @@ describe('direct evidence prefetch policy', () => {
       { role: 'user', content: '深圳明天会下雨吗？' },
     ]);
 
-    expect(plans).toHaveLength(1);
-    expect(plans[0]).toMatchObject({
-      kind: 'weather',
-      toolName: 'weather',
-      providerId: 'step-3.7-flash',
-    });
+    expect(plans).toEqual([]);
   });
 
   it('does not prefetch the same evidence ledger twice', () => {
@@ -41,7 +36,7 @@ describe('direct evidence prefetch policy', () => {
   it('selects dedicated exchange and official calendar evidence without generic search', () => {
     expect(buildDirectEvidencePrefetchPlans([
       { role: 'user', content: '现在 USD/CNY 是多少？' },
-    ])).toEqual([expect.objectContaining({ kind: 'exchange', toolName: 'exchange_rate' })]);
+    ])).toEqual([]);
 
     expect(buildDirectEvidencePrefetchPlans([
       { role: 'user', content: '2026 年国庆节怎么调休？' },
@@ -51,10 +46,10 @@ describe('direct evidence prefetch policy', () => {
   it('recognizes MLB and NHL as direct sports evidence intents', () => {
     expect(buildDirectEvidencePrefetchPlans([
       { role: 'user', content: '今天 MLB 有哪些比赛？' },
-    ])).toEqual([expect.objectContaining({ kind: 'sports', toolName: 'sports_score' })]);
+    ])).toEqual([]);
     expect(buildDirectEvidencePrefetchPlans([
       { role: 'user', content: '明天 NHL 赛程是什么？' },
-    ])).toEqual([expect.objectContaining({ kind: 'sports', toolName: 'sports_score' })]);
+    ])).toEqual([]);
   });
 
   it('prefetches structured official sources for Hugging Face, arXiv, and earthquakes', () => {

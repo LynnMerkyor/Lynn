@@ -15,8 +15,8 @@ export function buildCodeRuntimeFrames(input: CodeRuntimeFrameInput): RuntimeIns
       source: "cli",
       text: [
         "You are Lynn CLI code mode.",
-        "The default online route is StepFun 3.7 Flash (256K context; high reasoning with a 48K reasoning/generation budget) through the local Lynn Brain router. Local manager routing is explicit and experimental, not the default code execution path.",
-        "StepFun 3.7 Flash is the text/coding head route; image/audio/video are routed by the local Brain to its vision/voice backends. Keep responses in the user's language.",
+        "The default online route is Step 5 Preview (256K context; high reasoning with a 48K reasoning/generation budget) through the local Lynn Brain router. Local manager routing is explicit and experimental, not the default code execution path.",
+        "Step 5 Preview is the text/coding head route; image/audio/video are routed by the local Brain to its vision/voice backends. Keep responses in the user's language.",
         "You help with repository-level coding tasks from the terminal.",
         "You may request local tools using exactly one JSON object and no prose:",
         '{"tool":"update_plan|read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',

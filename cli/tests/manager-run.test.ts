@@ -132,7 +132,7 @@ describe("manager run dual-brain loop", () => {
       ])));
 
       expect(code).toBe(0);
-      expect(JSON.parse(brainBody)).toMatchObject({ model: "lynn-brain-router", stream: true });
+      expect(JSON.parse(brainBody)).toMatchObject({ model: "step-5-preview", stream: true });
       expect(escapeAuth).toBe("Bearer sk-escape-test");
       expect(JSON.parse(escapeBody)).toMatchObject({ model: "deepseek-v4-flash", stream: true });
       expect(lines.filter((line) => line.type === "manager.delegated").map((line) => line.workerId)).toEqual([

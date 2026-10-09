@@ -127,10 +127,7 @@ export function hasFinanceLookupIntent(query: unknown, explicitSymbol = ""): boo
   if (NON_FINANCE_QUOTE_CONTEXT_RE.test(text) && !FINANCE_LOOKUP_CONTEXT_RE.test(text)) return false;
   if (FINANCE_LOOKUP_CONTEXT_RE.test(text)) return true;
   if (/\$[A-Z]{1,5}(?:\.[A-Z]{1,3})?\b/.test(text)) return true;
-  for (const [name, symbol] of US_STOCK_NAME_TO_SYMBOL) {
-    if (text.toLowerCase().includes(name.toLowerCase())) return true;
-    if (new RegExp(`\\b${symbol}\\b`, "i").test(text)) return true;
-  }
+  if (/\b[A-Z]{2,5}(?:\.US)?\b/.test(text) && FINANCE_LOOKUP_CONTEXT_RE.test(text)) return true;
   return false;
 }
 
@@ -147,21 +144,16 @@ export function extractUsStockSymbols(query: unknown, explicitSymbol = ""): stri
     const bare = normalized.split(".")[0];
     if (TICKER_STOPWORDS.has(bare)) return;
     if (!explicit && !dollar && !known && !financeContext) return;
+    if (!explicit && !dollar && !known && financeContext && bare.length < 2) return;
     if (bare.length === 1 && !explicit && !dollar) return;
     if (!symbols.includes(bare)) symbols.push(bare);
   };
 
   add(explicitSymbol, { explicit: true });
-  for (const [name, symbol] of US_STOCK_NAME_TO_SYMBOL) {
-    if (text.toLowerCase().includes(name.toLowerCase())) add(symbol, { known: true });
-  }
-  if (/(?:美股|纳斯达克|纳指|七姐妹|七巨头|magnificent|mag7).{0,12}(?:科技|AI|人工智能|芯片|半导体|互联网|表现|行情|涨跌)?|(?:科技|AI|人工智能|芯片|半导体|互联网).{0,12}(?:美股|纳斯达克|纳指|七姐妹|七巨头|magnificent|mag7)/i.test(text)) {
-    for (const symbol of US_TECH_BASKET_SYMBOLS) add(symbol, { known: true });
-  }
-  for (const match of text.matchAll(/\$?\b([A-Z]{1,5})(?:\.[A-Z]{1,3})?\b/g)) {
+  for (const match of text.matchAll(/(?:\$|\b)([A-Z]{1,5})(?:\.US)?\b/g)) {
     const raw = match[0] || "";
     const bare = (match[1] || "").toUpperCase();
-    add(bare, { dollar: raw.startsWith("$"), known: KNOWN_US_STOCK_SYMBOLS.has(bare) });
+    add(bare, { dollar: raw.startsWith("$"), explicit: /\.US\b/i.test(raw) || (financeContext && bare.length >= 2) });
   }
   return symbols.slice(0, 8);
 }
@@ -450,12 +442,6 @@ export function extractHongKongStockSymbols(query: unknown, explicitSymbol = "")
   };
 
   add(explicitSymbol);
-  for (const [name, symbol] of HK_STOCK_NAME_TO_SYMBOL) {
-    if (text.includes(name)) add(symbol);
-  }
-  if (/(?:港股.{0,8}科技|科技.{0,8}港股|恒生科技|港股互联网|港股.{0,8}互联网|中概科技)/.test(text)) {
-    for (const symbol of HK_TECH_BASKET_SYMBOLS) add(symbol);
-  }
   for (const match of text.matchAll(/\b(\d{4,5})\.HK\b/gi)) {
     add(match[1]);
   }
@@ -473,14 +459,6 @@ export function extractAStockSymbols(query: unknown, explicitSymbol = ""): strin
   };
 
   add(explicitSymbol);
-  for (const [name, symbol] of A_STOCK_NAME_TO_SYMBOL) {
-    if (text.includes(name)) add(symbol);
-  }
-  for (const basket of A_STOCK_BASKETS) {
-    if (basket.re.test(text)) {
-      for (const symbol of basket.symbols) add(symbol);
-    }
-  }
   for (const match of text.matchAll(/\b([0368]\d{5})\b/g)) {
     add(match[1]);
   }

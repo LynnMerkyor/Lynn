@@ -80,7 +80,7 @@ export function buildCliLocalWorkspacePrompt(prompt: string, cwd = process.cwd()
   };
 }
 
-const CLI_DIRECT_RESEARCH_KINDS = new Set(["market", "weather", "sports", "news", "public_data"]);
+const CLI_DIRECT_RESEARCH_KINDS = new Set(["news", "public_data"]);
 
 function toolNameForReportKind(kind: string): string {
   switch (kind) {
@@ -346,7 +346,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
   let sawReasoning = false;
   let lastUsage: unknown = null;
   let modelProvider = "brain";
-  let modelId = "lynn-brain-router";
+  let modelId = "step-5-preview";
   const renderState: HumanBrainRenderState = {};
   const spinner = new TerminalSpinner(process.stderr, t("spinner.thinking"), { quiet: true });
   const startedAt = Date.now();
@@ -450,7 +450,7 @@ export async function runPrompt(args: ParsedArgs, options: PromptOptions = {}): 
             modelId = cliProvider.profile.model;
           } else {
             modelProvider = event.activeProvider;
-            modelId = "lynn-brain-router";
+            modelId = "step-5-preview";
           }
         }
         if (event.type === "reasoning.delta") {

@@ -56,9 +56,9 @@ describe("providers command", () => {
     }
 
     expect(output).toContain("\"type\":\"providers.info\"");
-    expect(output).toContain("StepFun");
+    expect(output).toContain("Step 5 Preview");
     expect(output).toContain("\"name\":\"stepfun\"");
-    expect(output).toContain("\"model\":\"step-3.7-flash\"");
+    expect(output).toContain("\"model\":\"step-5-preview\"");
     expect(output).not.toContain("apiKey");
   });
 
@@ -110,7 +110,7 @@ describe("providers command", () => {
 
     expect(output).not.toContain("mimo");
     expect(output).toContain("stepfun");
-    expect(output).toContain("step-3.7-flash");
+    expect(output).toContain("step-5-preview");
     expect(output).toContain("spark");
     expect(output).toContain("Lynn providers set --preset stepfun --api-key <api-key>");
   });
@@ -138,8 +138,8 @@ describe("providers command", () => {
     const rendered = renderProviderPresets();
 
     expect(rendered).not.toContain("MiMo");
-    expect(rendered).toContain("StepFun");
-    expect(rendered).toContain("step-3.7-flash");
+    expect(rendered).toContain("Step 5 Preview");
+    expect(rendered).toContain("step-5-preview");
     expect(rendered).toContain("<api-key>");
     expect(rendered).not.toContain("sk-");
   });
@@ -269,7 +269,7 @@ describe("providers command", () => {
     await expect(readCliProviderProfile(dataDir)).resolves.toMatchObject({
       provider: "openai-compatible",
       baseUrl: "https://api.stepfun.com/step_plan/v1",
-      model: "step-3.7-flash",
+      model: "step-5-preview",
       apiKey: "step-secret",
     });
     await expect(resolveCliProviderProfile(parseArgs([
@@ -284,7 +284,7 @@ describe("providers command", () => {
       profile: {
         provider: "openai-compatible",
         baseUrl: "https://api.stepfun.com/step_plan/v1",
-        model: "step-3.7-flash",
+        model: "step-5-preview",
         apiKey: "step-secret",
       },
     });
@@ -404,7 +404,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
       source: "flags",
       profile: {
         baseUrl: "https://api.stepfun.com/step_plan/v1",
-        model: "step-3.7-flash",
+        model: "step-5-preview",
         apiKey: undefined,
       },
     });
@@ -426,7 +426,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
         source: "flags",
         profile: {
           baseUrl: "https://api.stepfun.com/step_plan/v1",
-          model: "step-3.7-flash",
+          model: "step-5-preview",
           apiKey: undefined,
         },
       });
@@ -476,7 +476,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
       STEPFUN_API_KEY: "step-env-key",
     })).toMatchObject({
       baseUrl: "https://api.stepfun.com/step_plan/v1",
-      model: "step-3.7-flash",
+      model: "step-5-preview",
       apiKey: "step-env-key",
     });
 
@@ -494,7 +494,7 @@ sys.exit(proc.returncode if proc.returncode is not None else 124)
       OPENAI_API_KEY: "sk-openai-only",
     })).toMatchObject({
       baseUrl: "https://api.stepfun.com/step_plan/v1",
-      model: "step-3.7-flash",
+      model: "step-5-preview",
       apiKey: undefined,
     });
   });

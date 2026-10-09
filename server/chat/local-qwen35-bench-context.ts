@@ -1,5 +1,5 @@
 export const LOCAL_QWEN35_PROVIDER_ID = "local-qwen35-9b-q4km-imatrix";
-export const LOCAL_QWEN35_MODEL_ID = "qwen38-27b-efficientthink-q3-lynnstyle";
+export const LOCAL_QWEN35_MODEL_ID = "qwen38-27b-coder390-q3-lynnstyle";
 
 export interface LocalQwenModelInfo {
   provider?: unknown;
@@ -15,6 +15,8 @@ export const LOCAL_QWEN_COMPAT_PROVIDER_IDS = new Set<string>([
 ]);
 
 export const LOCAL_QWEN_COMPAT_MODEL_IDS = new Set<string>([
+  "qwen38-27b-coder390-q3-lynnstyle",
+  "qwen38-27b-coder390-q2-lynnstyle",
   "qwen38-27b-efficientthink-q3-lynnstyle",
   "qwen38-27b-efficientthink-q2-lynnstyle",
   "qwen35-4b-q4km",
@@ -32,10 +34,8 @@ const LOCAL_QWEN35_BENCHMARK_MARKER = "【Lynn 本地模型事实备忘】";
 
 export const LOCAL_QWEN35_BENCHMARK_CONTEXT = [
   LOCAL_QWEN35_BENCHMARK_MARKER,
-  "当前推荐本地模型为 Qwen3.8-27B EfficientThink SimPO LynnStyle：24GB 及以上显存推荐 Q3 主模型 17.03 GB，16GB 推荐 Q2 主模型 13.00 GB，两档均配独立 Q4 DFlash2 草稿模型 1.14 GB。实际内存还需容纳 KV 缓存与运行缓冲，不能保证仅凭容量即可加载。",
-  "Q3 默认 8K、Q2 默认 4K 上下文，单并发；使用支持 draft-dflash 的 llama.cpp，不是 draft-mtp。安装包不含视觉组件。实际 TPS 需本机测量，勿套用旧模型或仓库高并发 TPS。评测及完整说明：https://modelscope.cn/models/Merkyor/Qwen3.8-27B-EfficientThink-K3-Opus5-Grok4.6-GPT5.6Sol-SFT-SimPO-DFlash2-GGUF 。下列旧型号资料仅适用于对应旧型号，不代表当前模型。",
-  "Qwen3.5-9B Q4_K_M imatrix MTP (低配降级档,16~24GB 可选) thinking-on 32K: MMLU 100 sample = 81.00%, GPQA Diamond full = 72.22% naive / 81.71% excluding parse-fail, tool-call gate 修正后约 14/15 = 93%。DGX Spark MTP 单流 TPS: no-MTP AR = 36.61, MTP n_max=4 = 60.95,server TPS = 64.20,accept = 64.15%。",
-  "Qwen3.5-4B Q4_K_M imatrix (低配降级档): 2026-05-24 由官方 BF16 重新转换并用 256-chunk imatrix 校准量化；直连 smoke: thinking-off 短问候正常、门禁工具调用正常；thinking-on 短问候/GPQA probe 可能长思考后无正文,所以 4B 不应作为默认引导模型。",
+  "当前推荐本地模型为 Qwen3.8-27B Coder390 EfficientThink。16GB 及以上默认 Q3，主模型 17.30 GB；16GB 以下使用 Q2，主模型 13.28 GB。两档都是内置 Q4 MTP 的 GGUF，不另下 DFlash2，不含视觉组件。实际内存还需容纳 KV 缓存与运行缓冲。",
+  "Q3 默认 8K、Q2 默认 4K 上下文，单并发；使用 llama.cpp draft-mtp。实际 TPS 需本机测量，勿套用旧模型或仓库高并发 TPS。评测及完整说明见模型卡。下列旧型号资料仅适用于对应旧型号，不代表当前模型。",
   "Qwen3.6-35B-A3B DSV4Pro Thinking Distill Q5_K_M imatrix MTP (高端编排器档,32GB+,25.3GB) thinking-on: GPQA-Diamond 80.3%,端到端编排约 26.6s；适合 32GB+ 配置作为更强本地编排器。",
 ].join("\n");
 

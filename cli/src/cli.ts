@@ -287,7 +287,7 @@ function startupModelLabel(info: ProvidersInfo, brainReachable: boolean): string
     return `CLI BYOK: ${info.cliProvider.profile.model}`;
   }
   const label = activeRouteLabel(info);
-  if (/^brain\s*\/\s*lynn-brain-router/i.test(label)) return DEFAULT_ROUTE_CHAIN;
+  if (/^brain\s*\/\s*step-5-preview/i.test(label)) return DEFAULT_ROUTE_CHAIN;
   return label;
 }
 

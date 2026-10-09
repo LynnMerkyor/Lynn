@@ -694,7 +694,7 @@ async function runCodeTask(
       sessionPath,
       title,
       modelProvider: cliProvider?.profile.provider || "brain",
-      modelId: cliProvider?.profile.model || "lynn-brain-router",
+      modelId: cliProvider?.profile.model || "step-5-preview",
     });
   }
   let savedSessionPath: string | null = null;
@@ -709,7 +709,7 @@ async function runCodeTask(
       title,
       line: { type: "user", content: taskText, data: { kind: "code_user_turn" } },
       modelProvider: cliProvider?.profile.provider || "brain",
-      modelId: cliProvider?.profile.model || "lynn-brain-router",
+      modelId: cliProvider?.profile.model || "step-5-preview",
     });
     if (json) writeJsonLine({ type: "session.checkpoint", ts: nowIso(), path: liveSessionPath, line: "user" });
     options.onEvent?.({ type: "session.checkpoint", path: liveSessionPath, line: "user" });
@@ -744,7 +744,7 @@ async function runCodeTask(
             title,
             line,
             modelProvider: cliProvider?.profile.provider || "brain",
-            modelId: cliProvider?.profile.model || "lynn-brain-router",
+            modelId: cliProvider?.profile.model || "step-5-preview",
           });
           if (json) writeJsonLine({ type: "session.checkpoint", ts: nowIso(), path: liveSessionPath, line: line.type });
           options.onEvent?.({ type: "session.checkpoint", path: liveSessionPath, line: line.type });
@@ -757,7 +757,7 @@ async function runCodeTask(
   if (saveSession) {
     savedSessionPath = await persistCodeTask({
       dataDir, liveSessionPath, sessionPath, cwd: context.cwd, title, task: taskText, text: final.text,
-      modelProvider: cliProvider?.profile.provider || 'brain', modelId: cliProvider?.profile.model || 'lynn-brain-router',
+      modelProvider: cliProvider?.profile.provider || 'brain', modelId: cliProvider?.profile.model || 'step-5-preview',
       rewindBeforeLine, snapshots: rewindSnapshots,
       onAssistantCheckpoint: (savedPath) => {
         if (json) writeJsonLine({ type: 'session.checkpoint', ts: nowIso(), path: savedPath, line: 'assistant' });

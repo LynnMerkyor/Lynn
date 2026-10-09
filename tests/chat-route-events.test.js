@@ -1962,7 +1962,7 @@ describe("chat route event forwarding", () => {
 
   // Deterministic realtime facts get a local evidence pass even for Brain V2,
   // so GUI turns can close from tool evidence if the writer times out.
-  it("injects local deterministic realtime prefetch for brain weather turns", async () => {
+  it("lets the model fill weather parameters instead of prefetching a guessed place", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     let eventsBeforeModelCall = [];
@@ -1970,7 +1970,6 @@ describe("chat route event forwarding", () => {
       eventsBeforeModelCall = [...clients[0].sent];
     });
     reportResearchMock.inferReportResearchKind.mockReturnValue("weather");
-    reportResearchMock.buildReportResearchContext.mockResolvedValue("【系统已完成天气工具预取】\n深圳今日天气晴。");
 
     const res = await app.request("/ws");
     expect(res.status).toBe(200);
@@ -1981,18 +1980,8 @@ describe("chat route event forwarding", () => {
 
     await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
 
-    expect(eventsBeforeModelCall).toContainEqual(expect.objectContaining({
-      type: "tool_start",
-      name: "weather",
-      sessionPath: "/sessions/current.jsonl",
-    }));
-    expect(eventsBeforeModelCall).toContainEqual(expect.objectContaining({
-      type: "tool_end",
-      name: "weather",
-      success: true,
-      sessionPath: "/sessions/current.jsonl",
-    }));
-    expect(reportResearchMock.buildReportResearchContext).toHaveBeenCalled();
+    expect(eventsBeforeModelCall.some((evt) => evt.type === "tool_start" && evt.name === "weather")).toBe(false);
+    expect(reportResearchMock.buildReportResearchContext).not.toHaveBeenCalled();
   });
 
   it("closes simple market prefetch turns with a direct local answer before model tool chains", async () => {
@@ -2016,25 +2005,15 @@ describe("chat route event forwarding", () => {
       data: JSON.stringify({ type: "prompt", text: "今日金价是多少？" }),
     }, connections[0].client);
 
-    await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
 
-    expect(hub.send).not.toHaveBeenCalled();
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
+    expect(clients[0].sent.some((evt) => evt.type === "tool_start" && evt.name === "stock_market")).toBe(false);
+    expect(reportResearchMock.buildReportResearchContext).not.toHaveBeenCalled();
+    expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "tool_start",
       name: "stock_market",
       sessionPath: "/sessions/current.jsonl",
     }));
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
-      type: "tool_end",
-      name: "stock_market",
-      success: true,
-      sessionPath: "/sessions/current.jsonl",
-    }));
-    const visibleText = clients[0].sent
-      .filter((evt) => evt.type === "text_delta")
-      .map((evt) => evt.delta)
-      .join("");
-    expect(visibleText).toContain("907.29 元/克");
   });
 
   it("closes public-data prefetch turns with a bounded local summary", async () => {
@@ -2088,20 +2067,9 @@ describe("chat route event forwarding", () => {
       data: JSON.stringify({ type: "prompt", text: "查询今晚世界杯赛程，并最后用一个小表格输出" }),
     }, connections[0].client);
 
-    await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
 
-    expect(hub.send).not.toHaveBeenCalled();
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
-      type: "tool_start",
-      name: "sports_score",
-      sessionPath: "/sessions/current.jsonl",
-    }));
-    const visibleText = clients[0].sent
-      .filter((evt) => evt.type === "text_delta")
-      .map((evt) => evt.delta)
-      .join("");
-    expect(visibleText).toContain("| 时间（北京时间） | 对阵/比分 | 状态 |");
-    expect(visibleText).toContain("Spain vs Saudi Arabia");
+    expect(clients[0].sent.some((evt) => evt.type === "tool_start" && evt.name === "sports_score")).toBe(false);
   });
 
   it("closes a bounded zero-match sports prefetch as no games without invoking the model", async () => {
@@ -2129,15 +2097,12 @@ describe("chat route event forwarding", () => {
       data: JSON.stringify({ type: "prompt", text: "今晚世界杯有比赛吗" }),
     }, connections[0].client);
 
-    await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
-    expect(hub.send).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
     const visibleText = clients[0].sent
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).toContain("今晚没有世界杯比赛");
-    expect(visibleText).toContain("按北京时间口径返回 0 场");
-    expect(visibleText).not.toContain("不等于赛事数量为 0");
+    expect(visibleText).not.toContain("今晚没有世界杯比赛");
   });
 
   it("closes GUI sports tool-chain turns from ESPN evidence before generic search can override it", async () => {
@@ -2331,16 +2296,8 @@ describe("chat route event forwarding", () => {
       }, connections[0].client);
 
       await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
-      expect(clients[0].sent).toContainEqual(expect.objectContaining({
-        type: "tool_start",
-        name: "sports_score",
-      }));
-      expect(clients[0].sent).toContainEqual(expect.objectContaining({
-        type: "tool_end",
-        name: "sports_score",
-        success: true,
-      }));
-      expect(clients[0].sent.filter((evt) => evt.type === "turn_end")).toHaveLength(0);
+      expect(clients[0].sent.some((evt) => evt.type === "tool_start" && evt.name === "sports_score")).toBe(false);
+      expect(clients[0].sent.filter((evt) => evt.type === "turn_end")).toHaveLength(1);
 
       await vi.advanceTimersByTimeAsync(8_000);
 
@@ -2348,9 +2305,7 @@ describe("chat route event forwarding", () => {
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
         .join("");
-      expect(visibleText).toContain("这轮检索拿到的可核验线索有限");
-      expect(visibleText).toContain("体育比分");
-      expect(visibleText).toContain("卡塔尔 vs 瑞士");
+      expect(visibleText).not.toContain("卡塔尔 vs 瑞士");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
     } finally {
@@ -2584,17 +2539,8 @@ describe("chat route event forwarding", () => {
 
     await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
 
-    expect(eventsBeforeModelCall).toContainEqual(expect.objectContaining({
-      type: "tool_start",
-      name: "weather",
-      sessionPath: "/sessions/current.jsonl",
-    }));
-    expect(eventsBeforeModelCall).toContainEqual(expect.objectContaining({
-      type: "tool_end",
-      name: "weather",
-      success: true,
-      sessionPath: "/sessions/current.jsonl",
-    }));
+    expect(eventsBeforeModelCall.some((evt) => evt.type === "tool_start" && evt.name === "weather")).toBe(false);
+    expect(reportResearchMock.buildReportResearchContext).not.toHaveBeenCalled();
   });
 
   it("creates a session on the first prompt when currentSessionPath is empty", async () => {
@@ -2616,11 +2562,8 @@ describe("chat route event forwarding", () => {
 
     await vi.waitFor(() => expect(engine.createSession).toHaveBeenCalled());
 
-    expect(clients[0].sent).toContainEqual(expect.objectContaining({
-      type: "tool_start",
-      name: "market_weather_brief",
-      sessionPath: "/sessions/new.jsonl",
-    }));
+    expect(hub.send).toHaveBeenCalled();
+    expect(clients[0].sent.some((evt) => evt.type === "tool_start" && evt.name === "market_weather_brief")).toBe(false);
     expect(clients[0].sent.some((evt) => evt.type === "text_delta"
       && evt.sessionPath === "/sessions/new.jsonl"
       && String(evt.delta || "").includes("AAPL"))).toBe(false);

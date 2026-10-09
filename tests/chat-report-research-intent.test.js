@@ -10,7 +10,11 @@ import {
 describe("report research intent module", () => {
   it("keeps stock target extraction isolated from fetch and answer logic", () => {
     expect(extractStockTargetForResearch("华丰科技怎么看")).toEqual({
-      name: "华丰科技",
+      name: "",
+      code: "",
+    });
+    expect(extractStockTargetForResearch("688629 怎么看")).toEqual({
+      name: "",
       code: "688629",
     });
   });
@@ -19,9 +23,9 @@ describe("report research intent module", () => {
     const intent = inferKind("请同时看一下今天 AAPL 最新价、上证指数最新点位、以及明天上海白天的天气，然后给出我明早去浦东机场时的出行与着装建议。");
 
     expect(intent.kind).toBe("market_weather_brief");
-    expect(intent.ticker).toBe("AAPL");
-    expect(intent.indexTarget?.label).toBe("上证指数");
-    expect(intent.weatherLocation).toBe("上海");
+    expect(intent.ticker).toBeUndefined();
+    expect(intent.indexTarget).toBeUndefined();
+    expect(intent.weatherLocation).toBeUndefined();
   });
 
   it("preserves the public kind classifier used by chat routing", () => {
@@ -31,10 +35,7 @@ describe("report research intent module", () => {
   });
 
   it("extracts both ends of a flight weather route", () => {
-    expect(extractFlightWeatherRoute("明天上海飞北京，帮我查天气风险并给穿衣和到机场建议")).toEqual({
-      origin: "上海",
-      destination: "北京",
-    });
+    expect(extractFlightWeatherRoute("明天上海飞北京，帮我查天气风险并给穿衣和到机场建议")).toBeNull();
     expect(extractFlightWeatherRoute("深圳明天下雨吗？")).toBeNull();
   });
 

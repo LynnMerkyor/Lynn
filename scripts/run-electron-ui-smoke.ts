@@ -425,7 +425,7 @@ async function main(): Promise<void> {
           })()`) as { text: string; value: string; contrast: number; overflow: number; inside: boolean; card: string };
           await waitForExpression(cdp, `document.querySelector('[data-local-model-smoke]').dataset.helpClicked === 'true'`);
           const failures: string[] = [];
-          const expected = state === 'q2' ? ['14.14 GB', '4K'] : ['18.18 GB', '8K'];
+          const expected = state === 'q2' ? ['13.28 GB', '4K'] : ['17.30 GB', '8K'];
           if (state === 'unknown') expected.push('已了解显存要求，手动选择此方案');
           for (const text of expected) if (!snapshot.text.includes(text)) failures.push(`missing setup text: ${text}`);
           if (!snapshot.value.includes(state === 'q2' ? '-q2-' : '-q3-')) failures.push('selected tier mismatch');

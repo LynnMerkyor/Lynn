@@ -246,33 +246,87 @@
     },
     {
       "id": "tool-behavior.weather-prefetch",
-      "title": "Realtime weather is prefetch-first so the model does not wait on remote tool chains",
+      "title": "Weather requests await model-supplied location parameters without sentence extraction",
       "level": "release",
-      "tags": ["tool-routing", "prefetch", "weather"],
+      "tags": ["tool-routing", "model-args", "weather"],
       "operation": "tool_use_behavior",
       "input": {
         "prompt": "查一下深圳今天是否下雨，给我一句行动建议。"
       },
       "assertions": [
-        { "path": "behavior", "equals": "prefetch_then_run_or_stop" },
-        { "path": "reason", "equals": "report_context_prefetch" },
+        { "path": "behavior", "equals": "run_llm_again" },
+        { "path": "reason", "equals": "default" },
         { "path": "reportKind", "equals": "weather" },
-        { "path": "toolName", "equals": "weather" }
+        { "path": "toolName", "absent": true },
+        { "path": "disableTools", "equals": false },
+        { "path": "effectivePromptText", "equals": "查一下深圳今天是否下雨，给我一句行动建议。" }
       ]
     },
     {
       "id": "tool-behavior.stock-prefetch",
-      "title": "Simple stock quote requests are prefetch-first",
+      "title": "Stock requests await model-supplied symbols without sentence extraction",
       "level": "release",
-      "tags": ["tool-routing", "prefetch", "stock"],
+      "tags": ["tool-routing", "model-args", "stock"],
       "operation": "tool_use_behavior",
       "input": {
         "prompt": "NVDA 今天最新股价多少？"
       },
       "assertions": [
-        { "path": "behavior", "equals": "prefetch_then_run_or_stop" },
+        { "path": "behavior", "equals": "run_llm_again" },
+        { "path": "reason", "equals": "default" },
         { "path": "reportKind", "equals": "market" },
-        { "path": "toolName", "equals": "stock_market" }
+        { "path": "toolName", "absent": true },
+        { "path": "disableTools", "equals": false },
+        { "path": "effectivePromptText", "equals": "NVDA 今天最新股价多少？" }
+      ]
+    },
+    {
+      "id": "tool-behavior.compound-place-model-args",
+      "title": "Shunde Daliang remains intact until the model supplies weather parameters",
+      "level": "release",
+      "tags": ["tool-routing", "model-args", "weather", "compound-place"],
+      "operation": "tool_use_behavior",
+      "input": {
+        "prompt": "我问的是明天晚上顺德大良区会不会下雨"
+      },
+      "assertions": [
+        { "path": "behavior", "equals": "run_llm_again" },
+        { "path": "reason", "equals": "default" },
+        { "path": "toolName", "absent": true },
+        { "path": "disableTools", "equals": false },
+        { "path": "effectivePromptText", "equals": "我问的是明天晚上顺德大良区会不会下雨" }
+      ]
+    },
+    {
+      "id": "tool-behavior.sports-model-args",
+      "title": "Sports requests await model-supplied leagues and teams",
+      "level": "release",
+      "tags": ["tool-routing", "model-args", "sports"],
+      "operation": "tool_use_behavior",
+      "input": {
+        "prompt": "查一下英超阿森纳下一场什么时候踢"
+      },
+      "assertions": [
+        { "path": "behavior", "equals": "run_llm_again" },
+        { "path": "toolName", "absent": true },
+        { "path": "disableTools", "equals": false },
+        { "path": "effectivePromptText", "equals": "查一下英超阿森纳下一场什么时候踢" }
+      ]
+    },
+    {
+      "id": "tool-behavior.exchange-model-args",
+      "title": "Exchange requests await model-supplied currency pairs",
+      "level": "release",
+      "tags": ["tool-routing", "model-args", "exchange"],
+      "operation": "tool_use_behavior",
+      "input": {
+        "prompt": "查一下美元兑人民币现在的汇率"
+      },
+      "assertions": [
+        { "path": "behavior", "equals": "run_llm_again" },
+        { "path": "toolName", "absent": true },
+        { "path": "disableTools", "equals": false },
+        { "path": "effectivePromptText", "equals": "查一下美元兑人民币现在的汇率" }
       ]
     },
     {

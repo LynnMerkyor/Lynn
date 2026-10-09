@@ -29,11 +29,11 @@ describe("doctor command", () => {
     expect(result.brain).toBe("skipped");
     expect(result.checks.some((check) => check.name === "node")).toBe(true);
     expect(result.cliProvider.configured).toBe(false);
-    expect(result.presets).toContain("stepfun:step-3.7-flash");
+    expect(result.presets).toContain("stepfun:step-5-preview");
     expect(result.presets).not.toContain("mimo:mimo-v2.5-pro");
     expect(renderDoctor(result)).toContain("optional CLI-only BYOK");
     expect(renderDoctor(result)).toContain("Lynn providers set --preset stepfun --api-key <api-key>");
-    expect(renderDoctor(result)).toContain("stepfun:step-3.7-flash");
+    expect(renderDoctor(result)).toContain("stepfun:step-5-preview");
   });
 
   it("reads Brain v2 provider route status without requiring CLI BYOK", async () => {
@@ -46,7 +46,7 @@ describe("doctor command", () => {
           ok: true,
           route: ["step-3.7-flash", "apex-spark-i-balanced"],
           providers: [
-            { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "set", configured: true, local: false, inRoute: true },
+            { id: "step-3.7-flash", model: "step-5-preview", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "set", configured: true, local: false, inRoute: true },
             { id: "apex-spark-i-balanced", model: "qwen36", endpoint: "http://127.0.0.1:18098/v1", wire: "openai", credential: "not_required", configured: true, local: true, inRoute: true, routeRole: "local_single_slot_manager", localConcurrencyLimit: 1 },
           ],
         }), { status: 200, statusText: "OK" });
@@ -69,8 +69,8 @@ describe("doctor command", () => {
     expect(result.ok).toBe(true);
     expect(result.brainSmoke).toMatchObject({ ok: true, provider: "step-3.7-flash" });
     expect(result.brainProviders?.route[0]).toBe("step-3.7-flash");
-    expect(rendered).toContain("brain-route: StepFun 3.7 Flash:key -> Spark Qwen 3.6 35B A3B Distill:local-single-slot");
-    expect(rendered).toContain("head ready: StepFun 3.7 Flash; fallback ready: Spark Qwen 3.6 35B A3B Distill");
+    expect(rendered).toContain("brain-route: Step 5 Preview:key -> Spark Qwen 3.6 35B A3B Distill:local-single-slot");
+    expect(rendered).toContain("head ready: Step 5 Preview; fallback ready: Spark Qwen 3.6 35B A3B Distill");
     expect(rendered).toContain("brain-smoke: route returned assistant output via step-3.7-flash");
   });
 
@@ -111,7 +111,7 @@ describe("doctor command", () => {
           ok: true,
           route: ["step-3.7-flash", "deepseek"],
           providers: [
-            { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "missing", configured: false, local: false, inRoute: true },
+            { id: "step-3.7-flash", model: "step-5-preview", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "missing", configured: false, local: false, inRoute: true },
             { id: "deepseek", model: "deepseek-v4-flash", endpoint: "https://api.deepseek.com/v1", wire: "openai", credential: "missing", configured: false, local: false, inRoute: true },
           ],
         }), { status: 200, statusText: "OK" });
@@ -137,7 +137,7 @@ describe("doctor command", () => {
           ok: true,
           route: ["step-3.7-flash", "deepseek"],
           providers: [
-            { id: "step-3.7-flash", model: "step-3.7-flash", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "set", configured: true, local: false, inRoute: true },
+            { id: "step-3.7-flash", model: "step-5-preview", endpoint: "https://api.stepfun.com/step_plan/v1", wire: "openai", credential: "set", configured: true, local: false, inRoute: true },
             { id: "deepseek", model: "deepseek-v4-flash", endpoint: "https://api.deepseek.com/v1", wire: "openai", credential: "set", configured: true, local: false, inRoute: true },
           ],
         }), { status: 200, statusText: "OK" });

@@ -85,7 +85,7 @@ export function configuredCliProviderPreset(opts: { lynnHome?: string; readFileS
     const model = typeof parsed.model === "string" ? parsed.model : "";
     const apiKey = typeof parsed.apiKey === "string" ? parsed.apiKey.trim() : "";
     if (!apiKey) return null;
-    if (baseUrl === "https://api.stepfun.com/step_plan/v1" && model === "step-3.7-flash") return "stepfun";
+    if (baseUrl === "https://api.stepfun.com/step_plan/v1" && ["step-3.7-flash", "step-5-preview"].includes(model)) return "stepfun";
     return null;
   } catch {
     return null;
@@ -99,7 +99,7 @@ function configuredPresetFromEnv(env: NodeJS.ProcessEnv): string | null {
   const baseUrl = (env.LYNN_CLI_BASE_URL || env.OPENAI_BASE_URL || "").replace(/\/+$/, "");
   const model = env.LYNN_CLI_MODEL || "";
   if (!apiKey.trim()) return null;
-  if (baseUrl === "https://api.stepfun.com/step_plan/v1" && model === "step-3.7-flash") return "stepfun";
+  if (baseUrl === "https://api.stepfun.com/step_plan/v1" && ["step-3.7-flash", "step-5-preview"].includes(model)) return "stepfun";
   return null;
 }
 

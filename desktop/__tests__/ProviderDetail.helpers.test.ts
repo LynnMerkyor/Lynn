@@ -45,25 +45,25 @@ describe("formatters", () => {
 });
 
 describe("normalizeLocalUpgradeOptions (memory-adaptive)", () => {
-  it("shows both downgrade + upgrade when memory is unknown", () => {
+  it("shows 35B when memory is unknown and hides 9B and 4B", () => {
     const out = normalizeLocalUpgradeOptions([], null);
-    expect(out.some((o) => o.id === "qwen35-4b-q4km")).toBe(true);
-    expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix")).toBe(true);
-  });
-  it("hides the 4B downgrade on >32GB machines, keeps 35B", () => {
-    const out = normalizeLocalUpgradeOptions([], 64);
     expect(out.some((o) => o.id === "qwen35-4b-q4km")).toBe(false);
+    expect(out.some((o) => o.id === "qwen35-9b-q4km-imatrix")).toBe(false);
     expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix")).toBe(true);
   });
-  it("hides the 35B upgrade on <24GB machines, keeps 4B", () => {
+  it("keeps 35B on large machines", () => {
+    const out = normalizeLocalUpgradeOptions([], 64);
+    expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix")).toBe(true);
+  });
+  it("hides the 35B upgrade below 32GB", () => {
     const out = normalizeLocalUpgradeOptions([], 16);
-    expect(out.some((o) => o.id === "qwen35-4b-q4km")).toBe(true);
+    expect(out.some((o) => o.id === "qwen35-4b-q4km")).toBe(false);
     expect(out.some((o) => o.id === "qwen36-35b-a3b-dsv4pro-distill-q5km-imatrix")).toBe(false);
   });
-  it("drops the default 27b server option from the optional list", () => {
-    const out = normalizeLocalUpgradeOptions([{ id: "x-9b" }, { id: "y-27b" }], 28);
+  it("drops 27B, 9B, and 4B from the optional list", () => {
+    const out = normalizeLocalUpgradeOptions([{ id: "x-9b" }, { id: "z-4b" }, { id: "y-27b" }], 28);
     expect(out.some((o) => o.id === "x-9b")).toBe(false);
-    expect(out.some((o) => o.id === "qwen35-9b-q4km-imatrix")).toBe(true);
+    expect(out.some((o) => o.id === "z-4b")).toBe(false);
     expect(out.some((o) => o.id === "y-27b")).toBe(false);
   });
 });

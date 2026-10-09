@@ -53,14 +53,14 @@ export const QUICK_START_PROVIDER = {
 /**
  * Quick-local track wires the user straight into the server-side local Qwen
  * provider. The provider id and endpoint name stay legacy-compatible, while the
- * default downloadable model is now Qwen3.8-27B DSV4Pro Coding Q4 imatrix MTP.
- * 9B / 4B remain manual low-config downgrades from Settings.
+ * default downloadable model is Qwen3.8-27B Coder390 Q3.
+ * 16GB and above defaults to Q3; below 16GB uses Q2.
  */
 export const QUICK_LOCAL_PROVIDER = {
   providerName: 'local-qwen35-9b-q4km-imatrix',
   providerUrl: 'http://127.0.0.1:18099/v1',
   providerApi: 'openai-completions',
-  defaultModelId: 'qwen38-27b-efficientthink-q3-lynnstyle',
+  defaultModelId: 'qwen38-27b-coder390-q3-lynnstyle',
 } as const;
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [

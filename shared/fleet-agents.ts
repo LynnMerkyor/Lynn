@@ -33,7 +33,7 @@ export interface CanonicalFleetAgent {
 
 export const CANONICAL_FLEET_AGENTS: readonly CanonicalFleetAgent[] = [
   { id: "lynn-cli", label: "Lynn CLI", bin: "lynn", cliBin: "Lynn", supportsJsonl: true, enabled: true, kind: "built-in", profileHint: "current binary" },
-  { id: "stepfun-flash", label: "StepFun 3.7 Flash (fast coding)", bin: "lynn", cliBin: "Lynn", supportsJsonl: true, enabled: true, kind: "built-in", profileHint: "built-in profile - BYOK preset stepfun", requiresPreset: "stepfun" },
+  { id: "stepfun-flash", label: "Step 5 Preview (fast coding)", bin: "lynn", cliBin: "Lynn", supportsJsonl: true, enabled: true, kind: "built-in", profileHint: "built-in profile - BYOK preset stepfun", requiresPreset: "stepfun" },
   { id: "codex-cli", label: "Codex", bin: "codex", cliBin: "codex", supportsJsonl: true, enabled: true, kind: "external" },
   { id: "claude-internal", label: "Claude (internal)", bin: "claude-internal", cliBin: "claude-internal", supportsJsonl: false, enabled: true, kind: "external" },
   { id: "claude-code", label: "Claude Code", bin: "claude", cliBin: "claude", supportsJsonl: true, enabled: true, kind: "external" },

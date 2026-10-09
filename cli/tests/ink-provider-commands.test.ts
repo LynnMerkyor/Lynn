@@ -38,7 +38,7 @@ describe("Ink provider commands", () => {
     expect(result.handled).toBe(true);
     expect(result.message).toContain("Lynn Models / Brain Route");
     expect(result.message).not.toContain("MiMo");
-    expect(result.message).toContain("StepFun 3.7 Flash");
+    expect(result.message).toContain("Step 5 Preview");
     expect(result.message).toContain("Spark Qwen 3.6 35B A3B Distill");
   });
 
@@ -74,12 +74,12 @@ describe("Ink provider commands", () => {
     expect(result.message).not.toContain("sk-test-1234");
     expect(result.refreshedProvider).toMatchObject({
       provider: "openai-compatible",
-      model: "step-3.7-flash",
+      model: "step-5-preview",
       apiKey: "sk-test-1234",
     });
     await expect(readCliProviderProfile(dataDir)).resolves.toMatchObject({
       provider: "openai-compatible",
-      model: "step-3.7-flash",
+      model: "step-5-preview",
       apiKey: "sk-test-1234",
     });
   });

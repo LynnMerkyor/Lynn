@@ -389,8 +389,8 @@ export async function runCodexHarnessLoop(input: CodeAgentLoopInput, options: Co
   }
   const proxyEnvKey = "LYNN_CODEX_RESPONSES_PROXY_TOKEN";
   const protocol = input.codexProtocol || "legacy-kebab";
-  const model = input.fallbackProvider?.model || "lynn-brain-router";
-  const activeProvider = input.fallbackProvider ? `cli-byok:${input.fallbackProvider.provider}` : "lynn-brain-router";
+  const model = input.fallbackProvider?.model || "step-5-preview";
+  const activeProvider = input.fallbackProvider ? `cli-byok:${input.fallbackProvider.provider}` : "step-5-preview";
   const fallbackFrom = input.fallbackProvider ? [{ id: "brain", reason: "harness-byok-direct" }] : undefined;
   input.onEvent?.({ type: "provider", provider: activeProvider });
   if (input.json) writeJsonLine({ type: "provider", ts: nowIso(), activeProvider, ...(fallbackFrom ? { fallbackFrom } : {}) });

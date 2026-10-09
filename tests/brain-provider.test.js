@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   BRAIN_API_ROOT,
+  BRAIN_DEFAULT_MODEL_ID,
+  isBrainModelId,
   BRAIN_BACKUP_API_ROOT,
   BRAIN_PROVIDER_BASE_URL,
   buildBrainProviderConfig,
@@ -41,5 +43,13 @@ describe("sanitizeBrainIdentityDisclosureText", () => {
   it("does not rewrite mixed-language identity text", () => {
     const raw = "未检测到 uvx。I’m currently running on Lynn's default model service. Missing uvx.";
     expect(sanitizeBrainIdentityDisclosureText(raw)).toBe(raw);
+  });
+});
+
+describe("default GUI and CLI model", () => {
+  it("uses Step 5 as the built-in default and still accepts the router id", () => {
+    expect(BRAIN_DEFAULT_MODEL_ID).toBe("step-5-preview");
+    expect(isBrainModelId("step-5-preview")).toBe(true);
+    expect(isBrainModelId("lynn-brain-router")).toBe(true);
   });
 });

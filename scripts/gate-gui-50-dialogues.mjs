@@ -313,7 +313,7 @@ async function startManagedServer() {
       ...runtime.env,
       LYNN_HOME: lynnHome,
       HANA_PORT: "0",
-      STEP_TEXT_MODEL: process.env.STEP_TEXT_MODEL || "step-3.7-flash",
+      STEP_TEXT_MODEL: process.env.STEP_TEXT_MODEL || "step-5-preview",
       LYNN_IMPORT_HANAKO_ON_FIRST_RUN: "0",
     },
     stdio: ["ignore", "pipe", "pipe"],

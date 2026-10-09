@@ -15,7 +15,7 @@ import { loadModels } from '../utils/ui-helpers';
 import { BRAIN_PROVIDER_ID, BRAIN_DEFAULT_MODEL_ID } from '../../../../shared/brain-provider.js';
 
 const LOCAL_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-const LOCAL_MODEL_ID = 'qwen38-27b-efficientthink-q3-lynnstyle';
+const LOCAL_MODEL_ID = 'qwen38-27b-coder390-q3-lynnstyle';
 
 type LocalStatus = {
   ok?: boolean;
@@ -181,7 +181,7 @@ export function ProviderStatusBadge() {
     setMenuOpen(false);
     try {
       const modelId = targetProvider === BRAIN_PROVIDER_ID ? BRAIN_DEFAULT_MODEL_ID
-        : localModelId || localStatus?.runtime?.model_ids?.find(id => /^qwen38-27b-efficientthink-q[23]-lynnstyle$/.test(id)) || LOCAL_MODEL_ID;
+        : localModelId || localStatus?.runtime?.model_ids?.find(id => /^qwen38-27b-(?:coder390|efficientthink)-q[23]-lynnstyle$/.test(id)) || LOCAL_MODEL_ID;
       await hanaFetch('/api/models/set', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -233,7 +233,7 @@ export function ProviderStatusBadge() {
       }
       window.setTimeout(() => void refreshLocal(), 1000);
       if (isLocalReady(latest)) await switchToProvider(LOCAL_PROVIDER_ID,
-        latest?.runtime?.model_ids?.find(id => /^qwen38-27b-efficientthink-q[23]-lynnstyle$/.test(id)));
+        latest?.runtime?.model_ids?.find(id => /^qwen38-27b-(?:coder390|efficientthink)-q[23]-lynnstyle$/.test(id)));
     } catch (err) {
       console.warn('[ProviderStatusBadge] local setup failed:', err);
     } finally {
@@ -303,8 +303,8 @@ export function ProviderStatusBadge() {
                   ? 'Lynn 会在授权后自动准备 llama.cpp、模型文件和本地端点。'
                   : 'Lynn will prepare llama.cpp, the model file, and the local endpoint after authorization.')
                 : (isZh
-                  ? '默认 27B 需要约 24GB+ 内存；低配机器可在设置页手动选择 9B/4B 降级。'
-                  : 'The default 27B path needs about 24GB+ memory; choose 9B/4B downgrade in Settings.')}
+                  ? '16GB 及以上默认安装 Coder390 Q3，16GB 以下使用 Q2。'
+                  : '16GB and above installs Coder390 Q3. Below 16GB uses Q2.')}
             </div>
           )}
         </div>

@@ -10,9 +10,9 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
   stepfun: {
     provider: "openai-compatible",
     baseUrl: "https://api.stepfun.com/step_plan/v1",
-    model: "step-3.7-flash",
-    displayName: "StepFun 3.7 Flash",
-    description: "StepFun 3.7 Flash fast text/coding head route",
+    model: "step-5-preview",
+    displayName: "Step 5 Preview",
+    description: "Step 5 Preview default text route",
   },
   spark: {
     provider: "openai-compatible",
@@ -38,7 +38,8 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
 };
 
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
-  stepfun: "StepFun 3.7 Flash",
+  stepfun: "Step 5 Preview",
+  "step-5-preview": "Step 5 Preview",
   "step-3.7-flash": "StepFun 3.7 Flash",
   spark: "Spark Qwen 3.6 35B A3B Distill",
   deepseek: "DS V4 Flash Vision Exp",

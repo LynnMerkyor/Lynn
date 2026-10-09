@@ -659,7 +659,7 @@
       "userNameHint": "어시스턴트가 부르는 이름",
       "userProfile": "사용자 프로필",
       "userProfileHint": "어시스턴트가 당신을 이해하는 데 도움이 돼요: 관심사, 습관, 취향 등. 시스템 프롬프트에 주입돼요",
-      "defaultProviderHint": "로컬 Qwen3.8-27B와 클라우드를 한 번에 전환. 저사양 환경은 Settings에서 9B/4B를 선택할 수 있습니다.",
+      "defaultProviderHint": "로컬 Qwen3.8-27B Coder390와 클라우드를 한 번에 전환. 16GB 이상은 Q3, 16GB 미만은 Q2.",
       "openProviders": "Providers 열기 →"
     },
     "crop": {
@@ -1198,9 +1198,9 @@
     },
     "localModel": {
       "title": "Download Lynn's default local model",
-      "subtitle": "Qwen3.8-27B EfficientThink: Q3 for 24GB+ VRAM; Q2 for 16GB. Both include Q4 DFlash2 and compatible llama.cpp. Additional memory is needed for caches and runtime buffers.",
-      "specsLine": "Q3 + Q4 DFlash2: 18.18 GB · Q2 + Q4 DFlash2: 14.14 GB · plus llama.cpp",
-      "needsBinary": "A DFlash2-compatible llama.cpp is required; one-click setup checks and prepares it.",
+      "subtitle": "Qwen3.8-27B Coder390: Q3 at 16GB and above, Q2 below 16GB. Both use built-in Q4 MTP and compatible llama.cpp. Additional memory is needed for caches and runtime buffers.",
+      "specsLine": "Q3: 17.30 GB · Q2: 13.28 GB · built-in Q4 MTP · plus llama.cpp",
+      "needsBinary": "내장 MTP(draft-mtp)를 지원하는 llama.cpp가 필요하며, 원클릭 설치에서 확인하고 준비합니다.",
       "needsBinaryHint": "Compatible runtimes are reused; manually installed runtimes are not overwritten.",
       "alreadyHave": "Local model is ready",
       "alreadyHaveDesc": "The model is already downloaded — you're good to go.",

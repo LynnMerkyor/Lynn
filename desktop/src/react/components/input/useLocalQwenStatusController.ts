@@ -86,7 +86,7 @@ export function useLocalQwenStatusController({
         ? `${LOCAL_QWEN_DISPLAY_NAME} 正在加载`
         : `${LOCAL_QWEN_DISPLAY_NAME} 正在连接`;
   const warmupCopy = endpointOccupied
-    ? '旧版模型继续保留为兼容选项；停止该端点后可安装或启动 Qwen3.8-27B Q3/Q2 + Q4 DFlash2。'
+    ? '旧版模型继续保留为兼容选项；停止该端点后可安装或启动 Qwen3.8-27B Coder390 Q3/Q2。'
     : running
     ? current
       ? (coldStartLikely

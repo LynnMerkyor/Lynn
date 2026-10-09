@@ -696,9 +696,26 @@ async function fetchEspnScoreboardJson(
   throw lastError;
 }
 
-export async function fetchSportsScoreboardEvidence(query: unknown): Promise<SportsScoreboardResult | null> {
+const MODEL_LEAGUE_PATHS: Record<string, SportsLeagueInfo> = {
+  "fifa.world": { label: "FIFA World Cup", path: "soccer/fifa.world", tournamentStart: "2026-06-11", tournamentEnd: "2026-07-19" },
+  worldcup: { label: "FIFA World Cup", path: "soccer/fifa.world", tournamentStart: "2026-06-11", tournamentEnd: "2026-07-19" },
+  "world-cup": { label: "FIFA World Cup", path: "soccer/fifa.world", tournamentStart: "2026-06-11", tournamentEnd: "2026-07-19" },
+  nba: { label: "NBA", path: "basketball/nba" },
+  mlb: { label: "MLB", path: "baseball/mlb" },
+  nhl: { label: "NHL", path: "hockey/nhl" },
+};
+
+function leagueFromModel(value: unknown): SportsLeagueInfo | null {
+  const key = compactLine(value).toLowerCase().replace(/\s+/g, "");
+  return MODEL_LEAGUE_PATHS[key] || null;
+}
+
+export async function fetchSportsScoreboardEvidence(
+  query: unknown,
+  options: { league?: unknown } = {},
+): Promise<SportsScoreboardResult | null> {
   const text = compactLine(query);
-  const league = resolveSportsLeague(text);
+  const league = leagueFromModel(options.league);
   if (!league) return null;
   const range = resolveSportsDateRange(text, league);
   // ESPN groups soccer events by its source date rather than Beijing date. A

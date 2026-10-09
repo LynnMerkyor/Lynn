@@ -41,7 +41,7 @@ export function buildDirectEvidencePrefetchPlans(
 ): DirectEvidencePrefetchPlan[] {
   const plans: DirectEvidencePrefetchPlan[] = [];
 
-  if (process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH !== '0' && shouldPreferWeatherTool(intentMessages)) {
+  if (process.env.BRAIN_V2_DIRECT_WEATHER_PREFETCH === 'model-args' && shouldPreferWeatherTool(intentMessages)) {
     plans.push({
       kind: 'weather',
       toolName: 'weather',
@@ -51,7 +51,7 @@ export function buildDirectEvidencePrefetchPlans(
   }
 
   if (
-    process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH !== '0'
+    process.env.BRAIN_V2_DIRECT_SPORTS_PREFETCH === 'model-args'
     && shouldPreferSportsScoreTool(intentMessages)
     && !hasEvidenceLedger(evidenceMessages, 'sports_score')
   ) {
@@ -64,7 +64,7 @@ export function buildDirectEvidencePrefetchPlans(
   }
 
   if (
-    process.env.BRAIN_V2_DIRECT_EXCHANGE_PREFETCH !== '0'
+    process.env.BRAIN_V2_DIRECT_EXCHANGE_PREFETCH === 'model-args'
     && shouldPreferExchangeRateTool(intentMessages)
     && !hasEvidenceLedger(evidenceMessages, 'exchange_rate')
   ) {
@@ -103,7 +103,7 @@ export function buildDirectEvidencePrefetchPlans(
   }
 
   if (
-    process.env.BRAIN_V2_DIRECT_MARKET_PREFETCH !== '0'
+    process.env.BRAIN_V2_DIRECT_MARKET_PREFETCH === 'model-args'
     && shouldPreferStockMarketTool(intentMessages)
     && !hasEvidenceLedger(evidenceMessages, 'stock_market')
   ) {

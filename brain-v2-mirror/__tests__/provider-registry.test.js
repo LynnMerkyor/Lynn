@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+vi.hoisted(() => {
+  process.env.STEP37_MODEL = 'step-5-preview';
+});
 import { getProvider, getProviderStatusSnapshot, PROVIDERS, providerOrderForCapability, providerOrderForReviewArbitration, universalOrder } from '../provider-registry.js';
 
 function withSavedEnv(keys, fn) {
@@ -103,7 +106,7 @@ describe('provider registry', () => {
     expect(step).toBeTruthy();
     expect(String(step.id)).toBe('step-3.7-flash');
     expect(step.endpoint).toBe('https://api.stepfun.com/step_plan/v1');
-    expect(String(step.model)).toBe('step-3.7-flash');
+    expect(String(step.model)).toBe('step-5-preview');
     expect(step.wire).toBe('openai');
     expect(step.cooldown_ms).toBe(60_000);
     expect(step.default_thinking).toBe(false);

@@ -344,7 +344,7 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
     throw new Error("Brain request requires a prompt or messages");
   }
   const body = applyReasoningToBody({
-    model: "lynn-brain-router",
+    model: "step-5-preview",
     stream: true,
     ...(request.tools?.length ? { tools: request.tools, tool_choice: "auto" } : {}),
     messages,

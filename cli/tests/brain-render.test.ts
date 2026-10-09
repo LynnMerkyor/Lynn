@@ -100,7 +100,7 @@ describe("renderBrainEventForHuman", () => {
       details: ["[Source A](https://a.example): fresh result"],
     }, state, stream);
 
-    expect(output).toContain("│ • route: StepFun 3.7 Flash");
+    expect(output).toContain("│ • route: Step 5 Preview");
     expect(output).toContain("│ > 🔎 web_search · running");
     expect(output).toContain("│ ✓ 🔎 web_search · done 5.1s");
     expect(output).toContain("│   MiMo summary · Source A: fresh result");
@@ -156,7 +156,7 @@ describe("renderBrainEventForHuman", () => {
       ms: 4500,
       details: [
         "[StepFun Docs](https://platform.stepfun.com/docs/zh/api-reference/chat/messages-create): max_tokens controls generated tokens; model context is separate.",
-        "[Pricing](https://platform.stepfun.com/pricing): StepFun 3.7 Flash supports high reasoning.",
+        "[Pricing](https://platform.stepfun.com/pricing): Step 5 Preview supports high reasoning.",
       ],
     }, state, stream);
 

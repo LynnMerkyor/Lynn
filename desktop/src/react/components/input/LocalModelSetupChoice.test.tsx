@@ -10,11 +10,11 @@ describe('local model setup choice', () => {
   it.each(localModelCatalog.tiers)('renders the exact $quantization package with help and source links', tier => {
     const html = renderToStaticMarkup(<LocalModelSetupChoice value={tier.modelId} recommendedId={tier.modelId} onChange={() => {}} onHelp={() => {}} />);
     expect(html).toContain(tier.label);
-    expect(html).toContain(((tier.expectedSize + localModelCatalog.draft.expectedSize) / 1e9).toFixed(2));
+    expect(html).toContain((tier.expectedSize / 1e9).toFixed(2));
     expect(html).toContain(localModelCatalog.modelCardUrl);
     expect(html).toContain('让 Lynn 帮我部署');
     expect(html).not.toContain('Coding100 82/100');
-    expect(html).not.toContain('MTP');
+    expect(html).toContain('内置 Q4 MTP');
   });
   it('keeps unknown hardware explicit and offers manual selection', () => {
     const html = renderToStaticMarkup(<LocalModelSetupChoice value={localModelCatalog.defaultModelId} onChange={() => {}} onHelp={() => {}} />);
@@ -41,13 +41,13 @@ describe('local model setup choice', () => {
     }
     try {
       await act(async () => root.render(<Choice />));
-      expect(host.textContent).toContain('18.18 GB');
+      expect(host.textContent).toContain('17.30 GB');
       const select = host.querySelector('select')!;
       await act(async () => {
         select.value = localModelCatalog.q2ModelId;
         select.dispatchEvent(new Event('change', { bubbles: true }));
       });
-      expect(host.textContent).toContain('14.14 GB');
+      expect(host.textContent).toContain('13.28 GB');
       expect(host.textContent).toContain('4K 上下文');
       expect(help).not.toHaveBeenCalled();
       const button = Array.from(host.querySelectorAll('button')).find(node => node.textContent === '让 Lynn 帮我部署')!;

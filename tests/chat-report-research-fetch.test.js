@@ -28,6 +28,7 @@ describe("report research fetch module", () => {
 
     const context = await fetchForKind("weather", null, {
       userPrompt: "杭州明天天气",
+      location: "杭州",
       toolWrappers: {
         realtimeInfo,
       },
@@ -37,6 +38,12 @@ describe("report research fetch module", () => {
       query: "杭州明天天气",
       location: "杭州",
     });
+    const raw = vi.fn().mockResolvedValue({ content: [{ text: "no place" }] });
+    await fetchForKind("weather", null, {
+      userPrompt: "明天晚上顺德大良区会不会下雨",
+      toolWrappers: { realtimeInfo: raw },
+    });
+    expect(raw).not.toHaveBeenCalled();
     expect(context).toContain("【天气工具资料】");
     expect(context).toContain("Cloudy");
   });

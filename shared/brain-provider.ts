@@ -92,12 +92,13 @@ const _BRAIN_MODEL_PRIMARY_ENCODED = "MzA2Mi1oc2FsZi01LjMtcGV0cw==";
 const _BRAIN_MODEL_UTILITY_ENCODED = "NDE0MC1iOS0xei1tbGc=";
 const _BRAIN_MODEL_AUX_1_ENCODED = "YjgtM25ld3E=";
 const _BRAIN_MODEL_AUX_2_ENCODED = "NDE0MC1iOS00LW1sZw==";
+const _BRAIN_MODEL_STEP5_ENCODED = "d2VpdmVycC01LXBldHM=";
 const _BRAIN_MODEL_ROUTER_ENCODED = "cmV0dW9yLW5pYXJiLW5ueWw=";
 const _BRAIN_MODEL_LEGACY_ENCODED = "YjctbmV3cS1sbGl0c2lkLTFyLWtlZXNwZWVk";
 
-// All user-facing default roles enter through the Brain router. Older concrete
-// model IDs remain listed below only for migration/display compatibility.
-export const BRAIN_CHAT_MODEL_ID = _d(_BRAIN_MODEL_ROUTER_ENCODED);
+// User-facing default roles request Step 5. The router ID stays accepted so
+// existing GUI/CLI configs keep resolving to the same Brain default route.
+export const BRAIN_CHAT_MODEL_ID = _d(_BRAIN_MODEL_STEP5_ENCODED);
 export const BRAIN_UTILITY_MODEL_ID = _d(_BRAIN_MODEL_ROUTER_ENCODED);
 export const BRAIN_UTILITY_LARGE_MODEL_ID = _d(_BRAIN_MODEL_ROUTER_ENCODED);
 export const BRAIN_SUMMARIZER_MODEL_ID = _d(_BRAIN_MODEL_ROUTER_ENCODED);
@@ -108,9 +109,11 @@ export const BRAIN_DEFAULT_META_LABEL = "第三方已备案 AI 模型";
 export const BRAIN_COMPLIANCE_NOTE = "默认模型服务接入第三方已备案 AI 模型，由 Lynn 统一调度对话、推理与工具执行链路。";
 export const BRAIN_USER_NOTICE = "继续使用默认模型，即表示你知悉 Lynn 会为对话、推理、摘要与工具协作向第三方已备案 AI 模型服务发起必要请求。你也可以在供应商设置中改用自己的模型服务。";
 export const BRAIN_LEGACY_MODEL_IDS: readonly string[] = [
+  _d(_BRAIN_MODEL_ROUTER_ENCODED),
   _d(_BRAIN_MODEL_LEGACY_ENCODED),
 ];
 export const BRAIN_DEFAULT_MODEL_IDS: readonly string[] = [
+  _d(_BRAIN_MODEL_STEP5_ENCODED),
   _d(_BRAIN_MODEL_ROUTER_ENCODED),
   _d(_BRAIN_MODEL_PRIMARY_ENCODED),
   _d(_BRAIN_MODEL_UTILITY_ENCODED),

@@ -37,7 +37,7 @@ describe("prompt prefetch cancellation", () => {
       hasStreamEvent: () => false, hasToolExecutionInFlight: () => false,
     });
     const options = { ws: { send: noop }, msg: {}, ss, promptSessionPath: engine.currentSessionPath };
-    const first = runner({ ...options, promptText: "杭州明天天气" });
+    const first = runner({ ...options, promptText: "中国主要私董会的人数和收费大概多少？" });
     await vi.waitFor(() => expect(buildReportResearchContext).toHaveBeenCalled());
     const abort = createWsControlHandler({ engine, hub, sessionState: { get: () => ss }, broadcast: noop });
     await abort({ type: "abort" }, {});

@@ -1,7 +1,7 @@
 export const LOCAL_QWEN35_PROVIDER_ID = 'local-qwen35-9b-q4km-imatrix';
-export const LOCAL_QWEN35_MODEL_ID = 'qwen38-27b-efficientthink-q3-lynnstyle';
+export const LOCAL_QWEN35_MODEL_ID = 'qwen38-27b-coder390-q3-lynnstyle';
 export function isRecommendedLocalModelId(id?: string | null) {
-  return id === LOCAL_QWEN35_MODEL_ID || id === 'qwen38-27b-efficientthink-q2-lynnstyle';
+  return id === LOCAL_QWEN35_MODEL_ID || id === 'qwen38-27b-coder390-q2-lynnstyle';
 }
 export const LOCAL_QWEN_DISPLAY_NAME = '本地 Qwen3.8-27B';
 export const LOCAL_QWEN_SHORT_NAME = 'Qwen3.8-27B';

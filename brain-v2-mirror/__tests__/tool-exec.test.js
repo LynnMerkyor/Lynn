@@ -211,12 +211,12 @@ describe('tool-exec dispatcher', () => {
       ].join('\n'),
     })));
 
-    const usd = await executeServerTool('exchange_rate', { query: '美元人民币汇率' });
+    const usd = await executeServerTool('exchange_rate', { base: 'USD', quote: 'CNY', query: '美元人民币汇率' });
     expect(usd).toContain('美元/人民币: 1 美元 = 6.7751 人民币');
     expect(usd).toContain('涨跌幅 -0.0148%');
     expect(usd).not.toContain('+6.7751%');
 
-    const jpy = await executeServerTool('exchange_rate', { query: '日元兑人民币现在大概多少？' });
+    const jpy = await executeServerTool('exchange_rate', { base: 'JPY', quote: 'CNY', query: '日元兑人民币现在大概多少？' });
     expect(jpy).toContain('日元/人民币: 1 日元 = 0.041936 人民币');
     expect(jpy).toContain('100 日元 ≈ 4.1936 人民币');
     expect(jpy).not.toContain('100日元 ≈ 0.042');
@@ -243,7 +243,7 @@ describe('tool-exec dispatcher', () => {
       throw new Error('unexpected url');
     }));
 
-    const result = await executeServerTool('exchange_rate', { query: 'USD/CNY 汇率' });
+    const result = await executeServerTool('exchange_rate', { base: 'USD', quote: 'CNY', query: 'USD/CNY 汇率' });
 
     expect(result).toContain('【市场汇率快照】');
     expect(result).toContain('provider: sina_fx');
@@ -251,6 +251,17 @@ describe('tool-exec dispatcher', () => {
     expect(result).toContain('provider: ecb_official');
     expect(result).toContain('USD/CNY: 1 USD = 6.720574 CNY');
     expect(result).toContain('不能替代银行结售汇或实时成交价');
+  });
+
+  it('rejects a weather sentence that has no model-extracted place', async () => {
+    const result = await executeServerTool('weather', { query: '明天晚上顺德大良区会不会下雨' });
+    expect(result).toContain('missing_location');
+    expect(result).not.toContain('open-meteo geocode empty');
+  });
+
+  it('rejects an exchange question that has no model-extracted currency pair', async () => {
+    const result = await executeServerTool('exchange_rate', { query: '美元人民币汇率' });
+    expect(result).toContain('missing_currency_pair');
   });
 
   it('returns Open-Meteo AQI for air quality prompts without web search fallback', async () => {
@@ -267,7 +278,7 @@ describe('tool-exec dispatcher', () => {
     })));
     vi.mocked(webSearch).mockClear();
 
-    const result = await executeServerTool('weather', { query: '北京今天空气质量怎么样？' });
+    const result = await executeServerTool('weather', { location: '北京', query: '北京今天空气质量怎么样？' });
 
     expect(result).toContain('北京当前空气质量');
     expect(result).toContain('AQI(US): 42');
@@ -348,7 +359,7 @@ describe('tool-exec dispatcher', () => {
       }),
     })));
 
-    const r = await executeServerTool('sports_score', { query: '世界杯比分' });
+    const r = await executeServerTool('sports_score', { league: 'fifa.world', query: '世界杯比分' });
     expect(r).toContain('provider: espn_scoreboard');
     expect(r).toContain('league: FIFA World Cup');
     expect(r).toContain('Mexico 2-0 South Africa');
@@ -377,7 +388,7 @@ describe('tool-exec dispatcher', () => {
     }));
 
     try {
-      const result = await executeServerTool('sports_score', { query: '今天 MLB 有哪些比赛？' });
+      const result = await executeServerTool('sports_score', { league: 'mlb', query: '今天 MLB 有哪些比赛？' });
 
       expect(result).toContain('provider: mlb_official');
       expect(result).toContain('北京时间查询日期: 2026-08-22');
@@ -407,7 +418,7 @@ describe('tool-exec dispatcher', () => {
     }));
 
     try {
-      const result = await executeServerTool('sports_score', { query: '明天 NHL 赛程' });
+      const result = await executeServerTool('sports_score', { league: 'nhl', query: '明天 NHL 赛程' });
 
       expect(result).toContain('provider: nhl_official');
       expect(result).toContain('北京时间查询日期: 2026-10-08');
@@ -468,7 +479,7 @@ describe('tool-exec dispatcher', () => {
     })));
 
     try {
-      const r = await executeServerTool('sports_score', { query: '今晚世界杯有几场比赛' });
+      const r = await executeServerTool('sports_score', { league: 'fifa.world', query: '今晚世界杯有几场比赛' });
       expect(r).toContain('Spain vs Saudi Arabia');
       expect(r).not.toContain('Spain 0-0 Saudi Arabia');
       expect(r).not.toContain('Japan 4-0 Tunisia');
@@ -507,7 +518,7 @@ describe('tool-exec dispatcher', () => {
     })));
 
     try {
-      const r = await executeServerTool('sports_score', { query: '今天世界杯赛程发我一下' });
+      const r = await executeServerTool('sports_score', { league: 'fifa.world', query: '今天世界杯赛程发我一下' });
       expect(r).toContain('provider: espn_scoreboard');
       expect(r).toContain('dateRange: 20260622-20260624');
       expect(r).toContain('Argentina vs Austria');
@@ -547,7 +558,7 @@ describe('tool-exec dispatcher', () => {
     })));
 
     try {
-      const r = await executeServerTool('sports_score', { query: '昨晚世界杯最新的比赛结果' });
+      const r = await executeServerTool('sports_score', { league: 'fifa.world', query: '昨晚世界杯最新的比赛结果' });
       expect(r).toContain('Spain 4-0 Saudi Arabia');
       expect(r).not.toContain('Argentina vs Austria');
     } finally {
@@ -563,7 +574,7 @@ describe('tool-exec dispatcher', () => {
     }));
 
     try {
-      const pending = executeServerTool('sports_score', { query: '你能预测今晚世界杯比分么？' });
+      const pending = executeServerTool('sports_score', { league: 'fifa.world', query: '你能预测今晚世界杯比分么？' });
       await vi.advanceTimersByTimeAsync(1000);
       const r = await pending;
       expect(r).toContain('directSourceStatus: fallback_static_schedule');

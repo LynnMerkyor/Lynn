@@ -229,10 +229,10 @@ export function runShimmerDemo(stream: NodeJS.WriteStream = process.stdout): voi
   line();
 
   line(dim("  ③ 工具卡片:", color));
-  line(renderCard({ kind: "tool", title: "web_search · running", body: ["query: StepFun 3.7 Flash TPS"] }, color));
+  line(renderCard({ kind: "tool", title: "web_search · running", body: ["query: Step 5 Preview TPS"] }, color));
   line(renderCard({ kind: "ok", title: "web_search · done · 1.2s", body: ["3 results · top: artificialanalysis.ai"] }, color));
   line(renderCard({ kind: "error", title: "bash · failed · exit 1", body: ["npm test: 2 failing"] }, color));
-  line(renderCard({ kind: "info", title: "route: StepFun 3.7 Flash", body: ["256K ctx · think auto"] }, color));
+  line(renderCard({ kind: "info", title: "route: Step 5 Preview", body: ["256K ctx · think auto"] }, color));
   line();
 
   line(dim("  ④ 计划卡片:", color));
@@ -245,6 +245,6 @@ export function runShimmerDemo(stream: NodeJS.WriteStream = process.stdout): voi
   line();
 
   line(dim("  ⑤ footer:", color));
-  line(`  ${dim("StepFun 3.7 Flash · ~ · ask / workspace-write · think auto · decode 211 TPS", color)}`);
+  line(`  ${dim("Step 5 Preview · ~ · ask / workspace-write · think auto · decode 211 TPS", color)}`);
   line();
 }

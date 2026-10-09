@@ -56,7 +56,7 @@ export function parseMessageModelRef(raw?: string | null): { id: string; provide
     return { provider: value.slice(0, slashIndex), id: value.slice(slashIndex + 1) };
   }
   const lower = value.toLowerCase();
-  if (lower === 'lynn-brain-router') return { provider: 'brain', id: value };
+  if (lower === 'step-5-preview' || lower === 'lynn-brain-router') return { provider: 'brain', id: value };
   if (lower === 'qwen35-4b-q4km') {
     return { provider: 'local-qwen35-4b-q4km', id: value };
   }

@@ -6,7 +6,7 @@ import { OAuthCredentials } from './OAuthCredentials';
 import { ApiKeyCredentials } from './ApiKeyCredentials';
 import { ProviderModelList } from './ProviderModelList';
 import { useLlamacppState } from '../../../hooks/use-llamacpp-state';
-import { LocalModelSetupChoice, getLocalModelTier, localModelCatalog, requestLocalModelHelp } from '../../../components/input/LocalModelSetupChoice';
+import { LocalModelSetupChoice, getLocalModelTier, localModelCatalog, localModelInstallBytes, requestLocalModelHelp } from '../../../components/input/LocalModelSetupChoice';
 import { BRAIN_PROVIDER_ID, BRAIN_PROVIDER_LABEL } from '../../../../../../shared/brain-provider.js';
 import styles from '../../Settings.module.css';
 import { notifyModelsChanged } from './model-change-events';
@@ -239,15 +239,15 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const modelFileName = modelPath ? (modelPath.split(/[\\/]/).pop() || modelPath) : '';
   const legacyModelPath = typeof observed.legacy_gguf === 'string' ? observed.legacy_gguf : '';
   const legacyModelFileName = legacyModelPath ? (legacyModelPath.split(/[\\/]/).pop() || legacyModelPath) : '';
-  // 默认卡只认当前 27B Q3/Q2 + Q4 DFlash2 artifact。旧 9B GGUF 会显示为可升级,不能挡住新版 27B Q3/Q2 + Q4 DFlash2 下载。
+  // 默认卡只认当前 Coder390 Q3/Q2。旧 GGUF 会显示为可升级，不能挡住新版下载。
   const hasModel = !!observed.gguf && modelFileName === selectedTier.fileName.split('/').pop();
   const needsMtpUpgrade = !hasModel && (observed.needs_model_upgrade === true || !!legacyModelPath);
   const hardwareWarnings = [...new Set([
     ...(endpointForeign
-      ? [`检测到 18099 当前运行的是 ${servedModelIds.join(', ') || '非默认模型端点'}，它不会作为默认 27B 使用；停止后可启动默认 Qwen3.8-27B Q3/Q2 + Q4 DFlash2。`]
+      ? [`检测到 18099 当前运行的是 ${servedModelIds.join(', ') || '非默认模型端点'}，它不会作为默认 27B 使用；停止后可启动 Coder390 Q3/Q2。`]
       : []),
     ...(needsMtpUpgrade
-      ? [`检测到已安装的旧版 GGUF：${legacyModelFileName || '旧文件'}。默认档已升级为 27B Q3/Q2 + Q4 DFlash2；点击升级会下载新版文件，旧文件不会被删除。`]
+      ? [`检测到已安装的旧版 GGUF：${legacyModelFileName || '旧文件'}。默认档已换成 Coder390 Q3/Q2；点击升级会下载新版文件，旧文件不会被删除。`]
       : []),
     ...(hardware.warnings || []),
     ...(hardware.blockers || []),
@@ -279,7 +279,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const defaultDownloadError = defaultDownloadForDefault && defaultDownloadState === 'error';
   const defaultDownloadPercent = Math.max(0, Math.min(100, Number(defaultDownload.overallPercent ?? defaultDownload.percent ?? 0)));
   const defaultDownloadTotalBytes = Number(defaultDownload.totalBytes || 0)
-    || (defaultDownloadDone ? selectedTier.expectedSize + localModelCatalog.draft.expectedSize : 0);
+    || (defaultDownloadDone ? localModelInstallBytes(selectedTier) : 0);
   const defaultDownloadBytesTransferred = Number(defaultDownload.bytesTransferred || 0)
     || (defaultDownloadDone ? defaultDownloadTotalBytes : 0);
   const defaultDownloadSizeText = [
@@ -353,7 +353,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const authorizeAndSetup = async () => {
     const profile = `\n\n本次方案：${selectedTier.label}，上下文 ${selectedTier.contextSize}，并发 1`;
     const warning = hardwareWarnings.length ? `\n\n注意：${hardwareWarnings.join(' ')}` : '';
-    const setupText = `将安装 ${selectedTier.label} 与兼容的 llama.cpp。两个模型文件合计 ${((selectedTier.expectedSize + localModelCatalog.draft.expectedSize) / 1e9).toFixed(2)} GB。Lynn 会校验文件并尝试启动；实际显存占用还包括缓存与运行缓冲。旧模型不会被删除。`;
+    const setupText = `将安装 ${selectedTier.label} 与兼容的 llama.cpp。主模型 ${(localModelInstallBytes(selectedTier) / 1e9).toFixed(2)} GB，内置 Q4 MTP，不另下草稿，不含视觉组件。Lynn 会校验文件并尝试启动；实际显存占用还包括缓存与运行缓冲。旧模型不会被删除。`;
     const ok = window.confirm(`${setupText}${profile}${warning}\n\n继续吗？`);
     if (!ok) return;
     if (platform?.llamacppStartDownload) {
@@ -363,7 +363,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           text: hasModel
             ? '正在启动本地 Qwen3.8-27B；如果模型文件已完整，Lynn 会直接校验并拉起本地端点。'
             : needsMtpUpgrade
-              ? '正在升级到本地 Qwen3.8-27B Q3/Q2 + Q4 DFlash2；旧版文件会保留，新版校验完成后按本次授权启动。'
+              ? '正在升级到本地 Qwen3.8-27B Coder390；旧版文件会保留，新版校验完成后按本次授权启动。'
               : '正在下载本地 Qwen3.8-27B，进度会留在当前页面；下载完成后按本次授权启动本地端点。',
         });
       try {
@@ -378,7 +378,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
             : hasModel
               ? '本地 Qwen3.8-27B 正在启动。'
               : needsMtpUpgrade
-                ? '本地 Qwen3.8-27B Q3/Q2 + Q4 DFlash2 升级已开始。'
+                ? '本地 Qwen3.8-27B Coder390 升级已开始。'
                 : '本地 Qwen3.8-27B 已开始下载。',
           'info',
         );
@@ -389,7 +389,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
             : hasModel
               ? '启动任务已提交。加载完成后会自动切换为本地模型。'
             : needsMtpUpgrade
-              ? '新版 27B Q3/Q2 + Q4 DFlash2 下载已启动，校验完成后会自动启动本地端点。'
+              ? 'Coder390 Q3/Q2 下载已启动，校验完成后会自动启动本地端点。'
                 : '本地 27B 下载已启动，校验完成后会自动启动本地端点。',
         });
         await onRefresh();
@@ -597,12 +597,12 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         onHelp={() => { void requestLocalModelHelp(selectedModelId, hardware, actionStatus?.text || defaultDownload.lastError || managerFailureReason).catch(err => showToast(String(err.message), 'error')); }} />
       <div className={styles['pv-local-qwen-main']}>
         <div>
-          <div className={styles['pv-local-qwen-kicker']}>24GB 及以上推荐 Q3 · 16GB 推荐 Q2</div>
+          <div className={styles['pv-local-qwen-kicker']}>16GB 及以上默认 Q3 · 16GB 以下 Q2</div>
           <div className={styles['pv-local-qwen-title']}>{selectedTier.label}</div>
           <div className={styles['pv-local-qwen-desc']}>
-            Qwen3.8-27B EfficientThink · 独立 Q4 DFlash2 草稿模型加速；实际速度取决于硬件及任务。
+            Qwen3.8-27B Coder390 EfficientThink · 内置 Q4 MTP 加速；实际速度取决于硬件及任务。
             Lynn 会在用户授权后自动准备 llama.cpp、模型文件和本地 OpenAI 端点；完成后可离线使用，
-            不需要 API Key，不上传对话。低配设备可在模型页手动选择 9B 或 4B 降级档；Lynn 会提示 4B thinking-on 风险。
+            不需要 API Key，不上传对话。此次安装不含视觉组件，也不另下 DFlash2 草稿。
           </div>
         </div>
         <div className={styles['pv-local-qwen-state-stack']}>
@@ -625,12 +625,12 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       </div>
 
       <div className={styles['pv-local-qwen-benefits']}>
-        <span>{((selectedTier.expectedSize + localModelCatalog.draft.expectedSize) / 1e9).toFixed(2)} GB</span>
+        <span>{(localModelInstallBytes(selectedTier) / 1e9).toFixed(2)} GB</span>
         <span>{selectedTier.contextSize / 1024}K 初始上下文</span>
-        <span>Q4 DFlash2</span>
+        <span>内置 Q4 MTP</span>
         <span>Lynn imatrix 校准</span>
         <span>评测详见模型卡</span>
-        <span>{selectedTier.memoryGib}GB 档</span>
+        <span>{selectedTier.audience || (selectedTier.memoryGib >= 16 ? '16GB 及以上' : '16GB 以下')}</span>
         <span>GUI 交互优先</span>
         <span>本地单并发</span>
         <span>忙时 CLI 转 StepFun</span>
@@ -642,8 +642,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       <div className={styles['pv-local-qwen-facts']}>
         <span>模型 {hasModel ? '已就绪' : needsMtpUpgrade ? '可安装新版本' : '待下载'}</span>
         {modelFileName && <span title={modelPath}>模型文件 {modelFileName}</span>}
-        {needsMtpUpgrade && legacyModelFileName && <span title={legacyModelPath}>旧版 9B {legacyModelFileName}</span>}
-        {needsMtpUpgrade && <span>新版 27B Q3/Q2 + Q4 DFlash2 待下载</span>}
+        {needsMtpUpgrade && legacyModelFileName && <span title={legacyModelPath}>旧版模型 {legacyModelFileName}</span>}
+        {needsMtpUpgrade && <span>Coder390 Q3/Q2 待下载</span>}
         <span>llama.cpp {hasRuntime ? '已找到' : '待安装'}</span>
         {endpointForeign && <span>当前端点 {servedModelIds.join(', ') || '非默认 27B'}</span>}
         {(endpointActive || endpointForeign) && runtimeStats?.pid && <span>PID {runtimeStats.pid}</span>}
@@ -836,9 +836,9 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           <div className={styles['pv-local-qwen-advanced-panel']}>
             <div>
               <strong>已有 GGUF / 模型目录</strong>
-              <span>默认使用 Qwen3.8-27B Q3/Q2 + Q4 DFlash2。9B、4B 仅作为低配降级；也可以导入已经下载好的 35B 或其他 GGUF。</span>
+              <span>默认使用 Qwen3.8-27B Coder390。16GB 及以上是 Q3，16GB 以下是 Q2。也可以导入已经下载好的 GGUF。</span>
               {modelPath && <code className={styles['pv-local-qwen-model-path']}>{modelPath}</code>}
-              {needsMtpUpgrade && legacyModelPath && <code className={styles['pv-local-qwen-model-path']}>旧版 9B：{legacyModelPath}</code>}
+              {needsMtpUpgrade && legacyModelPath && <code className={styles['pv-local-qwen-model-path']}>旧版模型：{legacyModelPath}</code>}
             </div>
             <div className={styles['pv-local-qwen-advanced-actions']}>
               <button type="button" className={styles['pv-verify-connection-btn']} onClick={openModelFolder}>
@@ -923,9 +923,9 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
                 : hasModel && hasRuntime
                   ? '启动本地模型'
                   : needsMtpUpgrade
-                    ? `安装 ${selectedTier.quantization} + Q4 DFlash2`
+                    ? `安装 ${selectedTier.quantization}`
                   : !hasModel
-                    ? `安装 ${selectedTier.quantization} + Q4 DFlash2 并启动`
+                    ? `安装 ${selectedTier.quantization} 并启动`
                     : '授权安装并启用'}
         </button>
         <button className={styles['pv-verify-connection-btn']} onClick={() => loadStatus(false)} disabled={loading}>

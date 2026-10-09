@@ -97,12 +97,8 @@ const FLIGHT_WEATHER_CITIES = [
 ];
 export function extractStockTargetForResearch(text: unknown): StockResearchTarget {
   const source = String(text || "");
-  const code = source.match(/\b([0368]\d{5})\b/)?.[1] || "";
-  for (const [name, mappedCode] of KNOWN_STOCK_NAME_TO_CODE) {
-    if (source.includes(name)) return { name, code: code || mappedCode };
-  }
-  const name = source.match(STOCK_COMPANY_RE)?.[0] || "";
-  if (name || code) return { name, code };
+  const explicit = source.match(/\b([0368]\d{5})\b/)?.[1] || "";
+  if (explicit) return { name: "", code: explicit };
   return { name: "", code: "" };
 }
 export function inferReportResearchKind(text: unknown): ReportResearchKind {
@@ -157,41 +153,20 @@ export function extractRequestedUsTickers(text: unknown): string[] {
   return symbols.slice(0, 8);
 }
 export function extractPrimaryUsTicker(text: unknown): string {
-  const normalized = String(text || "");
-  const seen = new Set<string>();
-  for (const match of normalized.matchAll(/\$?\b([A-Z]{2,5})\b/g)) {
-    const symbol = (match[1] || "").toUpperCase();
-    if (!symbol || MARKET_WEATHER_TICKER_STOPWORDS.has(symbol) || seen.has(symbol)) continue;
-    seen.add(symbol);
-    return symbol;
-  }
-  return "";
+  const match = String(text || "").match(/\$([A-Z]{1,5})/);
+  return match?.[1] || "";
 }
-export function detectPrimaryIndexTarget(text: unknown): IndexResearchTarget | null {
-  const normalized = String(text || "");
-  return INDEX_TARGETS.find((item) => item.re.test(normalized)) || null;
-}
-export function extractCompositeWeatherLocation(text: unknown): string {
-  const normalized = String(text || "");
-  for (const hint of AIRPORT_CITY_HINTS) {
-    if (hint.re.test(normalized)) return hint.city;
-  }
-  const clause = normalized.match(/[^。；，,\n]{0,80}(?:天气|气温|温度|预报)/)?.[0] || normalized;
-  return extractWeatherLocation(clause, "");
-}
-export function extractFlightWeatherRoute(text: unknown): FlightWeatherRoute | null {
-  const normalized = String(text || "").replace(/\s+/g, "");
-  for (const origin of FLIGHT_WEATHER_CITIES) {
-    for (const destination of FLIGHT_WEATHER_CITIES) {
-      if (origin === destination) continue;
-      const route = new RegExp(`${origin}(?:市)?(?:飞往|飞|到|前往)${destination}(?:市)?`);
-      if (route.test(normalized)) return { origin, destination };
-    }
-  }
+export function detectPrimaryIndexTarget(_text: unknown): IndexResearchTarget | null {
   return null;
 }
-export function extractWeatherLocationForResearch(query: unknown, fallback: string = ""): string {
-  return extractWeatherLocation(query, fallback);
+export function extractCompositeWeatherLocation(_text: unknown): string {
+  return "";
+}
+export function extractFlightWeatherRoute(_text: unknown): FlightWeatherRoute | null {
+  return null;
+}
+export function extractWeatherLocationForResearch(_query: unknown, fallback: string = ""): string {
+  return String(fallback || "").trim();
 }
 export function inferKind(promptText: unknown): ReportResearchIntent {
   const source = String(promptText || "");

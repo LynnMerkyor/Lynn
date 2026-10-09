@@ -3,7 +3,6 @@ import { createLiveNewsTool, createSportsScoreTool, createWeatherTool } from "..
 import { fetchWebContent } from "../../lib/tools/web-fetch.js";
 import { runSearchQuery } from "../../lib/tools/web-search.js";
 import { buildStructuredSection, extractToolText, parseIndexSnapshot, parseStockSnapshot, parseWeatherSnapshot } from "./report-research-answer.js";
-import { detectPrimaryIndexTarget, extractCompositeWeatherLocation, extractFlightWeatherRoute, extractPrimaryUsTicker, extractStockTargetForResearch, extractWeatherLocationForResearch } from "./report-research-intent.js";
 import { currentLynnVersionTag } from "./release-info.js";
 import { runAbortable } from "../../shared/abortable-task.js";
 import type { IndexResearchTarget, ReportResearchKind, StockResearchTarget } from "./report-research-intent.js";
@@ -76,11 +75,23 @@ export interface ReportResearchTimeouts {
   fetch?: number;
 }
 
+function compactResearchLocation(value: unknown): string {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
 export interface ReportResearchFetchOptions {
   signal?: AbortSignal;
   userPrompt?: unknown;
   prompt?: unknown;
   text?: unknown;
+  location?: string;
+  place?: string;
+  origin?: string;
+  destination?: string;
+  league?: string;
+  symbol?: string;
+  name?: string;
+  indexTarget?: IndexResearchTarget | null;
   callId?: string;
   label?: string;
   timeoutMs?: number;
@@ -631,8 +642,8 @@ export async function searchSummary(query: string, sceneHint: string, opts: Repo
   }
 }
 async function buildStockResearchContext(target: StockResearchTarget | null | undefined, text: unknown, userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
-  const resolvedTarget = target?.name || target?.code ? target : extractStockTargetForResearch(text);
-  if (!resolvedTarget.name && !resolvedTarget.code) return "";
+  const resolvedTarget = target?.name || target?.code ? target : null;
+  if (!resolvedTarget?.name && !resolvedTarget?.code) return "";
   const queryTarget = [resolvedTarget.name, resolvedTarget.code].filter(Boolean).join(" ");
   const sections = [
     "【股票研究资料】",
@@ -868,7 +879,7 @@ async function buildRealtimeToolContext({ title, toolKind, params, timeoutMs = R
 }
 async function buildWeatherResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const promptText = String(userPrompt || "");
-  const route = extractFlightWeatherRoute(promptText);
+  const route = opts.origin && opts.destination ? { origin: String(opts.origin), destination: String(opts.destination) } : null;
   if (route) {
     const dayPrefix = /后天/.test(promptText) ? "后天" : /明天/.test(promptText) ? "明天" : /今天|今日/.test(promptText) ? "今天" : "";
     const locations = [route.origin, route.destination];
@@ -899,7 +910,8 @@ async function buildWeatherResearchContext(userPrompt: unknown, opts: ReportRese
     });
     return sections.join("\n\n").slice(0, MAX_CONTEXT_CHARS);
   }
-  const location = extractWeatherLocationForResearch(userPrompt, "");
+  const location = compactResearchLocation(opts.location || opts.place || "");
+  if (!location) return "";
   return buildRealtimeToolContext({ title: "【天气工具资料】", toolKind: "weather", params: { query: promptText, location } }, opts);
 }
 function shouldDeferUnavailableSportsContext(userPrompt: unknown): boolean {
@@ -911,13 +923,14 @@ function shouldDeferUnavailableSportsContext(userPrompt: unknown): boolean {
 }
 async function buildSportsResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const promptText = String(userPrompt || "");
-  const context = await buildRealtimeToolContext({ title: "【体育比分工具资料】", toolKind: "sports", params: { query: promptText, maxResults: 5 } }, opts);
+  if (!opts.league) return "";
+  const context = await buildRealtimeToolContext({ title: "【体育比分工具资料】", toolKind: "sports", params: { query: promptText, league: opts.league, maxResults: 5 } }, opts);
   if (shouldDeferUnavailableSportsContext(userPrompt) && /directSourceStatus:\s*unavailable/i.test(context)) return "";
   return context;
 }
 function buildMarketResearchContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const promptText = String(userPrompt || "");
-  const indexTarget = detectPrimaryIndexTarget(userPrompt);
+  const indexTarget = opts.indexTarget || null;
   if (indexTarget) {
     return (async () => {
       try {
@@ -963,9 +976,9 @@ function buildMarketResearchContext(userPrompt: unknown, opts: ReportResearchFet
 }
 async function buildMarketWeatherBriefContext(userPrompt: unknown, opts: ReportResearchFetchOptions = {}): Promise<string> {
   const promptText = String(userPrompt || "");
-  const ticker = extractPrimaryUsTicker(userPrompt);
-  const indexTarget = detectPrimaryIndexTarget(userPrompt);
-  const weatherLocation = extractCompositeWeatherLocation(userPrompt);
+  const ticker = String(opts.symbol || "").trim();
+  const indexTarget = opts.indexTarget || null;
+  const weatherLocation = compactResearchLocation(opts.location || opts.place || "");
   const tasks: Promise<MarketWeatherTaskResult>[] = [];
   if (ticker) {
     tasks.push(executeStockMarketTool(

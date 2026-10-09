@@ -725,7 +725,7 @@
       "userNameHint": "Ta 怎麼稱呼你",
       "userProfile": "使用者檔案",
       "userProfileHint": "讓助手了解你：興趣、習慣、偏好等，會注入到系統提示詞中",
-      "defaultProviderHint": "一鍵在本機 Qwen3.8-27B 和雲端模型之間切換；低配可在設定頁選 9B/4B 降級。",
+      "defaultProviderHint": "一鍵在本機 Qwen3.8-27B Coder390 和雲端模型之間切換。16GB 及以上默认 Q3，16GB 以下使用 Q2。",
       "openProviders": "開啟 Providers →"
     },
     "crop": {
@@ -1269,9 +1269,9 @@
     },
     "localModel": {
       "title": "下载 Lynn 默认本地模型",
-      "subtitle": "Qwen3.8-27B EfficientThink：24GB 及以上显存推荐 Q3，16GB 推荐 Q2，均配 Q4 DFlash2 与兼容的 llama.cpp。模型下载后可本地运行；实际内存需求含缓存和运行缓冲。",
-      "specsLine": "Q3 + Q4 DFlash2：18.18 GB · Q2 + Q4 DFlash2：14.14 GB · llama.cpp 另计",
-      "needsBinary": "需要支持 DFlash2 的 llama.cpp，点击一键安装可自动检查和准备。",
+      "subtitle": "Qwen3.8-27B Coder390：16GB 及以上默认 Q3，16GB 以下使用 Q2。两档都是内置 Q4 MTP，并配兼容的 llama.cpp。模型下载后可本地运行；实际内存需求含缓存和运行缓冲。",
+      "specsLine": "Q3：17.30 GB · Q2：13.28 GB · 内置 Q4 MTP · llama.cpp 另计",
+      "needsBinary": "需要支援內建 MTP（draft-mtp）的 llama.cpp，點擊一鍵安裝可自動檢查和準備。",
       "needsBinaryHint": "已安装且兼容的运行时会复用，不覆盖手动安装目录。",
       "alreadyHave": "本地模型已就绪",
       "alreadyHaveDesc": "我们检测到模型已经下载完成，可以直接开始使用。",

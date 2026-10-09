@@ -123,7 +123,7 @@ describe("CLI provider profile", () => {
     })).toEqual({
       provider: "openai-compatible",
       baseUrl: "https://api.stepfun.com/step_plan/v1",
-      model: "step-3.7-flash",
+      model: "step-5-preview",
       apiKey: "step-secret",
     });
 
@@ -155,7 +155,7 @@ describe("CLI provider profile", () => {
     expect(resolved?.profile).toMatchObject({
       provider: "openai-compatible",
       baseUrl: "https://api.stepfun.com/step_plan/v1",
-      model: "step-3.7-flash",
+      model: "step-5-preview",
       apiKey: "step-env-secret",
     });
   });

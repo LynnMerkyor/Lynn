@@ -76,7 +76,7 @@ export interface BrainModelChoice {
 export const BRAIN_MODEL_CHOICES: BrainModelChoice[] = [
   {
     id: "stepfun",
-    name: "StepFun 3.7 Flash",
+    name: "Step 5 Preview",
     routeRole: { zh: "1 / 默认首位", en: "1 / default head" },
     capability: { zh: "256K 上下文 + high 推理 + 高 TPS 文本/编码", en: "256K context + high reasoning + high TPS text/coding" },
   },
@@ -115,7 +115,7 @@ export function renderBrainModelChoices(info: ProvidersInfo): string {
     "",
     t("models.note.fixed"),
     t("models.note.byok"),
-    "  /model stepfun  StepFun 3.7 Flash",
+    "  /model stepfun  Step 5 Preview",
     "  /model spark    Spark Qwen 3.6 35B A3B Distill",
   ].join("\n");
 }
@@ -158,9 +158,9 @@ export function renderProvidersInfo(info: ProvidersInfo): string {
 }
 
 export function activeRouteLabel(info: Pick<ProvidersInfo, "activeProvider" | "activeModel" | "defaultRoute">): string {
-  if (info.activeModel === "lynn-brain-router") return t("providers.route.default");
+  if (info.activeModel === "step-5-preview") return t("providers.route.default");
   if (info.activeModel) return modelLabelWithId(info.activeModel);
-  if (info.activeProvider === "brain" || info.activeProvider === "lynn-brain-router") return t("providers.route.default");
+  if (info.activeProvider === "brain" || info.activeProvider === "step-5-preview") return t("providers.route.default");
   if (info.activeProvider) return modelDisplayName(info.activeProvider);
   return info.defaultRoute;
 }

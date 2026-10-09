@@ -13,8 +13,11 @@ export function shouldPrefetchReportContext(reportKind: unknown, currentModelInf
   // Brain V2 owns open-ended realtime research server-side. For deterministic
   // realtime facts, keep a local evidence pass so GUI turns can close with
   // visible tool evidence even if the writer times out.
+  // Entity-bearing lookups must wait for the model to fill location/league/symbol.
+  // Prefetch before the model call is what turned a whole question into a guessed place.
+  if (new Set(["market_weather_brief", "weather", "sports", "market", "stock"]).has(String(reportKind))) return false;
   if (currentModelInfo?.isBrain) {
-    return new Set(["market_weather_brief", "weather", "sports", "market", "stock", "news", "public_data"]).has(String(reportKind));
+    return new Set(["news", "public_data"]).has(String(reportKind));
   }
   return true;
 }

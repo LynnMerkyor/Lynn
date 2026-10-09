@@ -30,7 +30,7 @@ describe("prompt stdin handling", () => {
       "weather",
       "明天深圳天气如何",
       "深圳明天雷暴，26-32°C。",
-    )).toBe(true);
+    )).toBe(false);
   });
 
   it("uses stdin as the whole prompt for dash", () => {
@@ -89,7 +89,7 @@ describe("prompt stdin handling", () => {
     }
 
     expect(output).toContain("\"type\":\"assistant.delta\"");
-    expect(output).toContain("模型路由:StepFun 3.7 Flash");
+    expect(output).toContain("模型路由:Step 5 Preview");
     expect(output).toContain("Lynn CLI 版本");
     expect(output).toContain("\"local\":true");
     expect(output).not.toContain("fetch failed");
@@ -165,17 +165,14 @@ describe("prompt stdin handling", () => {
         "--json",
         "--brain-url",
         "http://127.0.0.1:1",
-      ]), { json: true })).resolves.toBe(0);
+      ]), { json: true })).rejects.toThrow(/Brain request failed/);
     } finally {
       process.stdout.write = original;
       vi.unstubAllGlobals();
     }
 
-    expect(output).toContain('"name":"sports_score"');
-    expect(output).toContain("今晚没有世界杯比赛");
-    expect(output).toContain("按北京时间口径返回 0 场");
-    expect(output).toContain('"researchPrefetch":true');
-    expect(output).not.toContain("不等于赛事数量为 0");
+    expect(output).not.toContain("今晚没有世界杯比赛");
+    expect(output).not.toContain('"researchPrefetch":true');
   });
 
   it("answers Apple notarization official research prompts with local evidence", async () => {

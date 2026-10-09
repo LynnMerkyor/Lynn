@@ -8,28 +8,19 @@ function compact(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function resolveFxCodes(query) {
-  const pairs = {
-    '美元': 'USDCNY',
-    '欧元': 'EURCNY',
-    '英镑': 'GBPCNY',
-    '日元': 'JPYCNY',
-    '港币': 'HKDCNY',
-    '港元': 'HKDCNY',
-    '澳元': 'AUDCNY',
-    '加元': 'CADCNY',
-    '瑞郎': 'CHFCNY',
-    '韩元': 'KRWCNY',
-    '新加坡': 'SGDCNY',
-    '泰铢': 'THBCNY',
-  };
-  const explicit = compact(query).toUpperCase().match(/\b([A-Z]{3})\s*[\/-]?\s*([A-Z]{3})\b/);
-  if (explicit) return [`${explicit[1]}${explicit[2]}`];
-  const codes = [];
-  for (const [name, code] of Object.entries(pairs)) {
-    if (String(query || '').includes(name) && !codes.includes(code)) codes.push(code);
-  }
-  return codes.length ? codes : ['USDCNY', 'EURCNY', 'GBPCNY', 'JPYCNY', 'HKDCNY'];
+function isoCurrency(value) {
+  const code = compact(value).toUpperCase();
+  return /^[A-Z]{3}$/.test(code) ? code : '';
+}
+
+function resolveFxCodes(input) {
+  const source = input && typeof input === 'object' ? input : { query: input };
+  const base = isoCurrency(source.base);
+  const quote = isoCurrency(source.quote);
+  if (base && quote) return [`${base}${quote}`];
+  const pair = compact(source.pair).toUpperCase().match(/^([A-Z]{3})\s*[\/-]?\s*([A-Z]{3})$/);
+  if (pair) return [`${pair[1]}${pair[2]}`];
+  return [];
 }
 
 function formatFxNumber(value, digits = 6) {
@@ -125,6 +116,12 @@ async function fetchEcbExchangeRates(codes) {
 
 export async function exchangeRate(query) {
   const codes = resolveFxCodes(query);
+  if (!codes.length) {
+    return JSON.stringify({
+      error: 'missing_currency_pair',
+      guidance: '汇率货币对必须由模型分析后填入 base 和 quote，例如 base=USD quote=CNY。工具不再用中文币种词表猜测。',
+    });
+  }
   const [sina, ecb] = await Promise.allSettled([
     fetchSinaExchangeRates(codes),
     fetchEcbExchangeRates(codes),
@@ -262,18 +259,27 @@ async function fetchNhlOfficialScore(query) {
   ].join('\n');
 }
 
-export async function sportsScore(query) {
-  const q = String(query || '');
+export async function sportsScore(input) {
+  const source = input && typeof input === 'object' ? input : { query: input };
+  const league = compact(source.league).toLowerCase();
+  if (!league) {
+    return JSON.stringify({
+      directSourceStatus: 'unavailable',
+      error: 'missing_league',
+      guidance: '体育联赛必须由模型填入 league：fifa.world、nba、mlb 或 nhl。工具不再从句子猜联赛。',
+    });
+  }
+  const q = String(source.query || '');
   const officialAttempts = await Promise.allSettled([
-    fetchMlbOfficialScore(q),
-    fetchNhlOfficialScore(q),
+    league === 'mlb' ? fetchMlbOfficialScore(q) : Promise.resolve(''),
+    league === 'nhl' ? fetchNhlOfficialScore(q) : Promise.resolve(''),
   ]);
   const official = officialAttempts
     .filter((entry) => entry.status === 'fulfilled' && compact(entry.value))
     .map((entry) => entry.value);
   if (official.length) return official.join('\n\n');
   try {
-    const result = await fetchSportsScoreboardEvidence(q);
+    const result = await fetchSportsScoreboardEvidence(source.query || q, { league });
     if (result) return result.text;
     return JSON.stringify({
       directSourceStatus: 'unavailable',

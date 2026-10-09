@@ -57,7 +57,7 @@ function objectiveFromArgs(args: ParsedArgs): string {
 
 export function buildManagerWorkerPrompt(objective: string): string {
   return [
-    "You are StepFun 3.7 Flash, the Lynn dual-brain worker.",
+    "You are Step 5 Preview, the Lynn dual-brain worker.",
     "The local distilled A3B manager has delegated this task to you.",
     "Do the work directly and keep the answer machine-checkable.",
     "Include concrete evidence: files changed, commands/tests run, or a short reason why this is answer-only.",

@@ -11,20 +11,29 @@ function jsonResponse(data, status = 200) {
 }
 
 describe('weather multi-source fallback', () => {
+  it('rejects a sentence that was not analyzed into a place', async () => {
+    const result = JSON.parse(await weather({ query: '明天晚上顺德大良区会不会下雨' }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('missing_location');
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
   it.each([
-    ['明天深圳天气如何', '深圳'],
-    ['今晚广州会下雨吗', '广州'],
-    ['广州天河区明天会不会下雨', '广州天河区'],
-    ['明天东京天气怎么样', '东京'],
-    ['巴黎今晚会下雨吗', '巴黎'],
-    ['weather in London tomorrow', 'London'],
-  ])('extracts the location from %s', (query, expected) => {
+    ['顺德大良', '顺德大良'],
+    ['顺德', '顺德'],
+    ['Shunde', 'Shunde'],
+    ['Paris', 'Paris'],
+  ])('keeps the model-provided place %s', (query, expected) => {
     expect(__testing__.resolveDisplayCity(query)).toBe(expected);
+  });
+
+  it('does not mine a place out of a full question', () => {
+    expect(__testing__.resolveDisplayCity('明天晚上顺德大良区会不会下雨')).toBe('明天晚上顺德大良区会不会下雨');
+    expect(__testing__.resolveDisplayCity('')).toBe('');
   });
 
   it('uses CMA official observations and forecasts for Chinese cities', async () => {
@@ -51,7 +60,7 @@ describe('weather multi-source fallback', () => {
       throw new Error('secondary provider unavailable in this test');
     }));
 
-    const result = await weather('明天深圳天气如何');
+    const result = await weather({ location: '深圳', query: '明天深圳天气如何' });
 
     expect(result).toContain('深圳天气（中国气象局）');
     expect(result).toContain('provider: cma');
@@ -84,7 +93,7 @@ describe('weather multi-source fallback', () => {
       throw new Error('wttr unavailable in this test');
     }));
 
-    const result = await weather('weather in Paris tomorrow');
+    const result = await weather({ location: 'Paris', query: 'weather in Paris tomorrow' });
 
     expect(result).toContain('Paris天气（Open-Meteo）');
     expect(result).toContain('provider: open-meteo');
@@ -96,11 +105,11 @@ describe('weather multi-source fallback', () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
     const webSearchFn = vi.fn(async () => JSON.stringify({ ok: false, error: 'all search sources failed' }));
 
-    const result = await weather('明天深圳天气如何', { webSearchFn });
+    const result = await weather({ location: '深圳', query: '明天深圳天气如何' }, { webSearchFn });
     const parsed = JSON.parse(result);
 
     expect(parsed.ok).toBe(false);
-    expect(parsed.error).toBe('all weather sources failed');
+    expect(parsed.error).toBe('location_not_found');
     expect(parsed.sources).toEqual(['cma', 'open-meteo', 'wttr.in']);
     expect(result).not.toContain('mimo unusable result');
     expect(webSearchFn).toHaveBeenCalledTimes(1);

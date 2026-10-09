@@ -36,22 +36,28 @@ describe('hardware-adaptive EfficientThink installation', () => {
   it.each([24, 32, 48, 80])('recommends Q3 for a %s GiB card', memory => {
     expect(dedicated([memory]).recommended_model_id).toBe(catalog.defaultModelId);
   });
-  it('recommends Q2 for a 16 GiB card', () => expect(dedicated([16]).recommended_model_id).toBe(catalog.q2ModelId));
+  it('recommends Q3 from 16 GiB upward and Q2 below that', () => {
+    expect(dedicated([16]).recommended_model_id).toBe(catalog.defaultModelId);
+    expect(dedicated([15]).recommended_model_id).toBe(catalog.q2ModelId);
+    expect(dedicated([8]).recommended_model_id).toBe(catalog.q2ModelId);
+  });
   it('does not mistake host RAM or summed cards for VRAM', () => {
-    expect(dedicated([8], 128).can_enable).toBe(false);
-    expect(dedicated([8, 8], 128).can_enable).toBe(false);
+    expect(dedicated([8], 128).recommended_model_id).toBe(catalog.q2ModelId);
+    expect(dedicated([8, 8], 128).recommended_model_id).toBe(catalog.q2ModelId);
     expect(dedicated([], 128).recommended_model_id).toBeNull();
   });
   it('recognizes Apple unified memory, not Intel Mac host RAM', () => {
-    expect(recommendLocalModel({ platform: 'darwin', arch: 'arm64', totalMemoryGib: 16 }).can_enable).toBe(false);
+    expect(recommendLocalModel({ platform: 'darwin', arch: 'arm64', totalMemoryGib: 16 }).recommended_model_id).toBe(catalog.defaultModelId);
     expect(recommendLocalModel({ platform: 'darwin', arch: 'arm64', totalMemoryGib: 24 }).recommended_model_id).toBe(catalog.defaultModelId);
+    expect(recommendLocalModel({ platform: 'darwin', arch: 'arm64', totalMemoryGib: 12 }).recommended_model_id).toBe(catalog.q2ModelId);
     expect(recommendLocalModel({ platform: 'darwin', arch: 'x64', totalMemoryGib: 64 }).can_enable).toBe(false);
   });
-  it.each(catalog.tiers)('pairs $quantization with a separately verified Q4 DFlash2 file', tier => {
+  it.each(catalog.tiers)('downloads one verified Coder390 GGUF and launches built-in MTP', tier => {
     const { profile } = resolveLlamacppDownloadProfile(tier.modelId);
-    expect(profile.files).toHaveLength(2);
+    expect(profile.files).toHaveLength(1);
     expect(profile.files[0]).toMatchObject({ role: 'main', expectedSize: tier.expectedSize, expectedSha256: tier.expectedSha256 });
-    expect(profile.files[1]).toMatchObject({ role: 'draft', expectedSize: 1143006720, expectedSha256: 'e83676f81b6604331d02e004a50689eded7fa905c7e83468e5a376cc27abcad4' });
+    expect(profile.requiresDflash).toBe(false);
+    expect(profile.managedLocal).toBe(true);
     for (const file of profile.files) {
       expect(file.sources[0].url).toBe(`${catalog.modelCardUrl}/resolve/${catalog.revision}/${file.fileName}`);
       expect(file.expectedSha256).toMatch(/^[a-f0-9]{64}$/);
@@ -62,10 +68,11 @@ describe('hardware-adaptive EfficientThink installation', () => {
     const value = flag => launch.args[launch.args.indexOf(flag) + 1];
     expect(value('--ctx-size')).toBe(String(tier.contextSize));
     expect(value('--parallel')).toBe('1');
-    expect(value('--spec-type')).toBe('draft-dflash');
-    expect(value('--model-draft')).toBe(path.join(modelsRoot, tier.directory, catalog.draft.fileName));
-    expect(launch.args).not.toContain('draft-mtp');
-    expect(runtimeUsesProfile({ modelPath: value('--model-draft') }, modelsRoot, profile)).toBe(false);
+    expect(value('--spec-type')).toBe('draft-mtp');
+    expect(value('--spec-draft-n-max')).toBe('4');
+    expect(launch.args).not.toContain('--model-draft');
+    expect(launch.args).not.toContain('draft-dflash');
+    expect(runtimeUsesProfile({ modelPath: path.join(modelsRoot, tier.fileName) }, modelsRoot, profile)).toBe(true);
   });
   it('does not relabel legacy Q4 as the new Q3', () => {
     const id = 'qwen36-27b-dsv4pro-coding-q4-mtp';
@@ -97,7 +104,7 @@ describe('hardware-adaptive EfficientThink installation', () => {
     });
     expect(await handlers.get('local-model:request-help')({}, { modelId: catalog.q2ModelId, hardware: { accelerator_memory_gib: 16 }, error: 'Bearer secret-token' })).toEqual({ ok: true });
     const result = await handlers.get('local-model:consume-help')();
-    expect(result.prompt).toContain('Q2 + Q4 DFlash2');
+    expect(result.prompt).toContain('Coder390 EfficientThink Q2');
     expect(result.prompt).toContain('16.0 GiB');
     expect(result.prompt).not.toContain('secret-token');
     expect(result.prompt).toContain('先说明用途并征得确认');
@@ -114,13 +121,13 @@ describe('hardware-adaptive EfficientThink installation', () => {
     expect(start).not.toHaveBeenCalled();
     expect(h.onModelReady).not.toHaveBeenCalled();
   });
-  it('does not launch or switch models after a draft-file checksum failure', async () => {
-    const download = vi.spyOn(ModelDownloader.prototype, 'start').mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false, reason: 'checksum-mismatch' });
+  it('does not launch or switch models after a checksum failure', async () => {
+    const download = vi.spyOn(ModelDownloader.prototype, 'start').mockResolvedValueOnce({ ok: false, reason: 'checksum-mismatch' });
     const launch = vi.spyOn(LlamaCppManager.prototype, 'start');
     const h = installationHarness();
     await h.handlers.get('llamacpp:start-download')({}, { modelId: catalog.defaultModelId, startAfterDownload: true });
     await vi.waitFor(() => expect(h.state().state).toBe('error'));
-    expect(download).toHaveBeenCalledTimes(2);
+    expect(download).toHaveBeenCalledTimes(1);
     expect(launch).not.toHaveBeenCalled();
     expect(h.onModelReady).not.toHaveBeenCalled();
   });

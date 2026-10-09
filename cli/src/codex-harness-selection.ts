@@ -175,7 +175,7 @@ export async function probeCodeHarnessRoute(input: CodeHarnessRouteProbeInput): 
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: input.provider?.model || "lynn-brain-router",
+        model: input.provider?.model || "step-5-preview",
         input: "Reply with OK.",
         max_output_tokens: 64,
         stream: false,

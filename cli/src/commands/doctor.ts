@@ -127,7 +127,7 @@ export async function smokeBrainRoute(brainUrl: string, timeoutMs = DOCTOR_ROUTE
         ...signedBrainHeaders({ pathname: "/v1/chat/completions" }),
       },
       body: JSON.stringify({
-        model: "lynn-brain-router",
+        model: "step-5-preview",
         stream: true,
         max_tokens: DOCTOR_ROUTE_SMOKE_MAX_TOKENS,
         messages: [{ role: "user", content: "Reply with OK." }],
@@ -143,7 +143,7 @@ export async function smokeBrainRoute(brainUrl: string, timeoutMs = DOCTOR_ROUTE
           ...signedBrainHeaders({ pathname: "/v1/chat/completions" }),
         },
         body: JSON.stringify({
-          model: "lynn-brain-router",
+          model: "step-5-preview",
           stream: true,
           max_tokens: DOCTOR_ROUTE_SMOKE_MAX_TOKENS,
           messages: [{ role: "user", content: "Reply with OK." }],

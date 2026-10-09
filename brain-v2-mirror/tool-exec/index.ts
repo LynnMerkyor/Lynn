@@ -39,13 +39,16 @@ export const SERVER_TOOLS = [
     type: 'function',
     function: {
       name: 'weather',
-      description: 'Get current weather, weather alerts, and 3-day forecast for a city.',
+      description: 'Get current weather, alerts, and a short forecast. You must analyze the user question yourself and pass the place in location. Do not pass the whole sentence as the place. Examples: location=顺德大良, location=Shunde, location=Paris.',
       parameters: {
         type: 'object',
         properties: {
-          city: { type: 'string', description: 'City name in Chinese or English' },
-          query: { type: 'string', description: 'Original weather question, especially for alerts/warnings' },
+          location: { type: 'string', description: 'Complete place you identified. Keep compound names such as 顺德大良 intact. Never pass the full question and never shorten it to a parent city.' },
+          city: { type: 'string', description: 'Alias of location. Complete place only.' },
+          fallback_locations: { type: 'array', items: { type: 'string' }, description: 'Optional parent places you identified, tried only after the complete location misses. Example: ["顺德", "佛山"].' },
+          query: { type: 'string', description: 'Original user question, used only to pick today/tomorrow/tonight or alert/air-quality intent. Not used to extract the place.' },
         },
+        required: ['location'],
       },
     },
   },
@@ -53,8 +56,16 @@ export const SERVER_TOOLS = [
     type: 'function',
     function: {
       name: 'exchange_rate',
-      description: 'Get real-time forex/currency exchange rates (USD/EUR/GBP/JPY/HKD etc to CNY).',
-      parameters: { type: 'object', properties: { query: { type: 'string', description: 'Currency query e.g. 美元汇率' } }, required: ['query'] },
+      description: 'Get forex rates. You analyze the question and pass ISO currency codes. Do not rely on a hardcoded currency-name list.',
+      parameters: {
+        type: 'object',
+        properties: {
+          base: { type: 'string', description: 'ISO 4217 base currency you identified, e.g. USD, JPY, EUR.' },
+          quote: { type: 'string', description: 'ISO 4217 quote currency you identified, e.g. CNY.' },
+          query: { type: 'string', description: 'Original question, only for display context.' },
+        },
+        required: ['base', 'quote'],
+      },
     },
   },
   {
@@ -69,8 +80,15 @@ export const SERVER_TOOLS = [
     type: 'function',
     function: {
       name: 'sports_score',
-      description: 'Get live or recent sports scores and results (football, basketball, tennis, F1, etc).',
-      parameters: { type: 'object', properties: { query: { type: 'string', description: 'Sports query' } }, required: ['query'] },
+      description: 'Get scores or fixtures. You identify the league and pass league. Supported direct sources: fifa.world, nba, mlb, nhl. If you cannot identify one of these, say so instead of guessing a league from a team nickname list.',
+      parameters: {
+        type: 'object',
+        properties: {
+          league: { type: 'string', description: 'League you identified: fifa.world | nba | mlb | nhl.' },
+          query: { type: 'string', description: 'Original question, used only for date words such as tonight/yesterday and team filters.' },
+        },
+        required: ['league', 'query'],
+      },
     },
   },
   {
@@ -128,8 +146,17 @@ export const SERVER_TOOLS = [
     type: 'function',
     function: {
       name: 'stock_market',
-      description: 'Get stock/commodity prices and market data (A-shares, US stocks, HK stocks, gold, oil, crypto, forex).',
-      parameters: { type: 'object', properties: { query: { type: 'string', description: 'Stock or commodity query' } }, required: ['query'] },
+      description: 'Get a market quote. You analyze the question and pass symbol or name. Do not expect the tool to guess a company from a hardcoded name list. For a broad index question, pass symbol such as 纳指, 上证, 恒指, or the index ticker.',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: { type: 'string', description: 'Ticker or index token you identified, e.g. AAPL, 600519, 00700.HK, 纳指.' },
+          name: { type: 'string', description: 'Company or instrument name you identified, e.g. 贵州茅台. Used for lookup, not guessed from a local dictionary.' },
+          kind: { type: 'string', description: 'quote | index | gold | crypto | fund. You decide this.' },
+          query: { type: 'string', description: 'Original question, for date/context only.' },
+        },
+        required: ['query'],
+      },
     },
   },
   {
@@ -230,15 +257,15 @@ export async function executeServerTool(name, argsStr, { log } = {}) {
     switch (name) {
       case 'web_search':       return (await webSearch(args.query || '', { log })) || JSON.stringify({ error: 'no results' });
       case 'web_fetch':        return await webFetch(args.url || '', args.max_length || 8000, { log });
-      case 'weather':          return await weather(args.query || args.city || args.location || '北京', { log, webSearchFn: (q) => webSearch(q, { log }) });
-      case 'exchange_rate':    return await exchangeRate(args.query || '');
-      case 'express_tracking': return await expressTracking(args.query || '');
-      case 'sports_score':     return await sportsScore(args.query || '');
+      case 'weather':          return await weather({ location: args.location || args.city || args.place || '', fallback_locations: args.fallback_locations || [], query: args.query || '' }, { log, webSearchFn: (q) => webSearch(q, { log }) });
+      case 'exchange_rate':    return await exchangeRate({ base: args.base, quote: args.quote, pair: args.pair });
+      case 'express_tracking': return await expressTracking(args.query || args.number || '');
+      case 'sports_score':     return await sportsScore({ league: args.league, query: args.query || '' });
       case 'calendar':         return calendar(args.query || '');
       case 'unit_convert':     return unitConvert(args.query || '');
       case 'create_artifact':  return await createArtifact(args, { log });
       case 'create_pdf':       return await createPdf(args, { log });
-      case 'stock_market':     return await stockMarket(args.query || '', { log, webSearchFn: (q) => webSearch(q, { log }) });
+      case 'stock_market':     return await stockMarket({ symbol: args.symbol, name: args.name, kind: args.kind, query: args.query || '' }, { log, webSearchFn: (q) => webSearch(q, { log }) });
       case 'live_news':        return await liveNews(args.query || '', { log, webSearchFn: (q) => webSearch(q, { log }) });
       case 'stock_research':   return await stockResearch(args, { log });
       case 'create_report':    return await createReport(args, { log });

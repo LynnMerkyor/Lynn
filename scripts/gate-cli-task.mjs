@@ -102,16 +102,16 @@ async function main() {
   console.log("[gate-cli-task] 真实任务组:4 条 >10 字输入,验证默认模型/可见答案/代码产物/空答恢复");
 
   // ── T0 默认模型叙事(人类模式)──────────────────────────────────────────
-  // 锁住 v0.84 口径:普通 GUI/CLI 默认只展示 StepFun 3.7 Flash;本地 manager
+  // 锁住 v0.87.1 口径:普通 GUI/CLI 默认展示 Step 5 Preview;本地 manager
   // 是显式实验路径,不能在默认模型回答里伪装成主链路。
   {
-    const prompt = "用一句话说明 Lynn CLI v0.84 的默认模型是什么。";
-    console.log("\n[T0] 默认模型叙事(必须是 StepFun,不能回退旧链路)");
+    const prompt = "用一句话说明 Lynn CLI 的默认模型是什么。";
+    console.log("\n[T0] 默认模型叙事(必须是 Step 5 Preview,不能回退旧链路)");
     assertRealTaskPrompt("T0", prompt);
     const r = await runCli(["-p", prompt, "--fast", ...brainArgs()]);
     const combined = `${r.stdout}\n${r.stderr}`;
     check("T0 exit=0", r.code === 0, `exit=${r.code} stderr=${excerpt(r.stderr)}`);
-    check("T0 回答包含 StepFun 3.7 Flash", /StepFun\s*3\.7\s*Flash/i.test(r.stdout), `stdout=${excerpt(r.stdout, 200)}`);
+    check("T0 回答包含 Step 5 Preview", /Step\s*5\s*Preview/i.test(r.stdout), `stdout=${excerpt(r.stdout, 200)}`);
     check("T0 默认回答不含 Spark/DS 链路", !/Spark|DS-V4|DeepSeek/i.test(combined), `combined=${excerpt(combined, 240)}`);
   }
 

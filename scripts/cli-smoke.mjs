@@ -163,7 +163,7 @@ checks.push(run("provider presets", ["providers", "presets"]).then((r) => {
   assertIncludes(r.name, r.stdout, "deepseek");
   assertIncludes(r.name, r.stdout, "deepseek-v4-flash-vision-exp");
   assertIncludes(r.name, r.stdout, "stepfun");
-  assertIncludes(r.name, r.stdout, "step-3.7-flash");
+  assertIncludes(r.name, r.stdout, "step-5-preview");
   assertIncludes(r.name, r.stdout, "Lynn providers set --preset deepseek --api-key <api-key>");
   assertIncludes(r.name, r.stdout, "Lynn providers set --preset stepfun --api-key <api-key>");
   assertNotIncludes(r.name, r.stdout, "sk-");
@@ -211,10 +211,10 @@ checks.push(run("model preset shortcut saves BYOK", [
   "--json",
 ]).then(async (r) => {
   assertIncludes(r.name, r.stdout, '"type":"providers.saved"');
-  assertIncludes(r.name, r.stdout, '"model":"step-3.7-flash"');
+  assertIncludes(r.name, r.stdout, '"model":"step-5-preview"');
   assertNotIncludes(r.name, r.stdout, "model-shortcut-key");
   const profile = JSON.parse(await fs.promises.readFile(path.join(modelSwitchDataDir, "providers", "cli.json"), "utf8"));
-  if (profile.model !== "step-3.7-flash") throw new Error("model shortcut did not save StepFun model");
+  if (profile.model !== "step-5-preview") throw new Error("model shortcut did not save StepFun model");
   if (profile.apiKey !== "model-shortcut-key") throw new Error("model shortcut did not save key");
 }));
 
@@ -267,7 +267,7 @@ checks.push(run("doctor offline guidance", ["doctor", "--offline", "--data-dir",
   assertIncludes(r.name, r.stdout, "optional CLI-only BYOK");
   assertIncludes(r.name, r.stdout, "Lynn providers set --preset stepfun --api-key <api-key>");
   assertIncludes(r.name, r.stdout, "deepseek:deepseek-v4-flash-vision-exp");
-  assertIncludes(r.name, r.stdout, "stepfun:step-3.7-flash");
+  assertIncludes(r.name, r.stdout, "stepfun:step-5-preview");
   assertNotIncludes(r.name, r.stdout, "mimo:mimo-v2.5-pro");
   assertNotIncludes(r.name, r.stdout, "sk-");
 }));
@@ -548,7 +548,7 @@ async function runStepFunByokFallbackSmoke() {
     ]);
     assertIncludes(tested.name, tested.stdout, '"type":"providers.test"');
     assertIncludes(tested.name, tested.stdout, '"ok":true');
-    assertIncludes(tested.name, tested.stdout, '"model":"step-3.7-flash"');
+    assertIncludes(tested.name, tested.stdout, '"model":"step-5-preview"');
     assertNotIncludes(tested.name, tested.stdout, "step-smoke-key");
     const result = await run("stepfun byok fallback", [
       "-p",
@@ -568,7 +568,7 @@ async function runStepFunByokFallbackSmoke() {
     assertIncludes(result.name, result.stdout, '"text":"ok from stepfun"');
     if (!seen) throw new Error("StepFun BYOK smoke did not call the provider");
     if (seen.auth !== "Bearer step-smoke-key") throw new Error(`StepFun BYOK smoke used wrong auth: ${seen.auth}`);
-    if (seen.body.model !== "step-3.7-flash") throw new Error(`StepFun BYOK smoke used wrong model: ${seen.body.model}`);
+    if (seen.body.model !== "step-5-preview") throw new Error(`StepFun BYOK smoke used wrong model: ${seen.body.model}`);
     if ("extra_body" in seen.body) throw new Error(`StepFun BYOK smoke leaked SDK-only extra_body: ${JSON.stringify(seen.body.extra_body)}`);
     if (seen.body.reasoning_effort === "off" || seen.body.reasoning_effort === "auto") {
       throw new Error(`StepFun BYOK smoke leaked UI-only reasoning_effort: ${seen.body.reasoning_effort}`);
@@ -591,7 +591,7 @@ async function runStepFunByokFallbackSmoke() {
     assertIncludes(envResult.name, envResult.stdout, '"text":"ok from stepfun"');
     if (!seen) throw new Error("StepFun env preset smoke did not call the provider");
     if (seen.auth !== "Bearer step-smoke-key") throw new Error(`StepFun env preset smoke used wrong auth: ${seen.auth}`);
-    if (seen.body.model !== "step-3.7-flash") throw new Error(`StepFun env preset smoke used wrong model: ${seen.body.model}`);
+    if (seen.body.model !== "step-5-preview") throw new Error(`StepFun env preset smoke used wrong model: ${seen.body.model}`);
     if ("extra_body" in seen.body) throw new Error(`StepFun env preset smoke leaked SDK-only extra_body: ${JSON.stringify(seen.body.extra_body)}`);
     if (seen.body.reasoning_effort === "off" || seen.body.reasoning_effort === "auto") {
       throw new Error(`StepFun env preset smoke leaked UI-only reasoning_effort: ${seen.body.reasoning_effort}`);
@@ -609,7 +609,7 @@ async function runStepFunByokFallbackSmoke() {
       "--brain-url",
       "http://127.0.0.1:1",
     ], { stdinLines: ["hello from chat", "/exit"], env: { LYNN_CLI_BRAIN_TIMEOUT_MS: "50" } });
-    assertIncludes(chat.name, chat.stdout, "CLI BYOK: StepFun 3.7 Flash (step-3.7-flash)");
+    assertIncludes(chat.name, chat.stdout, "CLI BYOK: Step 5 Preview (step-5-preview)");
     assertIncludes(chat.name, chat.stdout, "CLI BYOK");
     assertIncludes(chat.name, chat.stdout, "ok from stepfun");
   } finally {
@@ -1001,7 +1001,7 @@ async function runStepFunWorkerByokSmoke() {
     assertIncludes(result.name, result.stdout, '"summary":"lynn-cli worker completed"');
     if (!seen) throw new Error("StepFun worker smoke did not call the provider");
     if (seen.auth !== "Bearer step-worker-key") throw new Error(`StepFun worker smoke used wrong auth: ${seen.auth}`);
-    if (seen.body.model !== "step-3.7-flash") throw new Error(`StepFun worker smoke used wrong model: ${seen.body.model}`);
+    if (seen.body.model !== "step-5-preview") throw new Error(`StepFun worker smoke used wrong model: ${seen.body.model}`);
     seen = null;
     const envOnlyResult = await run("stepfun worker env byok", [
       "worker",
@@ -1029,7 +1029,7 @@ async function runStepFunWorkerByokSmoke() {
     assertIncludes(envOnlyResult.name, envOnlyResult.stdout, '"type":"worker.finished"');
     if (!seen) throw new Error("StepFun worker env smoke did not call the provider");
     if (seen.auth !== "Bearer step-worker-env-key") throw new Error(`StepFun worker env smoke used wrong auth: ${seen.auth}`);
-    if (seen.body.model !== "step-3.7-flash") throw new Error(`StepFun worker env smoke used wrong model: ${seen.body.model}`);
+    if (seen.body.model !== "step-5-preview") throw new Error(`StepFun worker env smoke used wrong model: ${seen.body.model}`);
   } finally {
     await new Promise((resolve) => server.close(() => resolve()));
   }

@@ -13,13 +13,14 @@ const catalog = require('../shared/qwen38-local-models.json');
 const DEFAULT_MODEL_ID = catalog.defaultModelId;
 const LEGACY_CODING_MODEL_ID = "qwen36-27b-dsv4pro-coding-q4-mtp";
 const QWEN38_PROFILES = Object.fromEntries(catalog.tiers.map(tier => {
+  const revision = tier.revision || catalog.revision;
   const files = [
     { fileName: tier.fileName, expectedSize: tier.expectedSize, expectedSha256: tier.expectedSha256, role: 'main' },
-    { ...catalog.draft, fileName: `${tier.directory}/${catalog.draft.fileName}`, role: 'draft' },
-  ].map(file => ({ ...file, sources: [{ id: 'modelscope', label: 'ModelScope', url: `${catalog.modelCardUrl}/resolve/${catalog.revision}/${file.fileName}` }] }));
-  return [tier.modelId, { ...tier, revision: catalog.revision, files, draftFileName: files[1].fileName,
-    expectedSize: files.reduce((sum, file) => sum + file.expectedSize, 0),
-    sources: files[0].sources, modelCardUrl: catalog.modelCardUrl, requiresDflash: true,
+  ].map(file => ({ ...file, sources: [{ id: 'modelscope', label: 'ModelScope', url: `${catalog.modelCardUrl}/resolve/${revision}/${encodeRepoPath(file.fileName)}` }] }));
+  return [tier.modelId, { ...tier, revision, files,
+    expectedSize: tier.expectedSize,
+    sources: files[0].sources, modelCardUrl: catalog.modelCardUrl, requiresDflash: false, managedLocal: true,
+    speculation: tier.speculation || 'draft-mtp', specDraftNMax: 4,
     parallelSegments: 2, autoStart: false }];
 }));
 const LOCAL_9B_DOWNGRADE_MODEL_ID = "qwen35-9b-q4km-imatrix";
@@ -157,6 +158,8 @@ const LLAMACPP_ALIAS_MAP = Object.freeze({
   "local-qwen35-4b-q4km": "qwen35-4b-q4km",
   "local-qwen35-9b-q4km-imatrix": DEFAULT_MODEL_ID,
   "qwen35-9b-q4km-imatrix": LOCAL_9B_DOWNGRADE_MODEL_ID,
+  "qwen38-27b-efficientthink-q3-lynnstyle": DEFAULT_MODEL_ID,
+  "qwen38-27b-efficientthink-q2-lynnstyle": catalog.q2ModelId,
   [LEGACY_27B_DISTILL_MODEL_ID]: LEGACY_CODING_MODEL_ID,
   "local-qwen36-27b-dsv4pro-distill-q5km-imatrix": LEGACY_CODING_MODEL_ID,
   "local-a3b-distill": DISTILLED_35B_MODEL_ID,
@@ -271,21 +274,19 @@ function removeArgsWithValues(args, flags) {
 function buildLlamacppArgsForAlias(modelAlias, modelPath = "") {
   let args = [...(LLAMACPP_DEFAULT_CONFIG.serverArgs || [])];
   const fileName = path.basename(String(modelPath || ""));
-  const modern = Object.values(QWEN38_PROFILES).find(profile => profile.modelId === modelAlias || path.basename(profile.fileName) === fileName);
+  const canonicalAlias = canonicalizeLlamacppModelId(modelAlias);
+  const modern = Object.values(QWEN38_PROFILES).find(profile => profile.modelId === canonicalAlias || path.basename(profile.fileName) === fileName);
   if (modern) {
-    args = removeArgsWithValues(args, ['--spec-type', '--spec-draft-n-max', '--spec-draft-n-min', '--model-draft']);
+    args = removeArgsWithValues(args, ['--spec-type', '--spec-draft-n-max', '--spec-draft-n-min', '--model-draft', '--gpu-layers-draft']);
     replaceArgValue(args, '-a', modern.modelId);
     replaceArgValue(args, '--ctx-size', String(modern.contextSize));
     replaceArgValue(args, '--parallel', '1');
     replaceArgValue(args, '--batch-size', '256');
     replaceArgValue(args, '--ubatch-size', '128');
-    // DFlash is a separate draft model, never the main model's old MTP head.
-    if (modelPath) {
-      replaceArgValue(args, '--model-draft', path.join(path.dirname(modelPath), catalog.draft.fileName));
-      replaceArgValue(args, '--spec-type', 'draft-dflash');
-      replaceArgValue(args, '--gpu-layers-draft', 'all');
-      replaceArgValue(args, '--spec-draft-n-max', '7');
-      replaceArgValue(args, '--spec-draft-n-min', '0');
+    // Coder390 GGUF embeds Q4 MTP. Do not attach the older external DFlash2 draft.
+    if (modern.speculation === 'draft-mtp') {
+      replaceArgValue(args, '--spec-type', 'draft-mtp');
+      replaceArgValue(args, '--spec-draft-n-max', String(modern.specDraftNMax || 4));
     }
     return { alias: modern.modelId, args };
   }

@@ -1,4 +1,4 @@
-export const ROUTE_HEAD_MODEL = "StepFun 3.7 Flash";
+export const ROUTE_HEAD_MODEL = "Step 5 Preview";
 
 export const DEFAULT_ROUTE_CHAIN = ROUTE_HEAD_MODEL;
 export const DEFAULT_ROUTE_CHAIN_COMPACT = ROUTE_HEAD_MODEL;

@@ -133,7 +133,7 @@ const LOCAL_PROVIDER_FALLBACKS: Record<string, ProviderSummary> = {
     base_url: 'http://127.0.0.1:18099/v1',
     api: 'openai-completions',
     api_key: '',
-    models: ['qwen38-27b-efficientthink-q3-lynnstyle'],
+    models: ['qwen38-27b-coder390-q3-lynnstyle'],
     custom_models: [],
     removed_models: [],
     has_credentials: true,
