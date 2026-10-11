@@ -21,6 +21,7 @@ Lynn --version
 - **安装容量门槛**：低于 14GiB（如 13GB）或检测失败时禁止安装；14～不足 16GiB 仅达到 Q2 最低门槛，16GB 推荐 Q2，24GB 及以上推荐 Q3。Apple Silicon 看统一内存，NVIDIA 看单卡显存，不叠加多卡、不混用系统内存。手动选档不能绕过检查，文件之外还需预留上下文缓存和运行缓冲。
 
 - **GUI / CLI 默认工作模型**：统一使用 `step-5-preview`，保留已有配置的兼容入口。
+- **原生视觉与复查**：视觉验收跟随当前默认模型，不再固定 MiMo；修复云端原生图片保留和手动复查遗漏设备鉴权的问题。真实识图、手动复查和并发复查均纳入安装包门禁，失败降级不算通过。
 - **实时语音**：恢复 `stepaudio-2.5-realtime`，GUI 与 CLI 共用 Brain 托管的语音链路。
 - **工具参数由模型分析**：天气、体育、行情和汇率接收模型填写的地点、联赛、日期、球队、代码和货币对；取消从用户整句问题猜参数的预取路径。体育数据源不再猜日期或从句子抽球队，缺日期时明确要求模型补齐。
 - **复合地点**：保留“顺德大良”等完整地点；必要的上级地点由模型明确提供，不自动裁剪或猜测。
@@ -38,6 +39,7 @@ Lynn --version
 - Block installation below 14GiB or when hardware detection fails. Q2 is recommended at 16GB, Q3 at 24GB; 14 to under 16GiB only meets Q2's minimum. Detect Apple Silicon unified memory or the largest single NVIDIA GPU's VRAM, not summed GPUs or host RAM. Manual selection cannot bypass memory checks.
 
 - GUI and CLI request `step-5-preview` by default, retaining migration compatibility.
+- Vision acceptance follows the selected default model rather than requiring MiMo. Preserve native image inputs in Brain and attach device authentication to manual review sessions. Real image recognition, manual review and concurrent review are required package checks; failure fallbacks do not count as passes.
 - Restore `stepaudio-2.5-realtime` for the shared Brain-hosted realtime voice path.
 - Let the model supply places, leagues, dates, teams, tickers and currency pairs. Remove entity guessing from whole-question prefetch; sports sources require explicit dates instead of guessing dates or teams from sentences.
 - Preserve compound places such as Shunde Daliang; parent-place fallbacks must be supplied explicitly by the model.

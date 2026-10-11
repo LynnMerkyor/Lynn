@@ -10,6 +10,13 @@ function readPackage() {
 }
 
 describe('release gate contract', () => {
+  it('requires a real manual review in addition to concurrent automatic reviews', () => {
+    const runner = fs.readFileSync(path.join(ROOT, 'scripts/gate-installed-app.mjs'), 'utf8');
+    expect(runner).toContain('await runManualReviewGate(baseUrl, wsUrl, info.token)');
+    expect(runner).toContain('autoReview: false');
+    expect(runner).toContain('manual review did not provide a real correction');
+    expect(runner).toContain('msg.errorCode && !/recovered/i.test');
+  });
   it('waits for loaded model metadata before measuring packaged main UI', () => {
     const runner = fs.readFileSync(path.join(ROOT, 'scripts/packaged-main-ui-smoke.mjs'), 'utf8');
     expect(runner).toContain("!!button?.title.trim() && !button.className.includes('model-pill-disabled')");

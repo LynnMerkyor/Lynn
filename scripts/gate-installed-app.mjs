@@ -579,6 +579,35 @@ async function runConcurrentReviewGate(baseUrl, wsUrl, token, sessionPath = null
   }
 }
 
+async function runManualReviewGate(baseUrl, wsUrl, token) {
+  const ws = await openWs(wsUrl, token);
+  try {
+    const reviewId = `installed-manual-review-${Date.now()}`;
+    const resultsPromise = waitForReviewResults(ws, [reviewId], REVIEW_TIMEOUT_MS);
+    const [, results] = await Promise.all([
+      httpJson(baseUrl, token, "/api/review", {
+        method: "POST",
+        body: {
+          reviewId,
+          autoReview: false,
+          context: "请复查原回答中的算术结论：2+2=5。指出是否正确并简短说明。",
+          sourceResponse: "2+2=5。",
+        },
+        timeoutMs: 20000,
+      }),
+      resultsPromise,
+    ]);
+    const result = results.get(reviewId);
+    const text = `${result.content || ""} ${result.structured?.summary || ""}`;
+    if (!/4|四/.test(text) || /最低限度复查|没有生成新的模型判断|deterministic review status/i.test(text)) {
+      throw new Error("[installed-gate] manual review did not provide a real correction");
+    }
+    console.log(`[installed-gate] manual review ok: ${result.reviewerModelLabel || "unknown"}`);
+  } finally {
+    ws.close();
+  }
+}
+
 async function main() {
   const appBin = path.join(APP_PATH, "Contents", "MacOS", "Lynn");
   if (!await exists(appBin)) {
@@ -636,6 +665,7 @@ async function main() {
       return;
     }
     await runConcurrentReviewGate(baseUrl, wsUrl, info.token, isolatedSessionPath);
+    await runManualReviewGate(baseUrl, wsUrl, info.token);
     console.log(ONLY_REVIEW_CONCURRENCY
       ? "[installed-gate] PASS: installed review concurrency gate completed."
       : "[installed-gate] PASS: installed GUI/server/CLI/settings/main-ui/live-vision/review concurrency gate completed.");

@@ -27,6 +27,7 @@ import type { LynnAgentSession } from "../core/agent-runtime/create-session.js";
 import { debugLog } from "../lib/debug-log.js";
 import { t } from "../server/i18n.js";
 import { createLynnAgentSession } from "../core/agent-runtime/create-session.js";
+import { readSignedClientAgentHeadersForProvider } from "../core/client-agent-identity.js";
 
 type AgentSession = LynnAgentSession;
 type SessionModel = Model;
@@ -356,6 +357,12 @@ export async function runAgentSession(
         ),
       } as SessionModel)
     : resolvedModel as SessionModel;
+  const clientAgentHeaders = readSignedClientAgentHeadersForProvider({
+    method: "POST",
+    pathname: "/chat/completions",
+    provider: model?.provider,
+    baseUrl: model?.baseUrl,
+  });
   const { session } = await createLynnAgentSession({
     cwd,
     sessionManager: tempSessionMgr,
@@ -373,6 +380,7 @@ export async function runAgentSession(
     resourceLoader: tempResourceLoader,
     tools,
     customTools,
+    ...(Object.keys(clientAgentHeaders).length > 0 && { requestHeaders: clientAgentHeaders }),
   });
 
   onSessionReady?.(session.sessionManager?.getSessionFile?.() || null);
