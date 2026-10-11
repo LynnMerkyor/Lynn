@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { selectCases } from '../agent-regression-kit/src/core.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -9,6 +10,47 @@ function readPackage() {
 }
 
 describe('release gate contract', () => {
+  it('covers every gate-bank operation once through preflight instead of repeating wrappers', () => {
+    const scripts = readPackage().scripts;
+    const chain = ['release:preflight', 'release:full-gate', 'release:overnight'].map(name => scripts[name]).join(' && ');
+    expect(chain).not.toContain('test:agent-regression:gates');
+    expect(chain).not.toContain('test:agent-regression:nightly');
+    const bank = JSON.parse(fs.readFileSync(path.join(ROOT, 'agent-regression-kit/cases/lynn-gates-v1.json'), 'utf8'));
+    for (const entry of bank.cases) {
+      expect(entry.operation).toBe('command_gate');
+      for (const step of entry.input.steps) {
+        if (step.packageScript === 'test') {
+          expect(scripts['release:preflight']).toContain('npm run test:release:root');
+          for (const file of step.args.filter(arg => /\.(test|spec)\./.test(arg))) {
+            expect(file).toMatch(/^desktop\/.*\.(test|spec)\.tsx?$/);
+            expect(fs.existsSync(path.join(ROOT, file))).toBe(true);
+          }
+        } else {
+          expect(scripts['release:preflight'].split(' && ').filter(command => command === `npm run ${step.packageScript}`)).toHaveLength(1);
+        }
+      }
+    }
+  });
+
+  it('requires new backend nightly cases to be wired into release instead of silently omitted', () => {
+    const bank = JSON.parse(fs.readFileSync(path.join(ROOT, 'agent-regression-kit/cases/lynn-backend-v1.json'), 'utf8'));
+    expect(selectCases(bank, { level: 'nightly' }).map(entry => entry.id)).toEqual(
+      selectCases(bank, { level: 'release' }).map(entry => entry.id),
+    );
+    expect(readPackage().scripts['release:preflight'].split(' && ')).toContain('npm run test:agent-regression');
+    expect(readPackage().scripts['release:overnight']).toBe('npm run release:full-gate && npm run test:release:nightly');
+  });
+
+  it('isolates nightly sessions and avoids Terminal activation in hidden runs', () => {
+    expect(readPackage().scripts['test:release:nightly']).toContain('run-isolated-release-regression.mjs');
+    const runner = fs.readFileSync(path.join(ROOT, 'scripts/run-isolated-release-regression.mjs'), 'utf8');
+    expect(runner).toContain("fs.mkdtemp(path.join(os.tmpdir(), 'lynn-release-isolated-'))");
+    expect(runner).toContain("'--server-info', infoPath");
+    expect(runner).toContain('LYNN_HOME: home');
+    const terminal = fs.readFileSync(path.join(ROOT, 'scripts/cli-terminal-app-smoke.mjs'), 'utf8');
+    expect(terminal).toContain('if (hidden)');
+    expect(terminal).toContain('no Terminal.app UI');
+  });
   it('routes desktop packaging through the full release gate', () => {
     const scripts = readPackage().scripts;
     expect(scripts.dist).toContain('npm run release:full-gate');
@@ -36,12 +78,13 @@ describe('release gate contract', () => {
     );
   });
 
-  it('keeps the release gate aligned with the approved GUI100 and CLI100 policy', () => {
+  it('requires GUI100, CLI200, and live efficiency before release', () => {
     const scripts = readPackage().scripts;
     const fullGate = scripts['release:full-gate'];
-    expect(fullGate).toContain('npm run gate:cli-100');
+    expect(fullGate).toContain('npm run gate:cli-200');
     expect(fullGate).toContain('npm run gate:gui-100');
-    expect(fullGate).not.toContain('npm run gate:cli-200');
+    expect(fullGate).toContain('npm run release:cli-efficiency');
+    expect(fullGate).not.toContain('npm run gate:cli-100');
     expect(scripts['release:preflight']).toContain('npm run test:release:root');
     expect(scripts['test:release:root']).toBe('vitest run --maxWorkers=6');
   });
@@ -59,6 +102,13 @@ describe('release gate contract', () => {
     const scripts = readPackage().scripts;
     expect(scripts['release:verify-codex-harness-prod']).toContain('verify-codex-harness-prod.ts');
     expect(scripts['release:preflight']).toContain('npm run release:verify-codex-harness-prod');
+  });
+
+  it('compares exported tool names instead of source quote formatting', () => {
+    const gate = fs.readFileSync(path.join(ROOT, 'scripts', 'mirror-prod-diff.sh'), 'utf8');
+    expect(gate).toContain('SERVER_TOOLS.map(tool => tool.function.name)');
+    expect(gate).toContain('[ -n "$local_tools" ]');
+    expect(gate).toContain('[ "$local_tools" = "$remote_tools" ]');
   });
 
   it('builds the CLI before agent regression in a clean checkout', () => {

@@ -77,6 +77,8 @@ export function makeSSEEmitter(res: ServerResponse, { id, model = 'lynn-v2' }: S
         tool_progress: {
           event: chunk.event,
           name: chunk.name,
+          ...(chunk.toolCall ? { tool_call: chunk.toolCall } : {}),
+          ...(typeof chunk.result === 'string' ? { result: chunk.result } : {}),
           ...(typeof chunk.ms === 'number' ? { ms: chunk.ms } : {}),
           ...(typeof chunk.ok === 'boolean' ? { ok: chunk.ok } : {}),
           ...(typeof chunk.argsSummary === 'string' && chunk.argsSummary ? { args_summary: chunk.argsSummary } : {}),

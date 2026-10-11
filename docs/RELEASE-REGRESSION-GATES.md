@@ -26,10 +26,10 @@ npm run test:release:ui
 # 一键发版前检查：单测 + 类型 + CLI/Fleet + StepFun efficiency + 构建 + release static gate + UI smoke
 npm run release:preflight
 
-# 正式发版全量门禁：preflight + agent regression release bank + CLI200 + GUI100
+# 正式发版全量门禁：preflight + efficiency + CLI200 + GUI100
 npm run release:full-gate
 
-# 夜跑优化门禁：full-gate + nightly agent/runtime 回归，用于逐条修正用户体验问题
+# 夜跑优化门禁：full-gate + 独立 release nightly 回归，不重复包装已通过的检查
 npm run release:overnight
 
 # 真实安装包门禁：候选包装入 /Applications 后运行；覆盖 GUI server、CLI、Settings、主聊天 UI、并发 Hanako 复查
@@ -65,8 +65,8 @@ LYNN_HOME=~/.lynn-dev npm run test:release
 
 - `package.json` 必须有 build/test/release manifest 入口。
 - `package.json` 必须有 `release:verify-remotes`，用于发布后校验 GitHub/Gitee 双端同步。
-- `release:full-gate` 必须包含 `release:preflight`、`test:agent-regression:gates`、`gate:cli-200`、`gate:gui-100` 和 `gate:clean-data`。
-- `release:overnight` 必须包含 `release:full-gate`、agent regression nightly 和 release nightly。
+- `release:full-gate` 必须包含 `release:preflight`、`release:cli-efficiency`、`gate:cli-200`、`gate:gui-100` 和 `gate:clean-data`。
+- `release:overnight` 必须包含 `release:full-gate` 和 release nightly。统一 gate bank 的检查已由 preflight 覆盖；后台 bank 当前 nightly 与 release 用例相同，不重复执行。契约测试会阻止未来新增 nightly 用例却未接入发布流程。
 - `.github/update-manifest.json` 二进制资产不能指 GitHub `.dmg/.exe`，必须走腾讯镜像。
 - `site/app.js`、`site/download.html`、`site/index.html` 不能把 `.dmg/.exe` 链到 GitHub。
 - 核心 UI 文件必须存在：AssistantMessage、ThinkingBlock、ToolGroupBlock、WritingDiffViewer、prompt templates、PressToTalkButton、streaming store。

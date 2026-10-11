@@ -2569,6 +2569,35 @@ describe("chat route event forwarding", () => {
       && String(evt.delta || "").includes("AAPL"))).toBe(false);
   });
 
+  it("forwards trusted Brain progress and preserves full model-filled place parameters", async () => {
+    hub.send = vi.fn(() => new Promise(() => {}));
+    await app.request("/ws");
+    connections[0].handlers.onMessage({ data: JSON.stringify({ type: "prompt", text: "顺德大良明晚天气" }) }, connections[0].client);
+    const progress = { type: "tool_progress", source: "brain", name: "weather", event: "end", ok: true, ms: 120, argsSummary: "顺德大良", summary: "已获取预报", details: ["provider: cma", "请求地点: 顺德大良"] };
+    subscribed(progress, "/sessions/current.jsonl");
+    expect(clients[0].sent).toContainEqual(expect.objectContaining(progress));
+  });
+
+  it("preserves failed Brain progress without converting it into successful evidence", async () => {
+    hub.send = vi.fn(() => new Promise(() => {}));
+    await app.request("/ws");
+    connections[0].handlers.onMessage({ data: JSON.stringify({ type: "prompt", text: "查询天气" }) }, connections[0].client);
+    subscribed({ type: "tool_progress", source: "brain", name: "weather", event: "end", ok: false, summary: "上游不可用" }, "/sessions/current.jsonl");
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "tool_progress", name: "weather", ok: false }));
+    expect(clients[0].sent.some((event) => event.type === "tool_progress" && event.ok === true)).toBe(false);
+  });
+
+  it("drops untrusted, stale and late Brain progress", async () => {
+    hub.send = vi.fn(() => new Promise(() => {}));
+    await app.request("/ws");
+    connections[0].handlers.onMessage({ data: JSON.stringify({ type: "prompt", text: "查询天气" }) }, connections[0].client);
+    subscribed({ type: "tool_progress", name: "weather", event: "end", ok: true }, "/sessions/current.jsonl");
+    subscribed({ type: "tool_progress", source: "brain", name: "weather", event: "end", ok: true, _hubContext: { streamToken: "expired" } }, "/sessions/current.jsonl");
+    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    subscribed({ type: "tool_progress", source: "brain", name: "weather", event: "end", ok: true }, "/sessions/current.jsonl");
+    expect(clients[0].sent.some((event) => event.type === "tool_progress")).toBe(false);
+  });
+
   it("suppresses hallucinated tool-progress XML that only flushes at turn end", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);

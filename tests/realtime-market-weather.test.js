@@ -592,6 +592,7 @@ describe("realtime market/weather tools", () => {
 
       const pending = createSportsScoreTool().execute("test", {
         league: "fifa.world",
+        date_from: "2026-06-22", date_to: "2026-06-22",
         query: "今晚世界杯有几场比赛",
         maxResults: 5,
       });
@@ -623,17 +624,18 @@ describe("realtime market/weather tools", () => {
       const prompt = "今天世界杯赛程发我一下";
       const result = await createSportsScoreTool().execute("test", {
         league: "fifa.world",
+        date_from: "2026-08-22", date_to: "2026-08-22",
         query: prompt,
         maxResults: 5,
       });
       const text = result.content[0].text;
       const answer = buildDirectResearchAnswer("sports", `【体育比分工具资料】\n\n${text}`, prompt);
 
-      expect(text).toContain("dateRange: 20260821-20260823");
-      expect(text).toContain("查询口径: “今天/今日”按北京时间 2026-08-22 当日比赛处理。");
+      expect(text).toContain("dateRange: 20260822-20260822");
+      expect(text).toContain("dates=20260821-20260823");
       expect(text).not.toContain("查询口径: “今天/今日”按北京时间 2026-08-21");
       expect(answer).toContain("今天没有世界杯比赛");
-      expect(answer).toContain("2026-08-22 当日比赛处理");
+      expect(answer).toContain("2026-08-22");
       expect(answer).not.toContain("2026-08-21 当日比赛处理");
     } finally {
       vi.useRealTimers();
@@ -666,6 +668,7 @@ describe("realtime market/weather tools", () => {
 
       const pending = createSportsScoreTool().execute("test", {
         league: "fifa.world",
+        date_from: "2026-06-23", date_to: "2026-06-24",
         query: "今晚世界杯有几场比赛？",
         maxResults: 5,
       });
@@ -754,6 +757,7 @@ describe("realtime market/weather tools", () => {
       expect(inferReportResearchKind(prompt)).toBe("sports");
       const result = await createSportsScoreTool().execute("test", {
         league: "fifa.world",
+        date_from: "2026-06-25", date_to: "2026-06-26",
         query: prompt,
         maxResults: 5,
       });
@@ -773,7 +777,7 @@ describe("realtime market/weather tools", () => {
     }
   });
 
-  it("keeps expanded sports search queries from widening tonight into tournament-history scores", async () => {
+  it("does not let expanded search wording override the model-selected date window", async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date("2026-06-25T20:20:00+08:00"));
@@ -849,6 +853,7 @@ describe("realtime market/weather tools", () => {
 
       const result = await createSportsScoreTool().execute("test", {
         league: "fifa.world",
+        date_from: "2026-06-25", date_to: "2026-06-26",
         query: "2026世界杯 6月25日 赛程 今晚比赛 比分 赛果",
         maxResults: 5,
       });
@@ -856,11 +861,11 @@ describe("realtime market/weather tools", () => {
 
       expect(String(fetchMock.mock.calls[0][0])).toContain("dates=20260624-20260627");
       expect(text).toContain("dateRange: 20260625-20260626");
-      expect(text).toContain("匹配比赛: 6 场");
+      expect(text).toContain("匹配比赛: 7 场");
       expect(text).toContain("Curaçao vs Ivory Coast");
       expect(text).toContain("Türkiye vs United States");
       expect(text).not.toContain("Netherlands 5-1 Sweden");
-      expect(text).not.toContain("Brazil vs Morocco");
+      expect(text).toContain("Brazil vs Morocco");
     } finally {
       vi.useRealTimers();
     }
@@ -876,6 +881,7 @@ describe("realtime market/weather tools", () => {
 
       const pending = createSportsScoreTool().execute("test", {
         league: "fifa.world",
+        date_from: "2026-06-30", date_to: "2026-06-30",
         query: "2026世界杯 6月30日 赛程",
         maxResults: 5,
       });
@@ -892,7 +898,7 @@ describe("realtime market/weather tools", () => {
     }
   });
 
-  it("filters World Cup scoreboard by mentioned teams before answering match-existence questions", async () => {
+  it("filters World Cup scoreboard by model-supplied teams before answering match-existence questions", async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date("2026-06-21T15:30:00+08:00"));
@@ -921,6 +927,8 @@ describe("realtime market/weather tools", () => {
       expect(inferReportResearchKind(prompt)).toBe("sports");
       const result = await createSportsScoreTool().execute("test", {
         league: "fifa.world",
+        date_from: "2026-06-21", date_to: "2026-06-22",
+        teams: ["England", "Croatia"],
         query: prompt,
         maxResults: 5,
       });
@@ -964,6 +972,7 @@ describe("realtime market/weather tools", () => {
 
     const result = await createSportsScoreTool().execute("test", {
       league: "fifa.world",
+      date_from: "2026-07-14", date_to: "2026-07-16",
       query: "世界杯半决赛在哪一天？",
       maxResults: 5,
     });
@@ -976,13 +985,14 @@ describe("realtime market/weather tools", () => {
     expect(text).toContain("Quarterfinal 1 Winner vs Quarterfinal 2 Winner");
   });
 
-  it("uses the built-in World Cup fixture fallback when semifinal scoreboard fetch fails", async () => {
+  it("does not invent semifinal fixtures when the scoreboard fetch fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => {
       throw new Error("fetch failed");
     }));
 
     const result = await createSportsScoreTool().execute("test", {
       league: "fifa.world",
+      date_from: "2026-07-14", date_to: "2026-07-16",
       query: "世界杯半决赛在哪一天？",
       maxResults: 5,
     });
@@ -990,14 +1000,12 @@ describe("realtime market/weather tools", () => {
 
     expect(searchMock.runSearchQuery).not.toHaveBeenCalled();
     expect(result.details.provider).toBe("espn_scoreboard");
-    expect(text).toContain("directSourceStatus: fallback_static_schedule");
-    expect(text).toContain("2026/07/15");
-    expect(text).toContain("2026/07/16");
-    expect(text).toContain("Quarterfinal 1 Winner vs Quarterfinal 2 Winner");
-    expect(text).not.toContain("directSourceStatus: unavailable");
+    expect(text).not.toContain("fallback_static_schedule");
+    expect(text).not.toContain("Quarterfinal 1 Winner vs Quarterfinal 2 Winner");
+    expect(text).toContain("directSourceStatus: unavailable");
   });
 
-  it("uses the built-in World Cup fixture fallback when tonight scoreboard fetch fails", async () => {
+  it("does not invent tonight fixtures when the scoreboard fetch fails", async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date("2026-06-28T20:20:00+08:00"));
@@ -1007,6 +1015,7 @@ describe("realtime market/weather tools", () => {
 
       const pending = createSportsScoreTool().execute("test", {
         league: "fifa.world",
+        date_from: "2026-06-22", date_to: "2026-06-22",
         query: "今晚世界杯有几场比赛",
         maxResults: 5,
       });
@@ -1015,9 +1024,9 @@ describe("realtime market/weather tools", () => {
       const text = result.content[0].text;
 
       expect(result.details.provider).toBe("espn_scoreboard");
-      expect(text).toContain("directSourceStatus: fallback_static_schedule");
-      expect(text).toContain("2026/06/29 03:00 Group stage: South Africa vs Canada");
-      expect(text).not.toContain("directSourceStatus: unavailable");
+      expect(text).not.toContain("fallback_static_schedule");
+      expect(text).not.toContain("South Africa vs Canada");
+      expect(text).toContain("directSourceStatus: unavailable");
     } finally {
       vi.useRealTimers();
     }
@@ -1039,6 +1048,7 @@ describe("realtime market/weather tools", () => {
 
     const result = await createSportsScoreTool().execute("test", {
       league: "fifa.world",
+      date_from: "2026-08-22", date_to: "2026-08-22",
       query: "中超今天有什么比赛吗",
       maxResults: 5,
     });
@@ -1069,6 +1079,7 @@ describe("realtime market/weather tools", () => {
 
     const result = await createSportsScoreTool().execute("test", {
       league: "fifa.world",
+      date_from: "2026-08-22", date_to: "2026-08-22",
       query: "中超今天有什么比赛吗",
       maxResults: 5,
     });

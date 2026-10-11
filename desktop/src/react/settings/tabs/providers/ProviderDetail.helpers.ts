@@ -53,7 +53,7 @@ export const LOCAL_QWEN36_35B_UPGRADE: LocalUpgradeOption = {
   label: 'Qwen3.6-35B-A3B DSV4Pro Thinking Distill MTP Q5_K_M imatrix',
   profile: '32GB 显存/统一内存+ 可选 · 更高配本地编排器',
   metrics: ['25.3 GB Q5_K_M imatrix', 'MTP 原生头', 'GPQA-Diamond 80.3%', '端到端编排 26.6s'],
-  reason: '35B-A3B Q5_K_M 是手动可选的旧版模型，文件和缓存占用更大。默认推荐 Qwen3.8-27B Coder390：16GB 及以上 Q3，16GB 以下 Q2。',
+  reason: '35B-A3B Q5_K_M 是手动可选的旧版模型，文件和缓存占用更大。默认推荐 Qwen3.8-27B Coder390：24GB 及以上 Q3，24GB 以下（16GB 档） Q2。',
   modelscope_url: 'https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF',
   download_label: '下载到本机',
   file_name: 'Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf',
@@ -98,6 +98,7 @@ export function formatBytes(bytes?: number | null) {
 export function localModelActionErrorText(reason?: string, detail?: string) {
   const value = String(detail || reason || 'unknown-error');
   if (reason === 'insufficient-disk-space') return detail || '磁盘空间不足。请清理模型目录所在磁盘后重试。';
+  if (reason === 'insufficient-model-memory' || reason === 'unknown-model-memory') return detail || '显存/统一内存不足或未确认。Q2 至少 14GiB、推荐 16GB；Q3 需要 24GB 档位。';
   if (reason === 'another-download-running') return '已有其他本地模型正在下载或校验。请等待完成，或先取消当前下载。';
   if (reason === 'unknown-model-id' || reason === 'invalid-model-id') return '本地模型请求无效。请刷新设置页后重试。';
   if (reason === 'download-boundary-invalid') return detail || '下载源未通过安全校验。Lynn 只允许公开 http/https GGUF 源。';

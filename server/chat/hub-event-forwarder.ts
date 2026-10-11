@@ -190,9 +190,35 @@ export function createHubEventForwarder({
       return;
     }
 
+    if (event.type === "tool_progress" && event.source === "brain") {
+      if (!ss || !String(event.name || "").trim()) return;
+      ss.hasToolCall = true;
+      if (event.event === "end" && event.ok === true) {
+        rememberSuccessfulTool(ss, event.name, { outputPreview: event.summary }, {});
+      } else if (event.event === "end" && event.ok === false) {
+        rememberFailedTool(ss, event.name);
+      }
+      emitStreamEvent(sessionPath, ss, {
+        type: "tool_progress",
+        source: "brain",
+        name: event.name,
+        event: event.event,
+        ms: event.ms,
+        ok: event.ok,
+        summary: event.summary,
+        details: event.details,
+        argsSummary: event.argsSummary,
+      });
+      return;
+    }
+
     if (event.type === "message_update") {
       if (!ss) return;
       const sub = event.assistantMessageEvent?.type;
+
+      if ((sub === "text_delta" || sub === "thinking_delta") && event.assistantMessageEvent.delta && ss.toolFinalizationTimer) {
+        scheduleToolFinalizationFallback(sessionPath, ss);
+      }
 
       if (sub === "text_delta") {
         if (ss.isThinking) {

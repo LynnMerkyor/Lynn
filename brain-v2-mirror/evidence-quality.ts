@@ -211,33 +211,19 @@ function extractExplicitDateSerials(text: string, now = new Date()): number[] {
   return out;
 }
 
-function hasNoCurrentResultClaim(normalized: string): boolean {
-  return /(?:没有|暂无|还没有|尚无|未有|并没有).{0,28}(?:正式比赛|正赛|比分|赛果|结果|赛事比分|数据|记录|信息)/u.test(normalized)
-    || /(?:正式比赛|正赛|比分|赛果|结果|赛事比分|数据|记录|信息).{0,28}(?:没有|暂无|还没有|尚无|未有|并没有)/u.test(normalized)
-    || /(?:尚未|未|还没|还未).{0,20}(?:开赛|开始|开幕|开打|举行|产生|公布)/u.test(normalized);
-}
-
-function hasPastDateFutureStartClaim(normalized: string): boolean {
-  return /要到\d{4}年\d{1,2}月\d{1,2}日(?:[~～—–-]\d{1,2}月?\d{0,2}日?)?(?:才)?(?:正式)?(?:开赛|开始|开幕|开打|举行)/u.test(normalized)
-    || /要到\d{1,2}月\d{1,2}日(?:[~～—–-]\d{1,2}月?\d{0,2}日?)?(?:才)?(?:正式)?(?:开赛|开始|开幕|开打|举行)/u.test(normalized);
-}
-
-function hasCurrentOrPastRelativeContext(normalized: string): boolean {
-  return /(今天|今日|今晚|今早|今晨|目前|现在|当前|刚刚|刚才|昨晚|昨天|昨日|截至|截止|today|tonight|currently|current|latest|yesterday)/iu.test(normalized);
-}
-
 export function containsTemporalNoResultContradiction(text: unknown, now = new Date()): boolean {
-  const normalized = String(text || "").replace(/\s+/g, "");
-  if (!normalized) return false;
-  const dates = extractExplicitDateSerials(normalized, now);
-  if (!dates.some((date) => date <= currentDateSerialForZone(now)) && !hasCurrentOrPastRelativeContext(normalized)) return false;
-  return hasNoCurrentResultClaim(normalized) || hasPastDateFutureStartClaim(normalized);
+  const normalized = String(text || "").replace(/\s+|\*\*/g, "");
+  const futureStarts = normalized.matchAll(/要到(?:(?:\d{4}年)?\d{1,2}月\d{1,2}日|\d{4}-\d{1,2}-\d{1,2})(?:[~～—–-]\d{1,2}月?\d{0,2}日?)?(?:才)?(?:正式)?(?:开赛|开始|开幕|开打|举行)/gu);
+  for (const statement of futureStarts) {
+    const startDate = extractExplicitDateSerials(statement[0], now)[0];
+    if (startDate < currentDateSerialForZone(now)) return true;
+  }
+  return false;
 }
 
 export function containsGroundedToolDenialContradiction(text: unknown): boolean {
   const normalized = String(text || "").replace(/\s+/g, "");
   if (!normalized) return false;
-  return /(?:工具集|工具箱|工具列表|当前工具|可用工具|CLI工具|LynnCLI工具).{0,24}(?:没有|未包含|不包含|缺少|暂无|不支持).{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问)/iu.test(normalized)
-    || /(?:没有|未包含|不包含|缺少|暂无|不支持).{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问).{0,24}(?:工具|功能|能力|接口)/iu.test(normalized)
-    || /(?:无法|不能|没法|不支持).{0,24}(?:实时|在线|联网|访问网页|查询天气|查询股价|查询汇率|查询比分|查询赛程)/iu.test(normalized);
+  return /(?:工具集|工具箱|工具列表|当前工具|可用工具|CLI工具|LynnCLI工具)[^，,。！？；;]{0,24}(?:没有|未包含|不包含|缺少|暂无|不支持)[^，,。！？；;]{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问)/iu.test(normalized)
+    || /(?:没有|未包含|不包含|缺少|暂无|不支持)[^，,。！？；;]{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问)[^，,。！？；;]{0,24}(?:工具|功能|能力|接口)/iu.test(normalized);
 }

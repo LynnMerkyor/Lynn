@@ -7,9 +7,10 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { resolveBetterSqliteRuntime } from "./native-node-runtime.mjs";
+import { rejectGuiToolAuthorization, validateGuiTaskEvidence } from "./gui-task-quality.mjs";
 
 import { DIALOGUE_PROMPTS } from "./dialogue-scenario-bank.mjs";
-import { additionalDialogueQualityReason, claimsFreshToolEvidence, requiresFreshEvidenceForDialogue } from "./dialogue-quality-rules.mjs";
+import { hasUsdCnyRate, deniesAvailableToolCapability, additionalDialogueQualityReason, claimsFreshToolEvidence, containsMislabeledRelativeDate, containsPastDateFutureStartContradiction, hasVerifiedEmptySportsResult, hasVerifiedNoFixturePredictionAnswer, omitVerifiedSportsFetchWindows, overridesVerifiedEmptySportsWindow, requiresFreshEvidenceForDialogue } from "./dialogue-quality-rules.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -112,70 +113,6 @@ function resolveGateCurrentDate(argv = process.argv.slice(2)) {
 
 const CURRENT_DATE = resolveGateCurrentDate();
 
-function addDays(isoDate, days) {
-  const date = new Date(`${isoDate}T00:00:00+08:00`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return beijingDate(date);
-}
-
-function expectedDatesForRelativeLabel(label) {
-  const dates = new Set();
-  if (/(今天|今日)/.test(label)) dates.add(CURRENT_DATE);
-  if (/(今晚|今夜)/.test(label)) {
-    dates.add(CURRENT_DATE);
-    dates.add(addDays(CURRENT_DATE, 1));
-  }
-  if (/(明天|明日)/.test(label)) dates.add(addDays(CURRENT_DATE, 1));
-  if (/(昨晚|昨日|昨天)/.test(label)) {
-    dates.add(addDays(CURRENT_DATE, -1));
-    dates.add(CURRENT_DATE);
-  }
-  return dates;
-}
-
-function normalizeDateParts(year, month, day) {
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function dateYearForRelativeCheck() {
-  return CURRENT_DATE.slice(0, 4);
-}
-
-function isDisallowedRelativeDate(label, year, month, day) {
-  const allowed = expectedDatesForRelativeLabel(label);
-  if (!allowed.size) return false;
-  const date = normalizeDateParts(year || dateYearForRelativeCheck(), month, day);
-  if (!date.startsWith(`${dateYearForRelativeCheck()}-`)) return false;
-  return !allowed.has(date);
-}
-
-function gapContainsRelativeLabel(gap) {
-  return /(今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)/.test(String(gap || ""));
-}
-
-function containsMislabeledRelativeDate(prompt, text) {
-  if (!/(今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)/.test(prompt)) return false;
-  const labelBeforeDate = /(今天\/今日|今晚\/今夜|明天\/明日|昨晚\/昨天\/昨日|今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)([^\n。；;，,]{0,32}?)(?:(?:(\d{4})年\s*)?(\d{1,2})月\s*(\d{1,2})日|(\d{4})-(\d{1,2})-(\d{1,2}))/g;
-  const dateBeforeLabel = /(?:(?:(\d{4})年\s*)?(\d{1,2})月\s*(\d{1,2})日|(\d{4})-(\d{1,2})-(\d{1,2}))([^\n。；;，,]{0,32}?)(今天\/今日|今晚\/今夜|明天\/明日|昨晚\/昨天\/昨日|今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)/g;
-  let match;
-  while ((match = labelBeforeDate.exec(text))) {
-    const label = match[1];
-    if (gapContainsRelativeLabel(match[2])) continue;
-    const year = match[3] || match[6] || dateYearForRelativeCheck();
-    const month = match[4] || match[7];
-    const day = match[5] || match[8];
-    if (isDisallowedRelativeDate(label, year, month, day)) return true;
-  }
-  while ((match = dateBeforeLabel.exec(text))) {
-    const year = match[1] || match[4] || dateYearForRelativeCheck();
-    const month = match[2] || match[5];
-    const day = match[3] || match[6];
-    if (gapContainsRelativeLabel(match[7])) continue;
-    const label = match[8];
-    if (isDisallowedRelativeDate(label, year, month, day)) return true;
-  }
-  return false;
-}
 
 function parseArgs(argv) {
   const args = {
@@ -504,6 +441,7 @@ function buildReactReview(result) {
       providerTrail,
       toolNames: tools.map((tool) => tool.name).filter(Boolean),
       toolEvents,
+      authorizationDecisions: result.authorizationDecisions || [],
       hadTools: tools.length > 0,
     },
     observe: {
@@ -522,12 +460,6 @@ function buildReactReview(result) {
   };
 }
 
-function deniesAvailableToolCapability(text) {
-  const normalized = String(text || "").replace(/\s+/g, "");
-  return /(?:工具集|工具箱|工具列表|当前工具|可用工具|CLI工具|LynnCLI工具).{0,24}(?:没有|未包含|不包含|缺少|暂无|不支持).{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问)/iu.test(normalized)
-    || /(?:没有|未包含|不包含|缺少|暂无|不支持).{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问).{0,24}(?:工具|功能|能力|接口)/iu.test(normalized)
-    || /(?:无法|不能|没法|不支持).{0,24}(?:实时|在线|联网|访问网页|查询天气|查询股价|查询汇率|查询比分|查询赛程)/iu.test(normalized);
-}
 
 function isMetaToolOrSearchQuestion(prompt) {
   const p = String(prompt || "");
@@ -535,48 +467,12 @@ function isMetaToolOrSearchQuestion(prompt) {
     && /(工具|搜索|检索|复核|模型|空答|门禁|流程|结论|结果|内核|矩阵|CLI|GUI|工作台|信息架构)/.test(p);
 }
 
-function dateSerial(year, month, day) {
-  return Number(`${year}${String(month).padStart(2, "0")}${String(day).padStart(2, "0")}`);
-}
-
-function currentDateSerial() {
-  return Number(CURRENT_DATE.replaceAll("-", ""));
-}
-
-function extractExplicitDateSerials(text) {
-  const normalized = String(text || "");
-  const out = [];
-  const [currentYear] = CURRENT_DATE.split("-").map(Number);
-  for (const match of normalized.matchAll(/(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日/g)) {
-    out.push(dateSerial(Number(match[1]), Number(match[2]), Number(match[3])));
-  }
-  for (const match of normalized.matchAll(/(\d{4})-(\d{1,2})-(\d{1,2})/g)) {
-    out.push(dateSerial(Number(match[1]), Number(match[2]), Number(match[3])));
-  }
-  for (const match of normalized.matchAll(/(?<!\d)(\d{1,2})月\s*(\d{1,2})日/g)) {
-    out.push(dateSerial(currentYear, Number(match[1]), Number(match[2])));
-  }
-  return out;
-}
-
-function containsPastDateFutureStartContradiction(text) {
-  const normalized = String(text || "").replace(/\s+/g, "");
-  const dates = extractExplicitDateSerials(normalized);
-  if (!dates.some((date) => date <= currentDateSerial())) return false;
-  const futureStart = /要到\d{4}年\d{1,2}月\d{1,2}日(?:[~～—–-]\d{1,2}月?\d{0,2}日?)?(?:才)?(?:正式)?(?:开赛|开始|开幕|开打|举行)|要到\d{1,2}月\d{1,2}日(?:[~～—–-]\d{1,2}月?\d{0,2}日?)?(?:才)?(?:正式)?(?:开赛|开始|开幕|开打|举行)|尚未开打|未开打|还没开赛|还未开赛|才开赛|才开始|才正式开打|正赛.*(?:还没|尚未|没有).*开打/.test(normalized);
-  const noResult = /(?:没有|暂无|还没有|尚无|未有|并没有).{0,28}(?:正式比赛|正赛|比分|赛果|结果|赛事比分|数据|记录|信息)|(?:正式比赛|正赛|比分|赛果|结果|赛事比分|数据|记录|信息).{0,28}(?:没有|暂无|还没有|尚无|未有|并没有)|(?:尚未|未|还没|还未).{0,20}(?:开赛|开始|开幕|开打|举行|产生|公布)|目前并没有正在进行的世界杯/.test(normalized);
-  return futureStart || noResult;
-}
-
 function isStaleWorldCupAnswer(prompt, text) {
   const hasConcreteUpcomingSchedule = /(?:\d+)\s*场/.test(text)
     && /(?:vs|对阵|西班牙|沙特|比利时|伊朗|乌拉圭|佛得角|新西兰|埃及|Spain|Saudi|Belgium|Iran|Uruguay|Cape Verde|New Zealand|Egypt)/i.test(text)
     && /(?:未开始|Scheduled|北京时间|\b0?[0369]:00\b|00:00|03:00|06:00|09:00)/i.test(text);
   if (/(今晚|今夜|赛程|有几场)/.test(prompt) && hasConcreteUpcomingSchedule) return false;
-  if (containsPastDateFutureStartContradiction(text)) return true;
-  if (/目前并没有正在进行的世界杯|还没有(?:任何)?正赛比分|没有(?:任何)?正赛比分|正赛.*(?:还没|尚未|没有).*开打|要到\s*2026年\s*6月\s*11日.*才开打|要到\s*2026年\s*6月(?:\d{1,2}日)?.{0,24}(?:才)?(?:开赛|开始).{0,48}(?:没有|暂无|还没有).{0,24}(?:正式比赛|正赛|比分|赛果)|尚未开打|未开打/.test(text)) {
-    return true;
-  }
+  if (containsPastDateFutureStartContradiction(text, CURRENT_DATE)) return true;
   if (!/2022年卡塔尔世界杯/.test(text)) return false;
   const asksCurrentWorldCup = /2026|今年|本届|今晚|今夜|今天|今日|昨晚|昨天|赛程|比分|赛果|结果|几场|半决赛|世界杯/.test(prompt);
   const givesCurrentWorldCupAnswer = /2026|美加墨|本届|今年|北京时间|赛程|比分|小组赛|半决赛/.test(text);
@@ -595,11 +491,6 @@ function hasSupportedWorldCupSemifinalDate(text) {
 
 function hasGoldPrice(text) {
   return /\d{3,5}(?:\.\d+)?\s*元\/克|\d{3,5}(?:\.\d+)?\s*美元\/盎司|XAU\/USD[\s\S]{0,100}\d{3,5}(?:\.\d+)?/iu.test(String(text || ""));
-}
-
-function hasUsdCnyRate(text) {
-  const raw = String(text || "");
-  return /1\s*(?:USD|美元)\s*(?:=|≈|约|可兑换|兑换|兑)?\s*\d+(?:\.\d+)?\s*(?:CNY|人民币)|USD\/CNY[\s\S]{0,100}\d+(?:\.\d+)?|美元[兑对]人民币[\s\S]{0,100}\d+(?:\.\d+)?|1\s*(?:USD|美元)[\s\S]{0,16}\d+(?:\.\d+)?\s*(?:CNY|人民币)/iu.test(raw);
 }
 
 function hasJpyCnyRate(text) {
@@ -716,6 +607,8 @@ function usedUnrequestedFileCreation(prompt, result = {}) {
 }
 
 function qualityReason(prompt, text, result = {}) {
+  const guiEvidenceIssue = validateGuiTaskEvidence({ answer: text, expected: "", finished: true });
+  if (guiEvidenceIssue) return guiEvidenceIssue;
   if (/针对“[^”]+”，我能从工具证据中确认/.test(String(text || ""))) {
     return "tool-evidence-template-leaked";
   }
@@ -761,7 +654,7 @@ function qualityReason(prompt, text, result = {}) {
   if (/Responses\s*API/i.test(prompt) && /根据本轮已执行工具返回|网页抓取|抓取出错|Skip to content/i.test(text)) {
     return "responses-api-answer-leaked-fetch-noise";
   }
-  if (containsMislabeledRelativeDate(prompt, text)) {
+  if (containsMislabeledRelativeDate(prompt, omitVerifiedSportsFetchWindows(text, result.toolEvents), CURRENT_DATE)) {
     return "relative-date-answer-used-wrong-explicit-date";
   }
   if (hasPreviousYearLeakForRelativePrompt(prompt, text)) {
@@ -809,14 +702,19 @@ function qualityReason(prompt, text, result = {}) {
   }
   if (/世界杯/.test(prompt)) {
     if (isWorldCupPredictionPrompt(prompt)) {
-      if (!hasWorldCupPredictionAnswer(text)) return "world-cup-prediction-without-score-or-disclaimer";
+      if (!hasWorldCupPredictionAnswer(text) && !hasVerifiedNoFixturePredictionAnswer({ ...result, assistantText: text, currentDate: CURRENT_DATE })) return "world-cup-prediction-without-score-or-disclaimer";
       return "";
     }
     if (isStaleWorldCupAnswer(prompt, text)) {
       return "world-cup-stale-or-not-started-answer";
     }
+    const sportsEvidence = { ...result, assistantText: text, currentDate: CURRENT_DATE };
+    if (overridesVerifiedEmptySportsWindow(sportsEvidence)) {
+      return "sports-answer-overrode-verified-empty-window";
+    }
     const scorePattern = /\d+\s*[\u00a0\u202f ]*(?:[-–—:：比])[\u00a0\u202f ]*\d+/;
-    if (/已经出的赛事比分|最新的比赛结果|上一场比分/.test(prompt) && !scorePattern.test(text)) {
+    if (/已经出的赛事比分|最新的比赛结果|上一场比分/.test(prompt) && !scorePattern.test(text)
+      && !hasVerifiedEmptySportsResult(sportsEvidence)) {
       return "world-cup-score-question-without-score";
     }
     if (/今晚|今天|赛程|有几场/.test(prompt) && !/(?:\d+)\s*场|北京时间|赛程/.test(text)) {
@@ -845,6 +743,7 @@ function createActive(index, category, prompt) {
     providerTrail: [],
     tools: [],
     toolEvents: [],
+    authorizationDecisions: [],
     errors: [],
     events: 0,
     timedOut: false,
@@ -898,7 +797,7 @@ function consumeMessage(active, msg) {
   } else if (msg.type === "tool_progress") {
     const name = msg.name || msg.toolName || "tool";
     const event = msg.event || "";
-    active.toolEvents.push({ event, name, ok: msg.ok ?? null });
+    active.toolEvents.push({ event, name, ok: msg.ok ?? null, summary: msg.summary, details: msg.details, argsSummary: msg.argsSummary });
     if (event === "start") {
       active.tools.push({
         id: msg.toolCallId || msg.id || "",
@@ -938,7 +837,10 @@ async function runPrompt(config, ws, index, category, prompt, timeoutMs) {
   const sessionPath = session?.path || null;
   await new Promise((resolve) => {
     let quietTimer = null;
+    let closed = false;
+    const pendingAuthorizations = new Set();
     const cleanup = () => {
+      closed = true;
       clearTimeout(timer);
       if (quietTimer) clearTimeout(quietTimer);
       ws.off("message", onMessage);
@@ -946,6 +848,7 @@ async function runPrompt(config, ws, index, category, prompt, timeoutMs) {
       ws.off("close", onClose);
     };
     const finishSoon = () => {
+      if (closed || pendingAuthorizations.size) return;
       if (quietTimer) clearTimeout(quietTimer);
       quietTimer = setTimeout(() => {
         active.elapsedMs = Date.now() - active.startedAt;
@@ -983,6 +886,20 @@ async function runPrompt(config, ws, index, category, prompt, timeoutMs) {
         return;
       }
       consumeMessage(active, msg);
+      if (msg.type === "tool_authorization") {
+        if (quietTimer) clearTimeout(quietTimer);
+        const pending = rejectGuiToolAuthorization(active, msg, {
+          sessionPath,
+          reject: (confirmId, body) => httpJson(config.baseUrl, config.token, `/api/confirm/${encodeURIComponent(confirmId)}`, {
+            method: "POST", body, timeoutMs: 5000,
+          }),
+        });
+        pendingAuthorizations.add(pending);
+        pending.finally(() => {
+          pendingAuthorizations.delete(pending);
+          if (active.finishedNormally) finishSoon();
+        });
+      }
       if (active.finishedNormally) finishSoon();
     };
     ws.on("message", onMessage);

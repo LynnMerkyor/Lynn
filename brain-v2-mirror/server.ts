@@ -156,6 +156,7 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse, 
   try {
     const result = await routerRun({
       messages, tools, capabilityRequired, extraBody, reasoningEffort,
+      ...(body.tool_choice === 'none' ? { tools: null, manageServerTools: false } : {}),
       ...(reviewArbitration ? reviewArbitration : {}),
       signal: ctrl.signal,
       onChunk: async (chunk, meta) => {

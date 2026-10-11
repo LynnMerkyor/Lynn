@@ -2,7 +2,7 @@
 // Brain v2 · utility tools
 // Keep this module self-contained so the mirrored brain-v2 tree can run tests
 // outside the production /opt/lobster-brain directory.
-import { fetchSportsScoreboardEvidence } from '../../shared/sports-scoreboard.js';
+import { fetchSportsScoreboardEvidence, modelDateRange } from '../../shared/sports-scoreboard.js';
 
 function compact(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -161,13 +161,6 @@ function beijingYmdFromInstant(value) {
   }).format(date);
 }
 
-function sportsTargetDate(query) {
-  if (/后天|day after tomorrow/i.test(query)) return beijingDate(2);
-  if (/明天|明日|tomorrow/i.test(query)) return beijingDate(1);
-  if (/昨天|昨日|昨晚|yesterday/i.test(query)) return beijingDate(-1);
-  return beijingDate(0);
-}
-
 function beijingDateTime(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return compact(value);
@@ -182,10 +175,9 @@ function beijingDateTime(value) {
   }).format(date).replace(/\//g, '-');
 }
 
-async function fetchMlbOfficialScore(query) {
-  if (!/(?:\bMLB\b|美国职业棒球|美职棒|大联盟)/i.test(query)) return '';
-  const date = sportsTargetDate(query);
-  const startDate = ymdOffset(date, -1);
+async function fetchMlbOfficialScore(source) {
+  const date = source.date_to || source.date_from;
+  const startDate = ymdOffset(source.date_from, -1);
   const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=${startDate}&endDate=${date}&hydrate=team`;
   const resp = await fetch(url, {
     headers: { Accept: 'application/json', 'User-Agent': 'LynnBrain/0.86 MLB-official' },
@@ -195,8 +187,11 @@ async function fetchMlbOfficialScore(query) {
   const data = await resp.json();
   const games = (Array.isArray(data?.dates) ? data.dates : [])
     .flatMap((entry) => Array.isArray(entry?.games) ? entry.games : [])
-    .filter((game) => beijingYmdFromInstant(game?.gameDate) === date);
-  const lines = games.slice(0, 20).map((game) => {
+    .filter((game) => {
+      const day = beijingYmdFromInstant(game?.gameDate);
+      return day >= source.date_from && day <= date;
+    });
+  const lines = games.map((game) => {
     const away = compact(game?.teams?.away?.team?.name || game?.teams?.away?.team?.abbreviation || 'Away');
     const home = compact(game?.teams?.home?.team?.name || game?.teams?.home?.team?.abbreviation || 'Home');
     const awayScore = game?.teams?.away?.score;
@@ -206,39 +201,47 @@ async function fetchMlbOfficialScore(query) {
       ? `${away} ${awayScore ?? '-'}-${homeScore ?? '-'} ${home}`
       : `${away} vs ${home}`;
     return `- ${beijingDateTime(game?.gameDate)} ${score} (${compact(game?.status?.detailedState) || 'Scheduled'})`;
-  });
+  }).filter((line) => (source.teams || []).every((team) => line.toLowerCase().includes(String(team).toLowerCase())));
   return [
     '体育查询结果 (MLB official Stats API)',
     'provider: mlb_official',
     'league: Major League Baseball',
     `source: ${url}`,
-    `北京时间查询日期: ${date}`,
+    `北京时间查询日期: ${source.date_from}${source.date_from === date ? '' : ' 至 ' + date}`,
     `matched: ${lines.length}`,
     ...(lines.length ? lines : ['- 该日期未返回 MLB 比赛。']),
   ].join('\n');
 }
 
-async function fetchNhlOfficialScore(query) {
-  if (!/(?:\bNHL\b|国家冰球联盟|北美冰球|冰球联盟)/i.test(query)) return '';
-  const date = sportsTargetDate(query);
-  const urls = [ymdOffset(date, -1), date].map((value) => `https://api-web.nhle.com/v1/score/${value}`);
-  const responses = await Promise.all(urls.map(async (url) => {
+async function fetchNhlOfficialScore(source) {
+  const date = source.date_to || source.date_from;
+  const urls = [];
+  for (let day = ymdOffset(source.date_from, -1); day <= date; day = ymdOffset(day, 1)) {
+    if (urls.length >= 32) throw new Error('date_range_too_large: split into windows of at most 31 days');
+    urls.push('https://api-web.nhle.com/v1/score/' + day);
+  }
+  const responses = [];
+  for (let offset = 0; offset < urls.length; offset += 4) {
+    const batch = await Promise.all(urls.slice(offset, offset + 4).map(async (url) => {
     const resp = await fetch(url, {
       headers: { Accept: 'application/json', 'User-Agent': 'LynnBrain/0.86 NHL-official' },
       signal: AbortSignal.timeout(8000),
     });
     if (!resp.ok) throw new Error('NHL API HTTP ' + resp.status);
     return await resp.json();
-  }));
+    }));
+    responses.push(...batch);
+  }
   const seen = new Set();
   const games = responses.flatMap((data) => Array.isArray(data?.games) ? data.games : []).filter((game) => {
-    if (beijingYmdFromInstant(game?.startTimeUTC) !== date) return false;
+    const day = beijingYmdFromInstant(game?.startTimeUTC);
+    if (day < source.date_from || day > date) return false;
     const key = String(game?.id || `${game?.startTimeUTC}:${game?.awayTeam?.abbrev}:${game?.homeTeam?.abbrev}`);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
-  const lines = games.slice(0, 20).map((game) => {
+  const lines = games.map((game) => {
     const away = compact(game?.awayTeam?.abbrev || game?.awayTeam?.commonName?.default || 'Away');
     const home = compact(game?.homeTeam?.abbrev || game?.homeTeam?.commonName?.default || 'Home');
     const terminal = /FINAL|OFF/i.test(compact(game?.gameState));
@@ -247,13 +250,13 @@ async function fetchNhlOfficialScore(query) {
       ? `${away} ${game?.awayTeam?.score ?? '-'}-${game?.homeTeam?.score ?? '-'} ${home}`
       : `${away} vs ${home}`;
     return `- ${beijingDateTime(game?.startTimeUTC)} ${score} (${compact(game?.gameState) || 'FUT'})`;
-  });
+  }).filter((line) => (source.teams || []).every((team) => line.toLowerCase().includes(String(team).toLowerCase())));
   return [
     '体育查询结果 (NHL official API)',
     'provider: nhl_official',
     'league: National Hockey League',
     `source: ${urls.join(' | ')}`,
-    `北京时间查询日期: ${date}`,
+    `北京时间查询日期: ${source.date_from}${source.date_from === date ? '' : ' 至 ' + date}`,
     `matched: ${lines.length}`,
     ...(lines.length ? lines : ['- 该日期未返回 NHL 比赛。']),
   ].join('\n');
@@ -269,17 +272,25 @@ export async function sportsScore(input) {
       guidance: '体育联赛必须由模型填入 league：fifa.world、nba、mlb 或 nhl。工具不再从句子猜联赛。',
     });
   }
+  try {
+    const range = modelDateRange(source);
+    source.date_from = range.start.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3');
+    source.date_to = range.end.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3');
+    if (source.teams !== undefined && (!Array.isArray(source.teams) || source.teams.some((team) => typeof team !== 'string'))) throw new Error('invalid_teams: supply an array of team names');
+  } catch (error) {
+    return JSON.stringify({ directSourceStatus: 'unavailable', error: error.message, guidance: '模型必须填写明确日期和球队参数；工具不从原句猜测。' });
+  }
   const q = String(source.query || '');
   const officialAttempts = await Promise.allSettled([
-    league === 'mlb' ? fetchMlbOfficialScore(q) : Promise.resolve(''),
-    league === 'nhl' ? fetchNhlOfficialScore(q) : Promise.resolve(''),
+    league === 'mlb' ? fetchMlbOfficialScore(source) : Promise.resolve(''),
+    league === 'nhl' ? fetchNhlOfficialScore(source) : Promise.resolve(''),
   ]);
   const official = officialAttempts
     .filter((entry) => entry.status === 'fulfilled' && compact(entry.value))
     .map((entry) => entry.value);
   if (official.length) return official.join('\n\n');
   try {
-    const result = await fetchSportsScoreboardEvidence(source.query || q, { league });
+    const result = await fetchSportsScoreboardEvidence(source.query || q, { league, date_from: source.date_from, date_to: source.date_to, teams: source.teams });
     if (result) return result.text;
     return JSON.stringify({
       directSourceStatus: 'unavailable',

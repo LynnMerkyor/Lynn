@@ -625,7 +625,7 @@ export async function stockMarket(query, { log, webSearchFn } = {}) {
     }
     if (!results.length) return JSON.stringify({ error: '未找到行情数据' });
     log && log('info', 'tool-exec/stock_market', 'success markets=' + markets.join(',') + ' individual=' + (stockTarget?.code || 'none'));
-    return results.join('\n\n');
+    return results.join('\n\n') + '\n\n数据范围：本轮仅覆盖上述已返回的报价或榜单样本，不是全市场异动完整统计。未返回的板块排行、涨跌停家数或成交额不能从这些样本推断。';
   } catch (err) {
     log && log('warn', 'tool-exec/stock_market', 'failed: ' + err.message);
     return JSON.stringify({ error: err.message });

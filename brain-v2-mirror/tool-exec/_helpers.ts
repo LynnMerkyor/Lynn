@@ -35,7 +35,7 @@ export function withTimeout(promise, ms, label = 'racer') {
 // As soon as `minSuccess` racers succeed we wait a tiny settle window for other
 // already-fast racers, then return; callers that pass an AbortController should
 // abort laggards after this resolves.
-export async function aggregateAllSettled(racers, budgetMs, { minSuccess = 1, settleWindowMs = 25 } = {}) {
+export async function aggregateAllSettled(racers, budgetMs, { minSuccess = 1, settleWindowMs = 25, isSuccess = () => true } = {}) {
   const list = Array.isArray(racers) ? racers : [];
   if (!list.length) return [];
 
@@ -81,7 +81,7 @@ export async function aggregateAllSettled(racers, budgetMs, { minSuccess = 1, se
       Promise.resolve()
         .then(() => fn())
         .then(
-          (value) => ({ source, ok: true, value }),
+          (value) => ({ source, ok: isSuccess(value), value }),
           (error) => ({ source, ok: false, error: error.message || String(error) }),
         )
         .then((entry) => {

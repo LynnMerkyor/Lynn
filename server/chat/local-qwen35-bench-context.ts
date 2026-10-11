@@ -34,7 +34,7 @@ const LOCAL_QWEN35_BENCHMARK_MARKER = "【Lynn 本地模型事实备忘】";
 
 export const LOCAL_QWEN35_BENCHMARK_CONTEXT = [
   LOCAL_QWEN35_BENCHMARK_MARKER,
-  "当前推荐本地模型为 Qwen3.8-27B Coder390 EfficientThink。16GB 及以上默认 Q3，主模型 17.30 GB；16GB 以下使用 Q2，主模型 13.28 GB。两档都是内置 Q4 MTP 的 GGUF，不另下 DFlash2，不含视觉组件。实际内存还需容纳 KV 缓存与运行缓冲。",
+  "当前推荐本地模型为 Qwen3.8-27B Coder390 EfficientThink。16GB 默认 Q2，主模型 13.28 GB；24GB 及以上默认 Q3，主模型 17.30 GB。低于 14GiB 显存/统一内存不能安装，14～不足 16GiB 仅达 Q2 最低门槛。Apple Silicon 看统一内存，NVIDIA 看单卡显存，不叠加多卡，不把系统内存当显存。两档都是内置 Q4 MTP 的 GGUF，不另下 DFlash2，不含视觉组件。实际内存还需容纳 KV 缓存与运行缓冲。",
   "Q3 默认 8K、Q2 默认 4K 上下文，单并发；使用 llama.cpp draft-mtp。实际 TPS 需本机测量，勿套用旧模型或仓库高并发 TPS。评测及完整说明见模型卡。下列旧型号资料仅适用于对应旧型号，不代表当前模型。",
   "Qwen3.6-35B-A3B DSV4Pro Thinking Distill Q5_K_M imatrix MTP (高端编排器档,32GB+,25.3GB) thinking-on: GPQA-Diamond 80.3%,端到端编排约 26.6s；适合 32GB+ 配置作为更强本地编排器。",
 ].join("\n");

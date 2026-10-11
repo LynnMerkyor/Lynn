@@ -6,6 +6,18 @@ function normalizedText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+export function hasUsdCnyRate(text) {
+  const raw = String(text || "").replace(/[*_`]/g, "");
+  return /1\s*(?:USD|美元)\s*(?:=|≈|约|可兑换|兑换|兑)?\s*\d+(?:\.\d+)?\s*(?:CNY|人民币)/iu.test(raw)
+    || /(?:USD\s*\/\s*CNY|美元[兑对]人民币)\s*(?:汇率)?\s*(?:为|是|约为|约|[:：=≈])?\s*\d+(?:\.\d+)?(?![\d.\/-])(?=\s*(?:CNY|人民币|元|[，,。；;\n]|$))/iu.test(raw);
+}
+
+export function deniesAvailableToolCapability(text) {
+  const normalized = String(text || "").replace(/\s+/g, "");
+  return /(?:工具集|工具箱|工具列表|当前工具|可用工具|CLI工具|LynnCLI工具)[^，,。！？；;]{0,24}(?:没有|未包含|不包含|缺少|暂无|不支持)[^，,。！？；;]{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问)/iu.test(normalized)
+    || /(?:没有|未包含|不包含|缺少|暂无|不支持)[^，,。！？；;]{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问)[^，,。！？；;]{0,24}(?:工具|功能|能力|接口)/iu.test(normalized);
+}
+
 /**
  * A tool-evidence claim must assert a concrete returned or real-time fact.
  * Generic educational wording such as "retrieved reference material" is not
@@ -13,6 +25,172 @@ function normalizedText(value) {
  */
 export function claimsFreshToolEvidence(text) {
   return /(?:根据(?:最新|本次|本轮)?(?:查询|搜索|工具|检索)(?:结果|返回)|(?:查询|搜索|工具|检索)(?:结果|返回)(?:显示|表明|指出|为)|(?:最新|实时)(?:天气|行情|比分|赛程|价格|新闻|汇率|金价)|(?:查询|搜索)(?:到|得)(?:的)?(?:最新|实时)?(?:天气|行情|比分|赛程|价格|新闻|汇率|金价))/u.test(String(text || ""));
+}
+
+export function containsPastDateFutureStartContradiction(text, currentDate) {
+  const normalized = String(text || "").replace(/\s+|\*\*/g, "");
+  const today = Number(String(currentDate || "").replaceAll("-", ""));
+  const year = Number(String(currentDate || "").slice(0, 4));
+  const futureStarts = normalized.matchAll(/要到(?:(?:\d{4}年)?\d{1,2}月\d{1,2}日|\d{4}-\d{1,2}-\d{1,2})(?:[~～—–-]\d{1,2}月?\d{0,2}日?)?(?:才)?(?:正式)?(?:开赛|开始|开幕|开打|举行)/gu);
+  for (const statement of futureStarts) {
+    const match = statement[0].match(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日|(\d{4})-(\d{1,2})-(\d{1,2})/u);
+    if (!match) continue;
+    const dateYear = Number(match[1] || match[4] || year);
+    const month = Number(match[2] || match[5]);
+    const day = Number(match[3] || match[6]);
+    const startDate = Number(`${dateYear}${String(month).padStart(2, "0")}${String(day).padStart(2, "0")}`);
+    if (startDate < today) return true;
+  }
+  return false;
+}
+
+function completedSportsEvidence(toolEvents) {
+  return toolEvents.flatMap((event) => {
+    if (event.event !== "end" || event.ok !== true) return [];
+    if (event.name === "sports_score") return [event];
+    if (event.name !== "parallel_research" || !Array.isArray(event.details)) return [];
+    return event.details.flatMap((line) => {
+      if (typeof line !== "string" || !line.startsWith("subtool: ")) return [];
+      try {
+        const child = JSON.parse(line.slice("subtool: ".length));
+        return child.name === "sports_score" && child.ok === true && Array.isArray(child.details) ? [child] : [];
+      } catch { return []; }
+    });
+  });
+}
+
+export function hasVerifiedEmptySportsWindow({ toolEvents = [], prompt = "", currentDate = "" }) {
+  return completedSportsEvidence(toolEvents).some((event) => {
+    const details = Array.isArray(event.details) ? event.details : [];
+    if (!details.includes("provider: espn_scoreboard") || !details.includes("directSourceStatus: ok") || !details.includes("matched: 0")) return false;
+    const sources = details.filter((line) => line.startsWith("source: "));
+    if (!sources.length || !sources.every((line) => /^source: https:\/\/site\.api\.espn\.com\/apis\/site\/v2\/sports\/[^\s]+\/scoreboard\?[^\s]*dates=\d{8}(?:-\d{8})?(?:&[^\s]*)?$/u.test(line))) return false;
+    const range = details.map((line) => line.match(/^dateRange: (\d{8})-(\d{8})$/u)).find(Boolean);
+    if (!range || range[1] > range[2]) return false;
+    if (/昨晚|昨天|昨日|yesterday|今天|今日|今晚|今夜|today|tonight/iu.test(prompt)) {
+      const today = new Date(`${currentDate}T12:00:00Z`);
+      if (!Number.isFinite(today.getTime())) return false;
+      const offset = /昨晚|昨天|昨日|yesterday/iu.test(prompt) ? -86400000 : 0;
+      const targetDate = new Date(today.getTime() + offset).toISOString().slice(0, 10).replaceAll("-", "");
+      if (range[1] > targetDate || range[2] < targetDate) return false;
+    }
+    return true;
+  });
+}
+
+export function hasVerifiedEmptySportsResult(result) {
+  return /(?:0\s*场|(?:没有|无).{0,12}比赛)/u.test(String(result.assistantText || "").replace(/\*\*/g, ""))
+    && hasVerifiedEmptySportsWindow(result);
+}
+
+export function hasVerifiedNoFixturePredictionAnswer(result) {
+  const text = String(result.assistantText || "").replace(/\*\*/g, "");
+  return hasVerifiedEmptySportsResult(result)
+    && /(?:给不出|无法|不能|不应|不做|不会).{0,24}(?:比分|预测)|(?:比分|预测).{0,16}(?:没有依据|无依据|无对象)|不存在.{0,12}(?:可(?:以)?预测|预测对象)|没有(?:可(?:供|以)?预测的|预测对象)/u.test(text);
+}
+
+export function containsMislabeledRelativeDate(prompt, text, currentDate) {
+  const relativeLabel = /今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天/u;
+  if (!relativeLabel.test(prompt)) return false;
+  const year = String(currentDate).slice(0, 4);
+  const addDays = (offset) => new Date(new Date(`${currentDate}T12:00:00Z`).getTime() + offset * 86400000).toISOString().slice(0, 10);
+  const isDisallowed = (label, dateYear, month, day) => {
+    const allowed = new Set();
+    if (/今天|今日/u.test(label)) allowed.add(currentDate);
+    if (/今晚|今夜/u.test(label)) { allowed.add(currentDate); allowed.add(addDays(1)); }
+    if (/明天|明日/u.test(label)) allowed.add(addDays(1));
+    if (/昨晚|昨日|昨天/u.test(label)) { allowed.add(addDays(-1)); allowed.add(currentDate); }
+    const date = `${dateYear || year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return date.startsWith(`${year}-`) && !allowed.has(date);
+  };
+  const normalized = String(text).replace(/\|/gu, "\n").replace(/(?:更新时间|更新于|更新至|发布时间|发布于|数据截至|数据时间|抓取时间|采集时间|取数时间|截至)\s*[：:]?\s*(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{4}年\s*\d{1,2}月\s*\d{1,2}日)(?:\s+\d{1,2}:\d{2})?/gu, "[数据时间]");
+  const labelBeforeDate = /(今天\/今日|今晚\/今夜|明天\/明日|昨晚\/昨天\/昨日|今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)([^\n。；;，,]{0,32}?)(?:(?:(\d{4})年\s*)?(\d{1,2})月\s*(\d{1,2})日|(\d{4})-(\d{1,2})-(\d{1,2}))/gu;
+  const dateBeforeLabel = /(?:(?:(\d{4})年\s*)?(\d{1,2})月\s*(\d{1,2})日|(\d{4})-(\d{1,2})-(\d{1,2}))([^\n。；;，,]{0,32}?)(今天\/今日|今晚\/今夜|明天\/明日|昨晚\/昨天\/昨日|今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)/gu;
+  for (const match of normalized.matchAll(labelBeforeDate)) {
+    if (!relativeLabel.test(match[2]) && isDisallowed(match[1], match[3] || match[6], match[4] || match[7], match[5] || match[8])) return true;
+  }
+  for (const match of normalized.matchAll(dateBeforeLabel)) {
+    if (/[（(](?:含|包含|包括|涵盖|覆盖)\s*$/u.test(match[7])) continue;
+    if (!relativeLabel.test(match[7]) && isDisallowed(match[8], match[1] || match[4], match[2] || match[5], match[3] || match[6])) return true;
+  }
+  return false;
+}
+
+export function overridesVerifiedEmptySportsWindow(result) {
+  return /昨晚|昨天|昨日|yesterday|今天|今日|今晚|今夜|today|tonight/iu.test(result.prompt)
+    && hasVerifiedEmptySportsWindow(result)
+    && !hasVerifiedEmptySportsResult(result);
+}
+
+export function omitVerifiedSportsFetchWindows(text, toolEvents = []) {
+  const windows = [];
+  const queryWindows = [];
+  for (const event of completedSportsEvidence(toolEvents)) {
+    const details = Array.isArray(event.details) ? event.details : [];
+    if (!details.includes("directSourceStatus: ok")) continue;
+    const sourceLines = details.filter((line) => line.startsWith("source: "));
+    const dates = [];
+    let valid = sourceLines.length > 0;
+    for (const line of sourceLines) {
+      try {
+        const url = new URL(line.slice("source: ".length));
+        const range = url.searchParams.get("dates") || "";
+        if (url.origin !== "https://site.api.espn.com" || !/^\/apis\/site\/v2\/sports\/[^\s]+\/scoreboard$/u.test(url.pathname) || !/^\d{8}(?:-\d{8})?$/u.test(range)) valid = false;
+        dates.push(...range.split("-"));
+      } catch { valid = false; }
+    }
+    if (valid) {
+      dates.sort();
+      windows.push([dates[0], dates.at(-1)]);
+      const queryRange = details.map((line) => line.match(/^dateRange: (\d{8})-(\d{8})$/u)).find(Boolean);
+      if (queryRange && queryRange[1] <= queryRange[2] && queryRange[1] >= dates[0] && queryRange[2] <= dates.at(-1)) {
+        queryWindows.push([queryRange[1], queryRange[2]]);
+      }
+    }
+  }
+  const datePattern = (date, includeYear) => {
+    const month = Number(date.slice(4, 6));
+    const day = Number(date.slice(6, 8));
+    return `${includeYear ? `${date.slice(0, 4)}[-/年]` : ""}${month < 10 ? "0?" : ""}${month}[-/月]${day < 10 ? "0?" : ""}${day}日?`;
+  };
+  let answer = String(text || "");
+  for (const [first, last] of [...queryWindows, ...windows]) {
+    const range = new RegExp(`((?:查询|检索|取数)(?:范围)?\\s*[：:]?\\s*(?:北京时间\\s*)?)(?:${datePattern(first, true)}|${datePattern(first, false)})\\s*(?:至|到|[-–—~～])\\s*(?:${datePattern(last, true)}|${datePattern(last, false)})(?!\\d)`, "gu");
+    answer = answer.replace(range, "$1[已核验的查询窗口]");
+  }
+  const lines = answer.split("\n");
+  const cells = (line) => line.trim().replace(/^\||\|$/gu, "").split("|");
+  let queryColumns = [];
+  answer = lines.map((line, index) => {
+    if (!line.trim().startsWith("|")) {
+      queryColumns = [];
+      return line;
+    }
+    if (lines[index + 1]?.trim().startsWith("|") && cells(lines[index + 1]).every((cell) => /^\s*:?-{3,}:?\s*$/u.test(cell))) {
+      queryColumns = cells(line).map((cell) => /^(?:查询|检索|取数)范围$/u.test(cell.trim()));
+      return line;
+    }
+    if (!queryColumns.some(Boolean)) return line;
+    let column = -1;
+    return line.replace(/(?<=\|)[^|]+(?=\|)/gu, (cell) => {
+      column += 1;
+      if (!queryColumns[column]) return cell;
+      for (const [first, last] of [...queryWindows, ...windows]) {
+        const range = new RegExp(`^(\\s*)(?:${datePattern(first, true)}|${datePattern(first, false)})\\s*(?:至|到|[-–—~～])\\s*(?:${datePattern(last, true)}|${datePattern(last, false)})(?!\\d)`, "u");
+        cell = cell.replace(range, "$1[已核验的查询窗口]");
+      }
+      return cell;
+    });
+  }).join("\n");
+  return answer.split(/(?<=[。；！？!\n])/u).map((segment) => {
+    if (!/ESPN|scoreboard|数据源|取数|上游|接口/iu.test(segment) || /昨晚|昨天|昨日|今天|今日|今晚|今夜|明天|明日/u.test(segment)) return segment;
+    let normalized = segment;
+    for (const [first, last] of windows) {
+      const range = new RegExp(`${datePattern(first, true)}\\s*(?:至|到|[-–—~～])\\s*(?:${datePattern(last, true)}|${datePattern(last, false)})(?!\\d)`, "gu");
+      normalized = normalized.replace(range, "[已核验的上游取数窗口]");
+    }
+    return normalized;
+  }).join("");
 }
 
 export function requiresFreshEvidenceForDialogue({ category, prompt }) {
@@ -149,6 +327,18 @@ export function additionalDialogueQualityReason({ category, prompt, text, hasToo
   if (/(?:A\s*股|a\s*股).{0,16}异动|异动.{0,16}(?:A\s*股|a\s*股)/u.test(String(prompt || ""))
     && !/(?:样本|代表性|全市场)/u.test(rawText)) {
     return "a-share-anomaly-answer-missing-sample-boundary";
+  }
+  if (/NBA.*总决赛/iu.test(String(prompt || "")) && /几场|总比分/u.test(String(prompt || ""))) {
+    const seriesText = rawText.replaceAll("**", "");
+    const headline = seriesText.match(/总决赛[^\n]{0,80}?(?<!\d)(\d{1,2})\s*[-–—:：比]\s*(\d{1,2})(?!\d)[^\n]{0,50}?(\d{1,2})\s*场/u);
+    const countFirst = seriesText.match(/总决赛[^\n]{0,80}?(?<!\d)(\d{1,2})\s*场[^\n]{0,50}?(?<!\d)(\d{1,2})\s*[-–—:：比]\s*(\d{1,2})(?!\d)/u);
+    const hasHeadlineTotal = (headline && Number(headline[1]) + Number(headline[2]) === Number(headline[3]))
+      || (countFirst && Number(countFirst[2]) + Number(countFirst[3]) === Number(countFirst[1]));
+    const hasWinLossSummary = /(?:总比分|大比分|系列赛|总决赛)[\s\S]{0,120}\d+\s*胜\s*\d+\s*负/u.test(seriesText);
+    const hasNamedSeriesScore = /(?:总比分|大比分|系列赛|夺冠|赢得|获胜).{0,45}\d+\s*[-–—:：比]\s*\d+|\d+\s*[-–—:：比]\s*\d+.{0,30}(?:总比分|大比分|系列赛|夺冠|赢得|获胜)/u.test(seriesText);
+    if (!/(?:\d+|[一二三四五六七八九十]+)\s*场/u.test(seriesText) || !(hasHeadlineTotal || hasWinLossSummary || hasNamedSeriesScore)) {
+      return "nba-finals-answer-missing-series-summary";
+    }
   }
   if (hasStaleCrossDomainLeak(prompt, rawText)) {
     return "answer-leaked-unrelated-domain-context";

@@ -1,6 +1,7 @@
 import type { RuntimeInstructionFrame } from "../../shared/runtime-instruction-frames.js";
 import type { CodeContext } from "./code-context.js";
 import type { ToolRunContext } from "./tools/types.js";
+import { TASK_TOOL_POLICY } from "../../shared/task-tool-policy.js";
 
 export interface CodeRuntimeFrameInput {
   context: CodeContext;
@@ -18,6 +19,7 @@ export function buildCodeRuntimeFrames(input: CodeRuntimeFrameInput): RuntimeIns
         "The default online route is Step 5 Preview (256K context; high reasoning with a 48K reasoning/generation budget) through the local Lynn Brain router. Local manager routing is explicit and experimental, not the default code execution path.",
         "Step 5 Preview is the text/coding head route; image/audio/video are routed by the local Brain to its vision/voice backends. Keep responses in the user's language.",
         "You help with repository-level coding tasks from the terminal.",
+        TASK_TOOL_POLICY,
         "You may request local tools using exactly one JSON object and no prose:",
         '{"tool":"update_plan|read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',
         "For non-trivial tasks, first call update_plan/TodoWrite with items and statuses pending/in_progress/completed, then update it as work progresses.",

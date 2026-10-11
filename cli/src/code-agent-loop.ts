@@ -1,4 +1,5 @@
 import { streamBrainChat, type BrainStreamEvent, type ChatMessage } from "./brain-client.js";
+import { brainToolEvidenceMessages } from "../../shared/brain-tool-evidence.js";
 import { formatBrainErrorForHuman, renderBrainEventForHuman, summarizeUsage, thinkingStatusLabel, type HumanBrainRenderState } from "./brain-render.js";
 import { buildCodePrompt, type CodeContext } from "./code-context.js";
 import { buildCodeRuntimeFrames } from "./code-runtime-frames.js";
@@ -24,7 +25,6 @@ import { checkPlanContract, defaultToolBudget, checkToolBudget } from "./code-pl
 import { createWorkspaceSnapshot, recordWorkspaceSnapshotForRequest, restoreWorkspaceSnapshot, autoRollbackEnabled, type WorkspaceSnapshot } from "./code-snapshot.js";
 import { selfVerifyEnabled, buildSelfVerifyPrompt, parseSelfVerifyVerdict, formatSelfVerifyCritique } from "./code-self-verify.js";
 import { applyWorkingCheckpoint, formatWorkingCheckpointFrame, workingCheckpointObservation } from "./code-working-checkpoint.js";
-import { buildEvidenceSafetyAnswer } from "../../shared/evidence-safety-answer.js";
 import type { CodexAppServerProtocol } from "./codex-harness-selection.js";
 import {
   classifyAgentRunError,
@@ -783,14 +783,20 @@ async function collectBrainText(inputData: {
   const spinner = new TerminalSpinner(process.stderr, inputData.label, { danger: inputData.danger });
   const renderState: HumanBrainRenderState = {};
   const startedAt = Date.now();
-  const emitEvidenceSafetyAnswer = (): boolean => {
-    if (text.trim()) return false;
-    const answer = buildEvidenceSafetyAnswer([...inputData.messages, ...brainEvidenceMessages]);
-    if (!answer) return false;
-    text = answer;
-    inputData.onEvent?.({ type: "assistant.delta", text: answer });
-    if (inputData.json) writeJsonLine({ type: "assistant.delta", ts: nowIso(), text: answer, fallback: "evidence_safety" });
-    return true;
+  const recoverModelAnswer = async (): Promise<BrainTextResult | null> => {
+    const messages = [...inputData.messages, ...brainEvidenceMessages];
+    if (inputData.noTools || inputData.signal?.aborted || text.trim() || streamedToolCalls.toToolCalls().length
+      || !messages.some((message) => message.role === "tool")) return null;
+    const recovered = await collectBrainText({
+      ...inputData,
+      messages: [...messages, {
+        role: "user",
+        content: "请基于上文完整工具结果回答原问题，不再调用工具。自行判断相关性，区分事实、预测与证据不足，忽略无关搜索噪声，不得编造或复述工具日志。",
+      }],
+      noTools: true,
+    });
+    if (!recovered.text.trim() || recovered.toolCalls.length) throw new Error("模型未能根据工具结果生成最终答案，请重试。");
+    return { ...recovered, usageRecords: [...usageRecords, ...recovered.usageRecords] };
   };
   if (!inputData.json && !inputData.onEvent) spinner.start();
   try {
@@ -800,6 +806,7 @@ async function collectBrainText(inputData: {
       messages: inputData.messages,
       fallbackProvider: inputData.fallbackProvider,
       tools: inputData.noTools ? undefined : codeToolDefinitions(),
+      toolChoice: inputData.noTools ? "none" : undefined,
       signal: inputData.signal,
     })) {
       const renderReasoning = shouldRenderReasoning(inputData.reasoning.display, inputData.json);
@@ -818,8 +825,13 @@ async function collectBrainText(inputData: {
       if (event.type === "tool_call.delta") streamedToolCalls.append(event);
       if (event.type === "provider") inputData.onEvent?.({ type: "provider", provider: event.activeProvider });
       if (event.type === "tool_progress") {
-        const evidenceMessage = evidenceMessageFromToolProgress(event);
-        if (evidenceMessage) brainEvidenceMessages.push(evidenceMessage);
+        const evidenceMessages = brainToolEvidenceMessages(event);
+        if (evidenceMessages.length) {
+          inputData.messages.push(...evidenceMessages);
+        } else {
+          const evidenceMessage = evidenceMessageFromToolProgress(event);
+          if (evidenceMessage) brainEvidenceMessages.push(evidenceMessage);
+        }
         inputData.onEvent?.({ type: "tool.progress", message: [event.name, event.event].filter(Boolean).join(" ") });
       }
       if (event.type === "usage") usageRecords.push({ usage: event.usage, durationMs: Date.now() - startedAt });
@@ -828,7 +840,8 @@ async function collectBrainText(inputData: {
         else writeJsonLine({ ...event, ts: nowIso() });
       }
       if (event.type === "brain.error") {
-        if (emitEvidenceSafetyAnswer()) break;
+        const recovered = await recoverModelAnswer();
+        if (recovered) return recovered;
         throw new Error(formatBrainErrorForHuman(event.error, event.code));
       }
       if (!inputData.json && event.type !== "assistant.delta" && event.type !== "reasoning.delta") {
@@ -859,7 +872,8 @@ async function collectBrainText(inputData: {
   } finally {
     spinner.stop();
   }
-  emitEvidenceSafetyAnswer();
+  const recovered = await recoverModelAnswer();
+  if (recovered) return recovered;
   return { text, usageSummary, usageRecords, toolCalls: streamedToolCalls.toToolCalls() };
 }
 

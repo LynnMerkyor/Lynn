@@ -1,12 +1,246 @@
 import { describe, expect, it } from "vitest";
-import { additionalDialogueQualityReason, claimsFreshToolEvidence } from "../scripts/dialogue-quality-rules.mjs";
+import { hasUsdCnyRate } from "../scripts/dialogue-quality-rules.mjs";
+import { deniesAvailableToolCapability, additionalDialogueQualityReason, claimsFreshToolEvidence, containsMislabeledRelativeDate, containsPastDateFutureStartContradiction, hasVerifiedEmptySportsResult, hasVerifiedEmptySportsWindow, hasVerifiedNoFixturePredictionAnswer, omitVerifiedSportsFetchWindows, overridesVerifiedEmptySportsWindow } from "../scripts/dialogue-quality-rules.mjs";
 
 describe("dialogue quality rules", () => {
+  it.each([
+    '1 美元 = **6.6925** 人民币',
+    '1 USD = `6.692129` CNY',
+    'USD/CNY：6.6925',
+    '美元兑人民币汇率约为6.6925元。',
+  ])('recognizes rates independently of Markdown presentation: %s', (text) => {
+    expect(hasUsdCnyRate(text)).toBe(true);
+  });
+
+  it.each([
+    'USD/CNY：2026-10-11，未取得汇率。',
+    '美元兑人民币，2026年10月11日暂无数据。',
+    'USD/CNY 请求失败，错误码429。',
+    '1美元的报价暂不可用，已查询2个来源。',
+  ])('does not treat dates or error counters as rates: %s', (text) => {
+    expect(hasUsdCnyRate(text)).toBe(false);
+  });
+
+  it.each([
+    'Lynn CLI 的工具集中暂未包含天气查询功能。',
+    '当前工具不支持实时查询股价。',
+    '没有汇率查询工具。',
+  ])('still rejects explicit denial of declared tools: %s', (text) => {
+    expect(deniesAvailableToolCapability(text)).toBe(true);
+  });
+
+  it.each([
+    'ECB 为日度官方参考汇率，不能替代银行结售汇牌价或实时成交价。',
+    '搜索源返回429和超时，本次无法取得实时板块排行。',
+    '当前工具只返回指数样本，无法判断实时全市场异动。',
+    '没有拿到天气数据，工具返回上游错误。',
+  ])('does not mistake data scope for missing tool capability: %s', (text) => {
+    expect(deniesAvailableToolCapability(text)).toBe(false);
+  });
+
+  it("accepts declining a prediction only when the requested empty window is verified", () => {
+    const result = {
+      prompt: "预测今晚比赛比分", currentDate: "2026-10-09",
+      assistantText: "今晚没有比赛可预测，所以给不出比分。",
+      toolEvents: [{ name: "sports_score", event: "end", ok: true, details: [
+        "provider: espn_scoreboard", "directSourceStatus: ok", "matched: 0",
+        "dateRange: 20261009-20261010",
+        "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20261009",
+      ] }],
+    };
+    expect(hasVerifiedNoFixturePredictionAnswer(result)).toBe(true);
+    expect(hasVerifiedNoFixturePredictionAnswer({ ...result, assistantText: "今晚没有比赛，所以不存在可以预测的比分。" })).toBe(true);
+    expect(hasVerifiedNoFixturePredictionAnswer({ ...result, toolEvents: [] })).toBe(false);
+    expect(hasVerifiedNoFixturePredictionAnswer({ ...result, toolEvents: [{ ...result.toolEvents[0], ok: false }] })).toBe(false);
+    expect(hasVerifiedNoFixturePredictionAnswer({ ...result, currentDate: "2026-10-11" })).toBe(false);
+    expect(hasVerifiedNoFixturePredictionAnswer({ ...result, assistantText: "今晚没有比赛，但预测比分为 2-1。" })).toBe(false);
+    expect(hasVerifiedNoFixturePredictionAnswer({ ...result, assistantText: "赛事已结束，无法预测比分。" })).toBe(false);
+  });
+
+  it("separates source timestamps from relative forecast dates without allowing incorrect dates", () => {
+    const prompt = "深圳明天下雨吗？";
+    const text = "明天（2026-10-10）深圳不下雨。中国气象局数据（更新时间 2026-10-09 23:20）显示：明天白天晴。";
+    expect(containsMislabeledRelativeDate(prompt, text, "2026-10-09")).toBe(false);
+    expect(containsMislabeledRelativeDate(prompt, text.replace("明天（2026-10-10）", "明天（2026-10-09）"), "2026-10-09")).toBe(true);
+    expect(containsMislabeledRelativeDate(prompt, "更新时间2026-10-09，明天2026-10-11有雨。", "2026-10-09")).toBe(true);
+    expect(containsMislabeledRelativeDate(prompt, "截至2026年10月9日23时发布：明天2026年10月10日晴。", "2026-10-09")).toBe(false);
+    expect(containsMislabeledRelativeDate(prompt, "2026-10-09明天有雨。", "2026-10-09")).toBe(true);
+    expect(containsMislabeledRelativeDate("昨晚比赛结果", "昨晚2026-10-07没有比赛。", "2026-10-09")).toBe(true);
+    expect(containsMislabeledRelativeDate("今晚比赛结果", "今晚2026-10-10凌晨的比赛。", "2026-10-09")).toBe(false);
+    expect(containsMislabeledRelativeDate(prompt, "明天2027-01-01有雨。", "2026-12-31")).toBe(false);
+  });
+
+  it.each([
+    '2026年10月9日–11日（含昨晚10月10日）没有比赛。',
+    '2026-10-09至2026-10-11（包含昨晚2026-10-10）没有比赛。',
+    '2026年10月9日至12日(覆盖明天10月12日)的天气查询。',
+    '2026年10月9日至12日（包括今天10月11日）的行情。',
+  ])('does not equate a containing interval with its explicitly dated relative day: %s', (text) => {
+    expect(containsMislabeledRelativeDate('今天明天昨晚的情况', text, '2026-10-11')).toBe(false);
+  });
+
+  it.each([
+    '昨晚是2026年10月9日–11日（含昨晚10月10日）。',
+    '2026年10月9日–11日（含昨晚10月9日）没有比赛。',
+    '2026年10月9日（也就是昨晚）没有比赛。',
+    '2026年10月9日昨晚没有比赛。',
+    '明天2026-10-11有雨，查询范围2026-10-09至2026-10-12（包含明天）。',
+  ])('still rejects wrong explicit day bindings even around containment clauses: %s', (text) => {
+    expect(containsMislabeledRelativeDate('今天明天昨晚的情况', text, '2026-10-11')).toBe(true);
+  });
+
+  it("separates verified fetch buffers from answer dates without hiding wrong conclusions", () => {
+    const event = { name: "sports_score", event: "end", ok: true, details: [
+      "directSourceStatus: ok",
+      "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20261007-20261010",
+    ] };
+    const text = "昨晚（2026年10月8日）没有比赛。\n赛事数据源（ESPN）：查询了2026-10-07至2026-10-10。";
+    const normalized = omitVerifiedSportsFetchWindows(text, [event]);
+    expect(normalized).toContain("2026年10月8日");
+    expect(normalized).not.toContain("2026-10-07");
+    expect(omitVerifiedSportsFetchWindows(text, [])).toBe(text);
+    expect(omitVerifiedSportsFetchWindows(text, [{ ...event, ok: false }])).toBe(text);
+    const wrong = "ESPN显示昨晚是2026-10-07至2026-10-10，没有比赛。";
+    expect(omitVerifiedSportsFetchWindows(wrong, [event])).toBe(wrong);
+    const wrongWindow = "赛事数据源（ESPN）：查询了2026-10-06至2026-10-11。";
+    expect(omitVerifiedSportsFetchWindows(wrongWindow, [event])).toBe(wrongWindow);
+    expect(omitVerifiedSportsFetchWindows("根据工具核查结果（ESPN，2026-10-07 至 10-10）：", [event])).not.toContain("2026-10-07");
+  });
+
+  it("keeps relative-date conclusions distinct from explicitly verified query windows", () => {
+    const event = { name: "sports_score", event: "end", ok: true, details: [
+      "directSourceStatus: ok", "dateRange: 20261009-20261011",
+      "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20261008-20261012",
+    ] };
+    const text = "昨晚（北京时间2026年10月10日）没有比赛。\n查询范围：北京时间2026-10-09至2026-10-11（含昨晚10-10），数据源为ESPN。";
+    const normalized = omitVerifiedSportsFetchWindows(text, [event]);
+    expect(normalized).toContain("2026年10月10日");
+    expect(normalized).toContain("（含昨晚10-10）");
+    expect(containsMislabeledRelativeDate("昨晚比赛", normalized, "2026-10-11")).toBe(false);
+    expect(containsMislabeledRelativeDate("昨晚比赛", normalized.replace("2026年10月10日", "2026年10月9日"), "2026-10-11")).toBe(true);
+    expect(omitVerifiedSportsFetchWindows(text, [])).toBe(text);
+    expect(omitVerifiedSportsFetchWindows(text, [{ ...event, ok: false }])).toBe(text);
+    expect(omitVerifiedSportsFetchWindows(text, [{ ...event, details: event.details.filter((line) => !line.startsWith("dateRange:")) }])).toBe(text);
+    const wrongWindow = text.replace("2026-10-09至", "2026-10-07至");
+    expect(omitVerifiedSportsFetchWindows(wrongWindow, [event])).toBe(wrongWindow);
+    const wrongClaim = "ESPN显示昨晚是2026-10-09至2026-10-11，没有比赛。";
+    expect(omitVerifiedSportsFetchWindows(wrongClaim, [event])).toBe(wrongClaim);
+  });
+
+  it("recognizes verified yearless query buffers without relabeling tonight", () => {
+    const event = { name: "sports_score", event: "end", ok: true, details: [
+      "directSourceStatus: ok", "dateRange: 20261011-20261011",
+      "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20261010-20261012",
+    ] };
+    const text = "今晚（2026年10月11日）没有比赛。ESPN查询10月10日至10月12日（含今晚及前后各一天的时区缓冲窗口），均未匹配到比赛。";
+    const normalized = omitVerifiedSportsFetchWindows(text, [event]);
+    expect(normalized).toContain("今晚（2026年10月11日）");
+    expect(normalized).toContain("含今晚及前后各一天");
+    expect(containsMislabeledRelativeDate("今晚比赛", normalized, "2026-10-11")).toBe(false);
+    expect(containsMislabeledRelativeDate("今晚比赛", normalized.replace("2026年10月11日", "2026年10月10日"), "2026-10-11")).toBe(true);
+    expect(omitVerifiedSportsFetchWindows(text, [])).toBe(text);
+    const wrong = "今晚（10月10日至10月12日）没有比赛。";
+    expect(omitVerifiedSportsFetchWindows(wrong, [event])).toBe(wrong);
+    expect(containsMislabeledRelativeDate("今晚比赛", wrong, "2026-10-11")).toBe(true);
+  });
+
+  it("distinguishes verified Markdown query-window cells from date conclusions", () => {
+    const event = { name: "sports_score", event: "end", ok: true, details: [
+      "directSourceStatus: ok", "dateRange: 20261010-20261012",
+      "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20261009-20261013",
+    ] };
+    const text = "今晚（2026-10-11）无比赛。\n| 检索范围 | 结果 |\n|---|---|\n| 2026-10-09 ~ 10-13(含今晚) | 0场 |";
+    const normalized = omitVerifiedSportsFetchWindows(text, [event]);
+    expect(normalized).toContain("[已核验的查询窗口](含今晚)");
+    expect(containsMislabeledRelativeDate("今晚比赛", normalized, "2026-10-11")).toBe(false);
+    expect(containsMislabeledRelativeDate("今晚比赛", normalized.replace("今晚（2026-10-11）", "今晚（2026-10-09）"), "2026-10-11")).toBe(true);
+    expect(omitVerifiedSportsFetchWindows(text, [])).toBe(text);
+    expect(omitVerifiedSportsFetchWindows(text, [{ ...event, ok: false }])).toBe(text);
+    for (const wrong of [text.replace("检索范围", "比赛日期"), text.replace("| 2026-10-09", "| 今晚是2026-10-09"), text.replace("10-13(含今晚)", "10-14(含今晚)")]) {
+      expect(omitVerifiedSportsFetchWindows(wrong, [event])).toBe(wrong);
+    }
+    const wrongConclusion = text.replace("0场", "今晚是2026-10-09");
+    expect(containsMislabeledRelativeDate("今晚比赛", omitVerifiedSportsFetchWindows(wrongConclusion, [event]), "2026-10-11")).toBe(true);
+    const wrongOutsideTable = text + "\n\n| 2026-10-09 ~ 10-13(含今晚) |";
+    expect(omitVerifiedSportsFetchWindows(wrongOutsideTable, [event])).toContain("\n\n| 2026-10-09 ~ 10-13(含今晚) |");
+  });
+
+  it("accepts an empty sports window only with successful, dated, direct-source evidence", () => {
+    const result = {
+      prompt: "昨晚世界杯最新的比赛结果", currentDate: "2026-10-09",
+      assistantText: "北京时间昨晚没有世界杯比赛，共 0 场，不能编造比分。",
+      toolEvents: [{ name: "sports_score", event: "end", ok: true, details: [
+        "provider: espn_scoreboard", "directSourceStatus: ok", "matched: 0",
+        "dateRange: 20261008-20261009",
+        "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20261008",
+      ] }],
+    };
+    expect(hasVerifiedEmptySportsResult(result)).toBe(true);
+    expect(hasVerifiedEmptySportsWindow({ ...result, assistantText: "历史决赛 Alpha 2-1 Beta。" })).toBe(true);
+    const historical = { name: "sports_score", event: "end", ok: true, details: [
+      "provider: espn_scoreboard", "directSourceStatus: ok", "matched: 4",
+      "dateRange: 20260701-20260731",
+      "source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=950&dates=20260701-20260731",
+    ] };
+    const mixed = { ...result, toolEvents: [...result.toolEvents, historical] };
+    expect(overridesVerifiedEmptySportsWindow({ ...mixed, assistantText: "7月19日历史决赛 Alpha 2-1 Beta。" })).toBe(true);
+    expect(overridesVerifiedEmptySportsWindow(mixed)).toBe(false);
+    expect(overridesVerifiedEmptySportsWindow({ ...result, toolEvents: [historical] })).toBe(false);
+    expect(hasVerifiedEmptySportsWindow({ ...result, prompt: "今天世界杯最新比赛结果", toolEvents: [{ ...result.toolEvents[0], details: result.toolEvents[0].details.map((line) => line.replace("20261008-20261009", "20261008-20261008")) }] })).toBe(false);
+    const parallel = { name: "parallel_research", event: "end", ok: true, details: [
+      `subtool: ${JSON.stringify({ name: "sports_score", ok: true, details: result.toolEvents[0].details })}`,
+    ] };
+    expect(hasVerifiedEmptySportsResult({ ...result, toolEvents: [parallel] })).toBe(true);
+    expect(hasVerifiedEmptySportsResult({ ...result, toolEvents: [{ ...parallel, ok: false }] })).toBe(false);
+    expect(hasVerifiedEmptySportsResult({ ...result, toolEvents: [{ ...parallel, details: [
+      `subtool: ${JSON.stringify({ name: "sports_score", ok: false, details: result.toolEvents[0].details })}`,
+    ] }] })).toBe(false);
+    expect(hasVerifiedEmptySportsResult({ ...result, toolEvents: [{ ...result.toolEvents[0], details: result.toolEvents[0].details.map((line) => line.replace("20261008-20261009", "20261008-20261008")) }] })).toBe(true);
+    expect(hasVerifiedEmptySportsResult({ ...result, toolEvents: [] })).toBe(false);
+    expect(hasVerifiedEmptySportsResult({ ...result, toolEvents: [{ ...result.toolEvents[0], ok: false }] })).toBe(false);
+    expect(hasVerifiedEmptySportsResult({ ...result, assistantText: "数据源故障，未能查询赛果。" })).toBe(false);
+    for (const replacement of [
+      ["directSourceStatus: ok", "directSourceStatus: unavailable"],
+      ["directSourceStatus: ok", "directSourceStatus: fallback_static_schedule"],
+      ["dateRange: 20261008-20261009", "dateRange: 20260601-20260630"],
+      ["dateRange: 20261008-20261009", "dateRange: 20261007-20261007"],
+      [result.toolEvents[0].details[4], "source: https://example.com/search?q=WorldCup"],
+    ]) {
+      const details = result.toolEvents[0].details.map((line) => line === replacement[0] ? replacement[1] : line);
+      expect(hasVerifiedEmptySportsResult({ ...result, toolEvents: [{ ...result.toolEvents[0], details }] })).toBe(false);
+    }
+  });
+
+  it("distinguishes verified absence from a past-date future-start contradiction", () => {
+    const text = "昨晚（2026年10月8日）没有世界杯比赛，暂无赛果。";
+    expect(containsPastDateFutureStartContradiction(text, "2026-10-09")).toBe(false);
+    for (const stale of ["要到2026年6月11日才开赛，目前暂无赛果。", "要到 **2026年6月11日~7月19日** 才开打。", "要到2026-10-08才开赛。"]) {
+      expect(containsPastDateFutureStartContradiction(stale, "2026-10-09")).toBe(true);
+    }
+    expect(containsPastDateFutureStartContradiction("今天2026-10-09，要到2027年6月11日才开赛。", "2026-10-09")).toBe(false);
+    expect(containsPastDateFutureStartContradiction("要到2026年10月9日才开赛。", "2026-10-09")).toBe(false);
+  });
+
   it("only flags explicit live-result claims as tool evidence", () => {
     expect(claimsFreshToolEvidence("根据查询结果，深圳今天有阵雨。")).toBe(true);
     expect(claimsFreshToolEvidence("搜索结果显示该政策已于今天发布。")).toBe(true);
     expect(claimsFreshToolEvidence("上下文可包含检索到的参考资料和当前输入。")).toBe(false);
     expect(claimsFreshToolEvidence("可以检索相关资料后再做判断。")).toBe(false);
+  });
+
+  it("requires a finals series summary rather than accepting unrelated game scores", () => {
+    const task = { prompt: "NBA 总决赛打了几场，总比分如何？", category: "realtime", hasToolEvidence: true };
+    expect(additionalDialogueQualityReason({ ...task, text: "共查到 23 场比赛：Alpha 110-104 Beta。" })).toBe("nba-finals-answer-missing-series-summary");
+    expect(additionalDialogueQualityReason({ ...task, text: "已核实该赛季总决赛打了 7 场，系列赛总比分 4-3。" })).toBe("");
+    expect(additionalDialogueQualityReason({ ...task, text: "**NBA 总决赛：Alpha 4–1 Beta（共 5 场）**" })).toBe("");
+    expect(additionalDialogueQualityReason({ ...task, text: "**2026 年 NBA 总决赛：5 场结束，Alpha 4-1 Beta。**" })).toBe("");
+    expect(additionalDialogueQualityReason({ ...task, text: "NBA 总决赛打了2场，Alpha 1:1 Beta。" })).toBe("");
+    expect(additionalDialogueQualityReason({ ...task, text: "NBA 总决赛：7场结束，Alpha 4比3 Beta。" })).toBe("");
+    expect(additionalDialogueQualityReason({ ...task, text: "NBA 总决赛：6场结束，Alpha 4-1 Beta。" })).toBe("nba-finals-answer-missing-series-summary");
+    expect(additionalDialogueQualityReason({ ...task, text: "NBA 总决赛：5场结束，Alpha 110-104 Beta。" })).toBe("nba-finals-answer-missing-series-summary");
+    expect(additionalDialogueQualityReason({ ...task, text: "系列赛共进行 **5 场**，Alpha 以 **4 胜 1 负** 夺冠。" })).toBe("");
+    expect(additionalDialogueQualityReason({ ...task, text: "NBA 总决赛数据：Alpha 110-104 Beta，共 23 场。" })).toBe("nba-finals-answer-missing-series-summary");
+    expect(additionalDialogueQualityReason({ ...task, text: "NBA 总决赛：Alpha 4-1 Beta，共 23 场。" })).toBe("nba-finals-answer-missing-series-summary");
   });
 
   it("does not treat a relevant Claude Code product mention as stale context", () => {

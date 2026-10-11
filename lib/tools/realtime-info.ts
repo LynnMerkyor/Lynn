@@ -1376,20 +1376,23 @@ export function createSportsScoreTool() {
     name: "sports_score",
     label: zhOrEn("体育比分", "Sports scores"),
     description: zhOrEn(
-      "查询比分或赛程。你必须自己判断联赛并填 league：fifa.world、nba、mlb、nhl。不要把队名交给工具猜联赛。",
-      "Look up scores or fixtures. You must identify the league and pass league: fifa.world, nba, mlb, or nhl.",
+      "查询比分或赛程。你判断联赛、日期范围和球队并填写参数；历史比赛应使用实际比赛日期，不是当前一周。直连源失败时可继续搜索核验官方来源。",
+      "Look up scores or fixtures. Identify the league, date range and teams yourself. Resolve historical event dates; use search to verify official sources if the direct source fails.",
     ),
     parameters: Type.Object({
       league: Type.String({ description: zhOrEn("你判断的联赛：fifa.world | nba | mlb | nhl", "League you identified: fifa.world | nba | mlb | nhl") }),
-      query: Type.String({ description: zhOrEn("原问题，只用于日期和球队过滤", "Original question, only for date and team filters") }),
+      date_from: Type.String({ description: "First Beijing calendar date you identified, YYYY-MM-DD" }),
+      date_to: Type.String({ description: "Last Beijing calendar date you identified, YYYY-MM-DD; daily fallback supports up to 31 days per query" }),
+      teams: Type.Optional(Type.Array(Type.String({ description: "Exact team name returned by the source, usually English; omit the filter first if unknown" }))),
+      query: Type.String({ description: zhOrEn("原问题，用于上下文；历史比赛请填写结构化日期", "Original question for context; supply structured dates for historical events") }),
       maxResults: Type.Optional(Type.Number({ default: 5 })),
     }),
-    execute: async (_toolCallId: string, params: BasicToolParams & { league?: string }): Promise<ToolTextResult> => {
+    execute: async (_toolCallId: string, params: BasicToolParams & { league?: string; date_from?: string; date_to?: string; teams?: string[] }): Promise<ToolTextResult> => {
       const query = compactLine(params.query);
       const league = compactLine(params.league);
       let directError = "";
       try {
-        const direct = await fetchSportsScoreboardEvidence(query, { league });
+        const direct = await fetchSportsScoreboardEvidence(query, params);
         if (direct) {
           return {
             content: [{ type: "text", text: direct.text }],

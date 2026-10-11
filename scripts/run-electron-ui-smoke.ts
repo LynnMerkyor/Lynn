@@ -426,7 +426,8 @@ async function main(): Promise<void> {
           await waitForExpression(cdp, `document.querySelector('[data-local-model-smoke]').dataset.helpClicked === 'true'`);
           const failures: string[] = [];
           const expected = state === 'q2' ? ['13.28 GB', '4K'] : ['17.30 GB', '8K'];
-          if (state === 'unknown') expected.push('已了解显存要求，手动选择此方案');
+          expected.push('低于 14GiB 不能安装', '13GB 容量不足');
+          if (state === 'unknown') expected.push('手动选档不能跳过显存检查');
           for (const text of expected) if (!snapshot.text.includes(text)) failures.push(`missing setup text: ${text}`);
           if (!snapshot.value.includes(state === 'q2' ? '-q2-' : '-q3-')) failures.push('selected tier mismatch');
           if (snapshot.contrast < 4.5) failures.push(`select contrast ${snapshot.contrast.toFixed(2)} below 4.5`);

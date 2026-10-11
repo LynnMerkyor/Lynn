@@ -451,11 +451,30 @@ function summarizeToolResult(toolName: string, result: unknown): { summary?: str
   const parsed = parseJsonObject(raw);
   if (parsed?.error) return { summary: compactText('error: ' + String(parsed.error), 180), details: [compactText(raw, 500)] };
 
+  if (toolName === 'parallel_research' && Array.isArray(parsed?.results)) {
+    const children = parsed.results.filter((entry) => entry && typeof entry === 'object') as Record<string, unknown>[];
+    return {
+      summary: `并行查询: ${children.filter((entry) => entry.ok === true).length}/${children.length} 个子查询成功`,
+      details: children.map((entry) => `subtool: ${JSON.stringify({
+        name: entry.tool,
+        ok: entry.ok === true && toolResultSucceeded(entry.result),
+        ...summarizeToolResult(String(entry.tool || ''), entry.result ?? entry.error),
+      })}`),
+    };
+  }
+
   const lines = raw
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((line) => !/^──.+──$/.test(line) && line !== '搜索结果:');
+
+  if (toolName === 'sports_score' && /provider:\s*espn_scoreboard/.test(raw)) {
+    return {
+      summary: compactText(lines.find((line) => line.startsWith('匹配比赛:')) || lines[0], 180),
+      details: lines.filter((line) => /^(?:provider|directSourceStatus|source|dateRange|matched):/.test(line)).map((line) => compactText(line, 500)),
+    };
+  }
 
   if (toolName === 'web_search') {
     if (parsed) {
@@ -634,6 +653,13 @@ function evidenceToolWeight(toolName: string, result: unknown): number {
   if (parsed) return hasGenericStructuredEvidence(parsed) ? 1 : 0;
   const meaningfulLines = raw.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).length;
   return compactText(raw, 500).length >= 40 || meaningfulLines >= 2 ? 1 : 0;
+}
+
+function toolResultSucceeded(result: unknown): boolean {
+  const raw = typeof result === 'string' ? result : JSON.stringify(result);
+  if (!raw?.trim()) return false;
+  const parsed = parseJsonObject(raw);
+  return !parsed?.error && parsed?.ok !== false && parsed?.status !== 'no_direct_source' && parsed?.directSourceStatus !== 'unavailable';
 }
 
 type ScoreboardRow = { time: string; matchup: string; result: string };
@@ -994,63 +1020,6 @@ function buildDeterministicOfficialModelAnswer(prompt: unknown, result: unknown)
   ].join('\n');
 }
 
-function extractGroundedEvidenceLedgers(messages: ChatMessage[]): Array<{ tool: string; lines: string[] }> {
-  const out: Array<{ tool: string; lines: string[] }> = [];
-  const isUsableLedgerLine = (line: string): boolean => {
-    const compacted = line.replace(/\s+/gu, ' ').trim();
-    if (!compacted) return false;
-    if (/^(?:摘要[:：]\s*)?error[:：]?/iu.test(compacted)) return false;
-    if (/(?:all search sources failed|no evidence returned|unusable result|empty result|no_direct_source|directSourceStatus.*unavailable)/iu.test(compacted)) return false;
-    if (/^\{/.test(compacted)) {
-      const parsed = parseJsonObject(compacted);
-      if (parsed && (parsed.ok === false || parsed.error || parsed.status === 'no_direct_source' || parsed.directSourceStatus === 'unavailable')) return false;
-    }
-    return true;
-  };
-  for (const message of messages) {
-    if (message.role !== 'tool') continue;
-    const text = typeof message.content === 'string' ? message.content : JSON.stringify(message.content || '');
-    const header = text.match(/【Lynn 工具证据 #\d+:\s*([^】]+)】/u);
-    if (!header) continue;
-    const tool = header[1].trim();
-    const ledgerMatch = text.match(/【证据账本】\n([\s\S]*?)(?:\n\n|$)/u);
-    const rawLedger = ledgerMatch?.[1] || '';
-    const lines = rawLedger
-      .split(/\r?\n/u)
-      .map((line) => line.replace(/^[-*]\s*/u, '').trim())
-      .filter(Boolean)
-      .filter(isUsableLedgerLine)
-      .slice(0, 5);
-    if (lines.length) out.push({ tool, lines });
-  }
-  return out;
-}
-
-function buildDeterministicGroundedEvidenceAnswer(messages: ChatMessage[]): string | null {
-  const ledgers = extractGroundedEvidenceLedgers(messages);
-  if (!ledgers.length) return null;
-  const lines: string[] = [];
-  const seen = new Set<string>();
-  for (const ledger of ledgers) {
-    for (const line of ledger.lines) {
-      const compacted = compactText(line, 320);
-      const key = `${ledger.tool}:${compacted}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      lines.push(`- ${ledger.tool}: ${compacted}`);
-      if (lines.length >= 8) break;
-    }
-    if (lines.length >= 8) break;
-  }
-  if (!lines.length) return null;
-  return [
-    '根据本轮已执行工具返回的证据，当前能确认：',
-    ...lines,
-    '',
-    '以上只包含工具结果中可见的事实；工具未返回或来源未覆盖的部分，不能继续补推。',
-  ].join('\n');
-}
-
 const GROUNDED_TOOL_NAMES = new Set([
   'web_search',
   'web_fetch',
@@ -1064,7 +1033,7 @@ const GROUNDED_TOOL_NAMES = new Set([
 ]);
 
 function isEvidenceHandoffEnabled(): boolean {
-  return process.env.BRAIN_V2_EVIDENCE_HANDOFF !== '0';
+  return process.env.BRAIN_V2_EVIDENCE_HANDOFF === '1';
 }
 
 function evidenceHandoffAfter(): number {
@@ -1088,9 +1057,9 @@ function isGroundedToolName(toolName: string | undefined): boolean {
 
 function buildEvidenceHandoffPrompt(toolCount: number): string {
   return [
-    `本轮已经获得约 ${toolCount} 条可用工具证据,请接手完成最终总结。`,
+    `本轮已经获得约 ${toolCount} 条可用工具证据,请接手继续处理用户原问题。`,
     currentTemporalContext(),
-    '不要再调用工具,不要重新搜索,只基于上文已有工具证据回答用户原问题。',
+    '先判断已有证据是否覆盖用户原问题。日历、时间锚点或单个样本不能替代用户要求的行情、比赛或其它事实；缺少核心证据时继续选择合适工具，并自行分析填写参数。证据充分后再给最终答案，不重复相同查询。',
     '如果上文候选模型已经说过结论或夹带旧知识,请忽略；工具证据和当前时间锚点是唯一事实来源。',
     '先把证据压缩成: 已知事实 / 来源口径 / 缺口 / 最终答案；最终只输出面向用户的答案。',
     '涉及“今天/明天/昨晚/今晚/最新/当前”等相对时间时,必须以当前时间锚点换算,不要把网页发布时间当成赛事/行情/天气日期。',
@@ -1114,11 +1083,13 @@ function buildTemporalCorrectionHandoffPrompt(toolCount: number, rejectedAnswer:
 
 function buildToolDenialCorrectionHandoffPrompt(toolCount: number, rejectedAnswer: string): string {
   return [
-    `本轮已经获得约 ${toolCount} 条可用工具证据,但上一个候选答案否认了已经执行过的工具能力,请接手修正并输出最终答案。`,
+    toolCount > 0
+      ? `本轮已经获得约 ${toolCount} 条可用工具证据,但上一个候选答案否认了已经执行过的工具能力,请接手修正并输出最终答案。`
+      : '本轮已经提供可用查询工具，但上一个候选答案没有尝试调用就声称不具备这些能力。请分析原问题并选择实际需要的工具核验。',
     currentTemporalContext(),
-    '不要再调用工具,不要重新搜索,只基于上文已有工具证据回答用户原问题。',
+    '已有证据充分时直接回答；核心事实尚未覆盖时继续选择合适工具核验，不重复相同查询。',
     `请忽略这个被拦截的候选答案: ${compactText(rejectedAnswer, 420)}`,
-    '重点检查: 上文已有工具证据账本；不要再说“没有查询工具”“工具不支持”“无法实时查询”。',
+    '重点检查: 不要声称已提供的工具不存在。工具可用不等于本次数据完整；允许如实说明上游错误、时间不匹配或无法确认实时数据。',
     '工具证据和当前时间锚点是唯一事实来源；如果证据仍不足,请明确说明缺少什么,不要把工具能力说成不存在。',
     '最终只输出面向用户的答案,不要输出内部计划、工具轨迹或“The user wants...”这类中间推理。',
   ].join('\n');
@@ -1140,8 +1111,10 @@ function formatToolResultContent(toolName: string, result: unknown, stepIndex: n
     raw,
     '',
     '【回答约束】请只基于上方工具证据回答当前事实、赛程、比分、价格、日期、数值和来源。',
-    '不要用旧知识或记忆补充工具证据里没有的具体事实；证据不足就明确说“工具结果中未查到”，并说明还需要继续检索。',
+    '不要用旧知识或记忆补充工具证据里没有的具体事实；核心证据不足时继续选择工具核验。用户未提供的航班号等补充条件，以及数据源不支持的其它统计口径，分别说明具体缺口，不把它们误报为整个查询失败。',
+    '最终答案必须显式说明证据覆盖范围和统计口径。只返回指数或个股报价时，明确这是样本而非全市场完整统计；不能用样本涨跌断言全市场没有异动。没有成交量、成交额或其比较数据时，不得推断缩量、放量、资金流入或流出。',
     '如果涉及相对时间,请用当前时间锚点换算；网页发布时间只能说明来源发布时间,不能直接当作比赛/行情/天气日期。',
+    '严格区分用户所问时间、工具查询范围和上游取数缓冲。dateRange 只是本次工具查询范围，可能由模型为检索而扩大，不等于用户所问时间；source URL 的 dates 还可能包含额外时区缓冲。相对时间始终依据原始用户问题与当前时间锚点换算，最终结论只针对该时间，不能把扩大窗口标成“昨天/昨晚/今天/今晚/明天”。需要列查询范围时单独标注它是检索覆盖范围；历史赛果不得替代用户所问时段的结论。',
     '若同一轮证据存在日期或事实冲突,请先指出冲突并给出最小可靠结论,不要拼接互相矛盾的结论。',
     '不要输出内部规划、英文自述或“The user wants...”这类中间推理文本。',
   ].filter((line): line is string => typeof line === 'string').join('\n');
@@ -1250,11 +1223,12 @@ async function runRound({
   skipProviders,
   sanitizeSynthesisOpening,
   bufferContent,
+  bufferToolCalls = false,
   attemptTimeoutCapMs,
   providerOrder,
   strictProviderOrder,
   augmentContext = true,
-}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache; skipProviders?: ReadonlySet<ProviderId>; sanitizeSynthesisOpening?: boolean; bufferContent?: boolean; attemptTimeoutCapMs?: number; augmentContext?: boolean }): Promise<RunRoundResult> {
+}: Required<Pick<RouterRunOptions, 'onChunk'>> & Omit<RouterRunOptions, 'onChunk'> & { requestCache?: SearchRequestCache; audioCache?: AudioRequestCache; skipProviders?: ReadonlySet<ProviderId>; sanitizeSynthesisOpening?: boolean; bufferContent?: boolean; bufferToolCalls?: boolean; attemptTimeoutCapMs?: number; augmentContext?: boolean }): Promise<RunRoundResult> {
   const errors: Array<{ providerId: ProviderId; error: string }> = [];
   // 2026-05-25 P0-1: track fallback chain so SSE consumer 可显示给 user
   // (例:"StepFun → Spark fallback"),不再让 cascade decision 对 UI 不可见。
@@ -1428,13 +1402,16 @@ async function runRound({
               if (d.function?.name) toolCallsAcc[idx].function.name += d.function.name;
               if (d.function?.arguments) toolCallsAcc[idx].function.arguments += d.function.arguments;
             }
-            await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
+            if (!bufferToolCalls) {
+              await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
+            }
             continue;
           }
           if (chunk.type === 'finish') {
             await flushSynthesisBuffer(true);
             await flushPseudoToolCarry();
             finishReason = chunk.reason;
+            if (bufferToolCalls && chunk.reason === 'tool_calls') continue;
             if (bufferContent && chunk.reason !== 'tool_calls') {
               bufferedFinishChunk = {
                 reason: chunk.reason || 'stop',
@@ -1556,6 +1533,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         ? []
         : mergeWithServerTools(tools, messages);
   let workingMessages: ChatMessage[] = [...(messages || [])];
+  const evidenceTools = mergedTools.filter((tool) => isGroundedToolName(tool.function?.name)).map((tool) => tool.function.name);
   if (internalLynnUxTurn) {
     workingMessages = [{
       role: 'system',
@@ -1671,7 +1649,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     );
     const toolResult = await executeServerTool(toolName, argsText, { log });
     const ms = Date.now() - started;
-    const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
+    const ok = toolResultSucceeded(toolResult);
     const toolSummary = summarizeToolResult(toolName, toolResult);
     await onChunk(
       { type: 'tool_progress', event: 'end', name: toolName, ms, ok: !!ok, argsSummary, ...toolSummary },
@@ -1722,7 +1700,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     );
     const toolResult = await executeServerTool(toolName, argsText, { log });
     const ms = Date.now() - started;
-    const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
+    const ok = toolResultSucceeded(toolResult);
     const toolSummary = summarizeToolResult(toolName, toolResult);
     await onChunk(
       { type: 'tool_progress', event: 'end', name: toolName, ms, ok: !!ok, argsSummary, ...toolSummary },
@@ -1775,29 +1753,14 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         skipProviders: skippedProviders,
         sanitizeSynthesisOpening: summarizeFromEvidenceOnly || hasGroundedEvidenceContext,
         bufferContent: shouldBufferProviderContent || hasCallableTools,
+        bufferToolCalls: manageServerTools,
         augmentContext: manageServerTools,
       });
     } catch (error) {
       if (strictProviderOrder || !manageServerTools) throw error;
-      const deterministicAnswer = buildDeterministicSportsEvidenceAnswer(workingMessages, turnUserPrompt);
-      if (deterministicAnswer) {
-        const providerId = (lastProviderId || 'deepseek-chat') as ProviderId;
-        log && log('warn', `all providers failed after sports evidence; emitting deterministic scoreboard fallback`);
-        await onChunk({ type: 'content', delta: deterministicAnswer }, { providerId });
-        await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
-        return { ok: true, providerId, iterations: iter };
-      }
-      const evidenceAnswer = buildDeterministicGroundedEvidenceAnswer(workingMessages);
-      if (evidenceAnswer) {
-        const providerId = (lastProviderId || 'deepseek-chat') as ProviderId;
-        log && log('warn', `all providers failed after grounded evidence; emitting deterministic evidence fallback`);
-        await onChunk({ type: 'content', delta: evidenceAnswer }, { providerId });
-        await onChunk({ type: 'finish', reason: 'stop' }, { providerId });
-        return { ok: true, providerId, iterations: iter };
-      }
       const recoveryOrder = [
-        'glm-5-turbo' as ProviderId,
         ...requestProviderOrder,
+        'glm-5-turbo' as ProviderId,
       ];
       const recoveryProviderId = Array.from(new Set(recoveryOrder)).find((candidateId) => {
         const candidate = getProvider(candidateId);
@@ -1820,10 +1783,10 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         ...workingMessages,
         {
           role: 'user',
-          content: '所有候选刚才都未在时限内完成。请用简洁结构直接回答原问题，不调用工具，不解释路由或重试过程。',
+          content: '此前候选未能完成有效答案。请基于上文完整工具结果简洁回答原问题，不调用工具，不解释路由或重试过程。区分可核验事实、缺少的数据和上游失败；无法确认实时数据时如实说明，不输出原始JSON、工具账本或编造结论。',
         },
       ];
-      log && log('warn', `all providers failed without grounded evidence; final recovery probe=${recoveryProviderId}`);
+      log && log('warn', `all providers failed; bounded model recovery probe=${recoveryProviderId}`);
       try {
         result = await runRound({
           messages: recoveryMessages,
@@ -1837,8 +1800,6 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
             thinking: { type: 'disabled' },
             max_tokens: 2_048,
           },
-          // Last chance exists to produce visible content, not another hidden
-          // reasoning trace. Prefer the non-thinking GLM lane and force off.
           reasoningEffort: 'off',
           requestCache,
           audioCache,
@@ -1847,6 +1808,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
           skipProviders: recoverySkip,
           sanitizeSynthesisOpening: false,
           bufferContent: true,
+          bufferToolCalls: manageServerTools,
           augmentContext: manageServerTools,
           attemptTimeoutCapMs: positiveEnvNumber('BRAIN_V2_LAST_CHANCE_TIMEOUT_MS', 20_000),
         });
@@ -1901,16 +1863,13 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     }
 
     // Model 自然结束 (stop / length / content_filter / function_call 等非 tool_calls) → 透传完成。
-    // 若已经有工具证据,但候选答案把当前/过去日期说成"未开赛/无比分/无结果",
-    // 这是典型的参数记忆覆盖工具证据。不要让该答案落地,直接交给下一模型基于
-    // 同一证据账本总结,避免关键词清单式补丁。
-    if (result.finishReason !== 'tool_calls' || result.toolCalls.length === 0) {
+    if (result.toolCalls.length === 0) {
       const visibleText = String(result.contentAccum || '').trim();
       if (
         visibleText
         && hasGroundedEvidenceContext
         && lastProviderId
-        && containsTemporalNoResultContradiction(visibleText)
+        && containsTemporalNoResultContradiction(visibleText, new Date())
       ) {
         log && log('warn', `provider ${lastProviderId} produced temporal no-result contradiction after grounded evidence; hand off to next provider`);
         skippedProviders.add(lastProviderId);
@@ -1923,13 +1882,12 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       }
       if (
         visibleText
-        && hasGroundedEvidenceContext
+        && (hasGroundedEvidenceContext || evidenceTools.length > 0)
         && lastProviderId
         && containsGroundedToolDenialContradiction(visibleText)
       ) {
         log && log('warn', `provider ${lastProviderId} denied available grounded tools after tool evidence; hand off to next provider`);
         skippedProviders.add(lastProviderId);
-        summarizeFromEvidenceOnly = true;
         workingMessages.push({
           role: 'user',
           content: buildToolDenialCorrectionHandoffPrompt(evidenceToolCount, visibleText),
@@ -1948,20 +1906,28 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       : result.toolCalls;
 
     // 客户端工具 (client 自己执行) → 透传 tool_calls 到客户端,loop 退出
-    if (clientCalls.length > 0) {
+    const forwardClientCalls = async (): Promise<RouterRunResult> => {
       log && log('info', `iter ${iter}: ${clientCalls.length} client-side tool_calls forwarded, stop loop`);
+      if (manageServerTools) {
+        await onChunk({
+          type: 'tool_call_delta',
+          delta: clientCalls.map((call, index) => ({ ...call, index })),
+        }, { providerId: result.providerId });
+        await onChunk({ type: 'finish', reason: 'tool_calls' }, { providerId: result.providerId });
+      }
       return {
         ok: true, providerId: lastProviderId, iterations: iter,
         forwardedToClient: true, clientToolCalls: clientCalls.length,
-        toolCalls: result.toolCalls,
+        toolCalls: clientCalls,
         bufferedContentChunks: [],
         bufferedFinishChunk: { type: 'finish', reason: 'tool_calls' },
       };
-    }
+    };
+    if (clientCalls.length > 0 && serverCalls.length === 0) return await forwardClientCalls();
 
     // 服务端工具 → brain 代执行,结果回灌 messages,下一轮再问 model
     log && log('info', `iter ${iter}: ${serverCalls.length} server-side tool_calls, executing...`);
-    workingMessages.push(assistantToolContinuationMessage(result));
+    workingMessages.push({ ...assistantToolContinuationMessage(result), tool_calls: serverCalls });
     // Phase 1 (serial): storm verdicts. Storm counting is order-dependent on the CALL sequence
     // only (name+args repetition), never on execution results, so verdicts are decided up front.
     // Hitting the storm ceiling aborts the round before executing the remaining tools.
@@ -2031,10 +1997,10 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
         );
         const toolResult = await executeServerTool(tc.function.name, tc.function.arguments || '{}', { log });
         const ms = Date.now() - t0;
-        const ok = toolResult && !String(toolResult).startsWith('{"error"') && !String(toolResult).startsWith('{"ok":false');
+        const ok = toolResultSucceeded(toolResult);
         const toolSummary = summarizeToolResult(tc.function.name, toolResult);
         await onChunk(
-          { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok, argsSummary, ...toolSummary },
+          { type: 'tool_progress', event: 'end', name: tc.function.name, ms, ok: !!ok, argsSummary, ...toolSummary, toolCall: tc, result: toolResult },
           { providerId: roundProviderId }
         );
         toolOutcomes[order] = { tc, toolResult };
@@ -2056,14 +2022,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       });
     }
     workingMessages = compactToolResults(workingMessages, toolResultCompactionConfig);
-    const deterministicSportsFactAnswer = evidenceToolCount > 0
-      ? buildDeterministicSportsFactAnswer(workingMessages, turnUserPrompt)
-      : null;
-    if (deterministicSportsFactAnswer) {
-      await onChunk({ type: 'content', delta: deterministicSportsFactAnswer }, { providerId: lastProviderId });
-      await onChunk({ type: 'finish', reason: 'stop' }, { providerId: lastProviderId });
-      return { ok: true, providerId: lastProviderId, iterations: iter };
-    }
+    if (clientCalls.length > 0) return await forwardClientCalls();
     if (
       isEvidenceHandoffEnabled()
       && !evidenceHandoffDone
@@ -2071,13 +2030,12 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       && lastProviderId
     ) {
       evidenceHandoffDone = true;
-      summarizeFromEvidenceOnly = true;
       skippedProviders.add(lastProviderId);
       workingMessages.push({
         role: 'user',
         content: buildEvidenceHandoffPrompt(evidenceToolCount),
       });
-      log && log('info', `iter ${iter}: grounded evidence budget reached (${evidenceToolCount}/${evidenceHandoffTarget}); hand off from ${lastProviderId} to next provider for synthesis`);
+      log && log('info', `iter ${iter}: grounded evidence budget reached (${evidenceToolCount}/${evidenceHandoffTarget}); hand off from ${lastProviderId} with tools available for continued verification`);
       continue;
     }
     if (toolRoundEffortDown && !clientPinnedReasoning) {

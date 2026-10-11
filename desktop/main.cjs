@@ -772,7 +772,7 @@ app.whenReady().then(async () => {
 
     // 2b. 2026-05-01 — 启动 voice tunnel manager(跨平台 ssh 隧道守护)
     //     macOS 已有 launchd watchdog 时自动 standby + 仅监控;Win/Linux 接管 spawn。
-    voiceTunnelController.start();
+    if (!uiTestIsolation.enabled) voiceTunnelController.start();
 
     // 2c. Local GGUF is opt-in. Qwen3.5-9B occupies several GB of VRAM/UMA,
     // so app startup must never spawn llama.cpp unless the user explicitly

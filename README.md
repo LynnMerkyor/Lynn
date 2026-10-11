@@ -25,7 +25,7 @@
 
 ## V0.87.1
 
-默认工作模型为 Step 5 Preview，实时语音为 stepaudio-2.5-realtime。天气、体育、财经工具只执行模型已经填好的参数，不再从整句问题里猜地点、联赛或代码。本地模型换成 Qwen3.8-27B Coder390：16GB 及以上默认 Q3，16GB 以下使用 Q2，两档内置 Q4 MTP。GUI 与 CLI 版本统一为 V0.87.1。
+默认工作模型为 Step 5 Preview，实时语音为 stepaudio-2.5-realtime。天气、体育、财经工具只执行模型已经填好的参数，不再从整句问题里猜地点、联赛或代码。本地模型换成 Qwen3.8-27B Coder390：24GB 及以上默认 Q3，24GB 以下（16GB 档）使用 Q2，两档内置 Q4 MTP。GUI 与 CLI 版本统一为 V0.87.1。
 
 ## 生态入口
 
@@ -37,11 +37,22 @@
 
 ## 🧠 第一部分 · 引擎与模型
 
-### ① StepFun 默认主链 + 实时语音 + 本地编排器储备
+### ① Step 5 云端主链 + Qwen3.8-27B Coder390 本地模型
 
-v0.85 的 GUI / CLI 默认对话与任务执行统一走 **StepFun 3.7 Flash**:优先保证普通对话能回复、工具任务能完成、最终答案可见。本地蒸馏 A3B manager 仍作为显式 `Lynn manager run` 能力保留;考虑本地部署的并发能力与稳定性,默认切换到本地编排器继续暂缓。
+V0.87.1 的 GUI / CLI 默认对话与任务执行统一使用 **Step 5 Preview（`step-5-preview`）**。端侧推荐模型已迭代到 **Qwen3.8-27B Coder390 EfficientThink**，由用户在设置中明确选择、安装和启动；切换方案不会删除已有模型文件。
 
-语音主入口同样走 **Brain 托管 StepFun Realtime**:GUI 麦克风直接进入实时语音;CLI 在当前 `Lynn` chat 里输入 `/voice` 或 `lynn voice` 会就地切到实时语音,状态和采样波形显示在聊天框下方,`Ctrl+C` 返回聊天。`Lynn voice --file/--record` 转写、`Lynn voice --speak` 朗读保存只是辅助工具,不再作为语音主体验。
+| 本地方案 | 推荐容量 | 模型文件 | 初始上下文 |
+|---|---|---|---|
+| Coder390 Q2 | 16GB 显存 / Apple 统一内存；最低 14GiB | 13.28GB | 4K，单并发 |
+| Coder390 Q3 | 24GB 及以上；系统报告值至少 23.5GiB | 17.30GB | 8K，单并发 |
+
+使用[指定模型仓库的 `GGUF/` 目录](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer/tree/master/GGUF)中的 **llama.cpp Q2 / Q3**，两档均内置 **Q4 MTP**；不是 `GGUF-NInfer/`，不安装 NInfer，不另下载 DFlash2 或视觉组件。NVIDIA 按最大单卡显存判断，不叠加多卡或系统内存。低于 14GiB（例如 13GB）及容量检测失败时禁止安装；14～不足 16GiB 仅达 Q2 最低门槛，仍需给上下文缓存、运行缓冲和系统留空间。
+
+语音主入口使用 **Brain 托管 StepAudio（`stepaudio-2.5-realtime`）**:GUI 麦克风直接进入实时语音;CLI 在当前 `Lynn` chat 里输入 `/voice` 或 `lynn voice` 会就地切到实时语音,状态和采样波形显示在聊天框下方,`Ctrl+C` 返回聊天。`Lynn voice --file/--record` 转写、`Lynn voice --speak` 朗读保存只是辅助工具,不再作为语音主体验。
+
+#### 历史编排器研究（非当前默认模型）
+
+以下为旧 A3B 编排器的研究记录，不是 Coder390 的评测结果，也不代表 GUI / CLI 当前默认模型。本地蒸馏 A3B manager 仅作为显式 `Lynn manager run` 能力保留。
 
 我们同时储备了一个会**快速 拆分 → 分派 → 验收**任务的本地编排器模型:用 LoRA（**r=64 / α=128 / dropout 0.05**,**1842 条蒸馏样本**)把 **DeepSeek-V4-Pro 在「思考开启(thinking-on)」时的多步推理与自我验证思维方式**蒸进 **Qwen3.6-35B-A3B**(MoE,3B 激活)。
 
@@ -56,8 +67,8 @@ v0.85 的 GUI / CLI 默认对话与任务执行统一走 **StepFun 3.7 Flash**:�
 
 关键:蒸馏与原版**单流 TPS 相同**(R6000 ~224 tok/s),但端到端编排**快一倍**——**蒸的是「思维方式」,红利是更少 token 到结论**。难题仍以 **harness 客观验证** 为准,不把模型自报完成当作验收。
 
-📦 **当前端侧默认模型**：[Qwen3.8-27B Coder390 EfficientThink](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer)。16GB 及以上默认 Q3，16GB 以下使用 Q2，加速为内置 Q4 MTP。上面的旧编排器对照数据不代表这一模型。
-> 与早期 `Lynn-V4-Pro-Distill` 区分:这一版蒸的是 **thinking-on 的思维方式**,目标「学会怎么想」,直接服务 Agent 编排。
+📦 **当前端侧默认模型**：[Qwen3.8-27B Coder390 EfficientThink](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer)。24GB 及以上默认 Q3，24GB 以下（16GB 档）使用 Q2，加速为内置 Q4 MTP。上面的旧编排器对照数据不代表这一模型。
+> 上述历史 A3B 编排器研究与早期 `Lynn-V4-Pro-Distill` 的区别是蒸馏 **thinking-on 的思维方式**，目标为 Agent 编排；这不是当前 Coder390 的训练或评测说明。
 
 ### ② 引擎路线:端侧选最快的 llama.cpp,并回馈上游
 
@@ -92,7 +103,7 @@ NVFP4 的真正红利不在单流 decode,而在**并发吞吐**。同一张 R600
 
 ## 🔭 V0.80 起源:CLI Worker, V0.86 安全边界与运行时可靠性更新
 
-V0.80 把 Lynn 带回编程主战场,但不是再做一个单 CLI 或 IDE 插件。最初的方向是探索多 CLI Agent 编排;到 V0.86,GUI 右侧收敛为更直接的 **当前会话 + 最近会话 + 文件 + 确认改动**,Brain 与本地 Agent 也把工具暴露、空答接班、权限边界和单轮状态重置变成可回归的运行时契约。公开可下载的 27B Coding Q4 MTP 继续作为默认端侧模型；并行 worker 能力保留在 CLI,给终端、CI 和其他 Agent 无头调用。
+V0.80 把 Lynn 带回编程主战场,但不是再做一个单 CLI 或 IDE 插件。最初的方向是探索多 CLI Agent 编排;到 V0.86,GUI 右侧收敛为更直接的 **当前会话 + 最近会话 + 文件 + 确认改动**,Brain 与本地 Agent 也把工具暴露、空答接班、权限边界和单轮状态重置变成可回归的运行时契约。V0.87.1 推荐的端侧模型已升级为 Qwen3.8-27B Coder390 Q2 / Q3（内置 Q4 MTP）；并行 worker 能力保留在 CLI,给终端、CI 和其他 Agent 无头调用。
 
 这不是“不服务代码”。恰恰相反,Lynn 要把代码任务和业务任务放到同一个调度系统里:
 
@@ -116,16 +127,16 @@ V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror. --force is safe for first install too.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.1.tgz"
 
 # 3. Launch.
 Lynn            # interactive chat TUI; 输入 /voice 或 lynn voice 进入实时语音
 Lynn code       # coding-agent TUI
-Lynn --version  # should print 0.87.0
+Lynn --version  # should print 0.87.1
 Lynn agents     # copyable headless worker commands for other agents
 ```
 
-默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到 Lynn 远端 Brain。v0.85 的 GUI/CLI 普通对话与任务执行统一回到 **StepFun 3.7 Flash(256K 上下文,Brain 托管 reasoning / 生成预算)** 一条龙主链,优先保证能正常对话、能完成工具任务、能给出最终答案。视觉由 StepFun `step-1o-turbo-vision` 承接;语音由 Brain 托管 **StepFun Realtime** 承接,CLI 当前 chat 内 `/voice` / `lynn voice` 与 GUI 麦克风默认就是实时语音对话。本地 manager 作为显式 `Lynn manager run` 实验链路保留,不会抢占默认 GUI/CLI 路径。纯 CLI 用户也可以用 `Lynn providers set ...` 绑定自己的 OpenAI 兼容端点。
+默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到 Lynn 远端 Brain。V0.87.1 的 GUI/CLI 普通对话与任务执行统一回到 **Step 5 Preview (`step-5-preview`)** 一条龙主链,优先保证能正常对话、能完成工具任务、能给出最终答案。视觉由 StepFun `step-1o-turbo-vision` 承接;语音由 Brain 托管 **StepFun Realtime (`stepaudio-2.5-realtime`)** 承接,CLI 当前 chat 内 `/voice` / `lynn voice` 与 GUI 麦克风默认就是实时语音对话。本地 manager 作为显式 `Lynn manager run` 实验链路保留,不会抢占默认 GUI/CLI 路径。纯 CLI 用户也可以用 `Lynn providers set ...` 绑定自己的 OpenAI 兼容端点。
 
 长任务默认采用 Reasonix 风格的**前置缓存纪律**:稳定前缀、工具定义、运行时约束和 resume 摘要分层固定,避免每轮重排导致 prefix drift;缓存命中以 `prefix-cache ... hit` 进入 usage、session、replay 和 `Lynn cache doctor --json`,不在界面里制造上下文焦虑。
 
@@ -1243,12 +1254,14 @@ MCP 服务器仍支持按需接入,但入口收进了 **设置 → MCP**。日�
 
 ## 本地模型：按显存选择，按需安装
 
-Qwen3.8-27B Coder390 EfficientThink：16GB 及以上默认 Q3（主模型 17.30 GB），16GB 以下使用 Q2（主模型 13.28 GB）。两档都是内置 Q4 MTP 的 GGUF，不另下 DFlash2，不含视觉组件。Q3 以 8K、Q2 以 4K 上下文和单并发启动；还需预留 KV 缓存、运行缓冲及系统空间。 本地模型仅在明确点击安装/启动后启用；已有模型和手动导入入口保留。
+硬件分档：Apple Silicon 使用系统报告的统一内存；Windows/Linux 的 NVIDIA 独显通过 `nvidia-smi` 读取单卡显存，取最大一张，不叠加多卡，也不使用系统内存冒充显存。16GB 推荐 Q2，24GB 及以上推荐 Q3（24GB 显卡报告值至少 23.5GiB）。低于 14GiB 禁止安装；13GB 不足，14～不足 16GiB 仅达 Q2 最低门槛。检测失败时不会放行安装，手动选档也不能绕过检查。模型文件之外还需预留上下文 KV 缓存、运行缓冲及系统空间，总容量符合不代表当前空闲容量充足。
+
+Qwen3.8-27B Coder390 EfficientThink：24GB 及以上默认 Q3（主模型 17.30 GB），24GB 以下（16GB 档）使用 Q2（主模型 13.28 GB）。两档都是内置 Q4 MTP 的 GGUF，不另下 DFlash2，不含视觉组件。Q3 以 8K、Q2 以 4K 上下文和单并发启动；还需预留 KV 缓存、运行缓冲及系统空间。 本地模型仅在明确点击安装/启动后启用；已有模型和手动导入入口保留。
 
 | 档位 | 模型 | 体积 | 推荐硬件 | 上下文 | 能力信号 |
 |------|------|:----:|---------|:------:|----------|
-| **16GB 及以上** | **Qwen3.8-27B Coder390 EfficientThink Q3** | 17.30 GB | 16GB 及以上默认 | 8K | 内置 Q4 MTP，单并发 |
-| **16GB 以下** | **Qwen3.8-27B Coder390 EfficientThink Q2** | 13.28 GB | 16GB 以下 | 4K | 内置 Q4 MTP，余量较紧 |
+| **24GB 及以上** | **Qwen3.8-27B Coder390 EfficientThink Q3** | 17.30 GB | 24GB 及以上默认 | 8K | 内置 Q4 MTP，单并发 |
+| **24GB 以下（16GB 档）** | **Qwen3.8-27B Coder390 EfficientThink Q2** | 13.28 GB | 24GB 以下（16GB 档） | 4K | 内置 Q4 MTP，余量较紧 |
 | Legacy 可选 | Qwen3.6-35B-A3B DSV4Pro Distill Q5_K_M imatrix MTP | 25.3 GB | 32GB 显存/统一内存+ | 32K | 旧 35B 编排器路线，保留给已有用户和对照测试 |
 
 > [完整模型卡](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer)。文件大小不等于实际显存占用；已下载的旧版模型继续保留，不静默删除。此次安装不含视觉组件。
@@ -1267,7 +1280,7 @@ Qwen3.8-27B Coder390 EfficientThink：16GB 及以上默认 Q3（主模型 17.30 
 - 下载 `GGUF/Qwen3.8-27B-Coder390-EfficientThink-Q3LynnStyle-MTP.gguf` 或 `GGUF/Qwen3.8-27B-Coder390-EfficientThink-Q2LynnStyle-MTP.gguf`，两档均内置 Q4 MTP，不另下 DFlash2 草稿。
 - 每个 GGUF 文件按固定字节数和 SHA-256 校验；本次安装不含视觉组件。
 
-**低配 9B / 4B 与高端 35B**(按硬件显式选择):
+**历史 9B / 4B / 35B 模型（非当前推荐档位）**：以下链接仅供旧用户或手动部署参考；新版设置页不再提供 9B / 4B 安装选项，不能用旧型号绕过 Coder390 的容量检查。
 - 9B: [Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.5-9B-GGUF-imatrix) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`,**5.38 GB**) — 低配降级
 - 4B: [Merkyor/Qwen3.5-4B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix) (`Qwen3.5-4B-Q4_K_M-imatrix.gguf`,**2.6 GB**) — 更低配置降级,建议 thinking-off
 - 35B legacy: [Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) (`Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf`,**25.3 GB**) — 旧编排器路线，保留给已有用户和对照测试
@@ -1280,10 +1293,10 @@ Qwen3.8-27B Coder390 EfficientThink：16GB 及以上默认 Q3（主模型 17.30 
 
 首次启动有两条路径：
 
-**Quick Start**（3 秒进主界面）— 输入名字、授权权限，直接开聊。**内置免费默认模型池**（v0.85 走 Brain V2:StepFun 负责文本/编码执行与视觉,其他供应商作为备用链路;本地 manager 只在显式调用时启用）：
+**Quick Start**（3 秒进主界面）— 输入名字、授权权限，直接开聊。**内置免费默认模型池**（V0.87.1 走 Brain V2:StepFun 负责文本/编码执行与视觉,其他供应商作为备用链路;本地 manager 只在显式调用时启用）：
 
 ```
-T1  ⭐ StepFun 3.7 Flash（256K 上下文,high reasoning,48K 推理/生成预算,高速文本/编码主路）
+T1  ⭐ Step 5 Preview（step-5-preview，文本/编码主路）
 T2  DS-V4 Flash（供应商备用链路,用于 StepFun 不可用或特定高风险场景）
 T3  本地 manager（显式 `Lynn manager run`,用于实验性拆分/验收）
 T4  视觉:StepFun `step-1o-turbo-vision`（图片识别,由 Brain 按 image content 自动切)
@@ -1338,7 +1351,7 @@ Lynn 不是简单套 OpenAI 兼容协议。从 9B 小模型到 GLM-5 推理模�
 |---|---|---|
 | 小 | <32K（ERNIE / Step 8K 等） | 仅 `web_search` + `web_fetch` |
 | 中 | 32K（豆包 / 混元 Pro / 百川 Turbo） | 标准 10 工具 |
-| 大 | ≥64K（StepFun 3.7 / Qwen3.6 / Kimi K2.6 / GLM-5 / DeepSeek V4） | 24 工具全开 |
+| 大 | ≥64K（Step 5 / Qwen3.6 / Kimi K2.6 / GLM-5 / DeepSeek V4） | 24 工具全开 |
 
 **小模型专属 Prompt 工程** — context < 32K 时自动注入：回复限 500 字 + 关键结论 `<!-- KEY: -->` 标注（压缩时优先保留）；单工具串行调用规则（防弱模型并行错）；3 步以上任务强制先出计划等确认。
 
@@ -1433,7 +1446,7 @@ Lynn 能读文件、跑命令、操作本地环境，所以安全不是附加功
 
 如果你有 GPU（或者能租到 vGPU），Lynn 支持把主力模型私有化。端侧默认走 llama.cpp，服务侧研究线保留 vLLM / NVFP4：
 
-- **推荐端侧配置**：Qwen3.8-27B Coder390 EfficientThink：16GB 及以上默认 Q3（主模型 17.30 GB），16GB 以下使用 Q2（主模型 13.28 GB）。两档都是内置 Q4 MTP 的 GGUF，不另下 DFlash2，不含视觉组件。Q3 以 8K、Q2 以 4K 上下文和单并发启动；还需预留 KV 缓存、运行缓冲及系统空间。
+- **推荐端侧配置**：Qwen3.8-27B Coder390 EfficientThink：24GB 及以上默认 Q3（主模型 17.30 GB），24GB 以下（16GB 档）使用 Q2（主模型 13.28 GB）。两档都是内置 Q4 MTP 的 GGUF，不另下 DFlash2，不含视觉组件。Q3 以 8K、Q2 以 4K 上下文和单并发启动；还需预留 KV 缓存、运行缓冲及系统空间。
 - **Legacy 可选配置**：Qwen3.6-35B-A3B DSV4Pro Distill Q5_K_M GGUF + llama.cpp + MTP n=3（旧 35B 编排器路线）
 - **服务侧研究线**：35B-A3B BF16 / FP8 / NVFP4 可接 vLLM，用于并发吞吐和长上下文实验，不作为普通用户默认下载
 - **工具调用**：OpenAI-compat 原生支持，Plan C 客户端工具透传无损
@@ -1478,14 +1491,14 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 **Windows**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.exe`，直接运行；版本记录见 [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)。
 
-> **Windows SmartScreen 提示：** V0.87.0 沿用现有 NSIS 安装方式，未包含公开信任的 Authenticode 代码签名。Windows 可能提示未知发布者或 SmartScreen 确认；请仅从上述正式渠道下载，并核对发布的 SHA-256。
+> **Windows SmartScreen 提示：** V0.87.1 沿用现有 NSIS 安装方式，未包含公开信任的 Authenticode 代码签名。Windows 可能提示未知发布者或 SmartScreen 确认；请仅从上述正式渠道下载，并核对发布的 SHA-256。
 
 Linux 版本计划中。
 
 ### 首次运行
 
 - **Quick Start**：输入名字 → 授权 → 进入主界面。默认模型池开箱即用，无需 API Key。
-- **本地模型**：设置 → 模型 → 本地 Qwen3.8-27B。Qwen3.8-27B Coder390 EfficientThink：16GB 及以上默认 Q3（主模型 17.30 GB），16GB 以下使用 Q2（主模型 13.28 GB）。两档都是内置 Q4 MTP 的 GGUF，不另下 DFlash2，不含视觉组件。Q3 以 8K、Q2 以 4K 上下文和单并发启动；还需预留 KV 缓存、运行缓冲及系统空间。 需要帮助时可转入 Lynn 对话协助部署。
+- **本地模型**：设置 → 模型 → 本地 Qwen3.8-27B。Qwen3.8-27B Coder390 EfficientThink：24GB 及以上默认 Q3（主模型 17.30 GB），24GB 以下（16GB 档）使用 Q2（主模型 13.28 GB）。两档都是内置 Q4 MTP 的 GGUF，不另下 DFlash2，不含视觉组件。Q3 以 8K、Q2 以 4K 上下文和单并发启动；还需预留 KV 缓存、运行缓冲及系统空间。 需要帮助时可转入 Lynn 对话协助部署。
 - **Advanced Setup**：输入名字 → 连接自己的供应商 → 选对话/工具模型 → 设权限 → 进入。
 
 所有模型配置后续都可在设置调整。
@@ -1604,7 +1617,7 @@ npm run dist:local            # 仅本地测试包（macOS DMG，跳过公证；
 
 ### Q4：没 API Key 能用吗？
 
-**能**。Quick Start 60 秒进主界面直接聊，全程零配置。后台默认走 Brain v2 的 StepFun 3.7 Flash 主链（256K 上下文,high 推理,48K 推理/生成预算）,供应商异常时再切到 DS-V4 Flash / GLM / Kimi / MiniMax 等备用链路。图片识别由 StepFun `step-1o-turbo-vision` 承接(Brain 按 image content 自动切)。
+**能**。Quick Start 60 秒进主界面直接聊，全程零配置。后台默认走 Brain v2 的 Step 5 Preview（`step-5-preview`）主链，供应商异常时再切到 DS-V4 Flash / GLM / Kimi / MiniMax 等备用链路。图片识别由 StepFun `step-1o-turbo-vision` 承接（Brain 按 image content 自动切）。
 
 ### Q5：Windows 能用吗？
 

@@ -85,6 +85,7 @@ afterEach(() => {
   delete process.env.BRAIN_V2_DIRECT_OFFICIAL_MODEL_PREFETCH;
   delete process.env.BRAIN_V2_TOOL_PARALLEL;
   delete process.env.BRAIN_V2_EVIDENCE_HANDOFF;
+  process.env.BRAIN_V2_EVIDENCE_HANDOFF = '1';
   delete process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER;
   delete process.env.BRAIN_V2_GUI_INTERACTIVE_ACTIVE;
   delete process.env.LYNN_GUI_INTERACTIVE_ACTIVE;
@@ -217,6 +218,97 @@ describe('Router', () => {
     expect(receivedTools).toEqual(tools);
     expect(chunks.some((chunk) => chunk.type === 'tool_progress')).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(chunks.filter((chunk) => chunk.type === 'tool_call_delta')).toHaveLength(1);
+    expect(chunks.filter((chunk) => chunk.type === 'finish')).toEqual([{ type: 'finish', reason: 'tool_calls' }]);
+  });
+
+  it('keeps fragmented server tool calls and their finish frames inside Brain', async () => {
+    let rounds = 0;
+    mockState.adapterFn = async function* () {
+      rounds += 1;
+      if (rounds === 1) {
+        yield { type: 'tool_call_delta', delta: [{ index: 0, id: 'server-calendar', function: { name: 'cal', arguments: '{"query":' } }] };
+        yield { type: 'tool_call_delta', delta: [{ index: 0, function: { name: 'endar', arguments: '"今天日期"}' } }] };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: '日期已通过日历工具核验。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+    await run({ messages: [{ role: 'user', content: '请查询日期' }], onChunk: (chunk) => chunks.push(chunk) });
+    expect(chunks.filter((chunk) => chunk.type === 'tool_call_delta')).toEqual([]);
+    expect(chunks.filter((chunk) => chunk.type === 'finish')).toEqual([{ type: 'finish', reason: 'stop' }]);
+    expect(chunks).toContainEqual(expect.objectContaining({ type: 'tool_progress', event: 'end', name: 'calendar', ok: true }));
+    expect(chunks.find((chunk) => chunk.type === 'tool_progress' && chunk.event === 'end')).toMatchObject({ toolCall: { id: 'server-calendar', function: { name: 'calendar', arguments: '{"query":"今天日期"}' } }, result: expect.any(String) });
+  });
+
+  it('forwards complete client calls exactly once without changing model parameters', async () => {
+    mockState.adapterFn = async function* () {
+      yield { type: 'tool_call_delta', delta: [{ index: 0, id: 'local-read', function: { name: 'read_', arguments: '{"path":' } }] };
+      yield { type: 'tool_call_delta', delta: [{ index: 0, function: { name: 'file', arguments: '"/tmp/report.md"}' } }] };
+      yield { type: 'finish', reason: 'tool_calls' };
+    };
+    const chunks = [];
+    const result = await run({ messages: [{ role: 'user', content: '读取报告' }], tools: [{ type: 'function', function: { name: 'read_file' } }], onChunk: (chunk) => chunks.push(chunk) });
+    expect(result).toMatchObject({ forwardedToClient: true, clientToolCalls: 1 });
+    expect(chunks.filter((chunk) => chunk.type === 'tool_call_delta')).toEqual([{
+      type: 'tool_call_delta', delta: [{ index: 0, id: 'local-read', type: 'function', function: { name: 'read_file', arguments: '{"path":"/tmp/report.md"}' } }],
+    }]);
+    expect(chunks.filter((chunk) => chunk.type === 'finish')).toEqual([{ type: 'finish', reason: 'tool_calls' }]);
+  });
+
+  it('does not leak a partial tool call when a provider fails and routing recovers', async () => {
+    mockState.adapterFn = async function* ({ provider }) {
+      if (provider.id === 'p-step') {
+        yield { type: 'tool_call_delta', delta: [{ index: 0, id: 'abandoned-call', function: { name: 'cal', arguments: '{"query":' } }] };
+        throw new Error('transport interrupted');
+      }
+      yield { type: 'content', delta: '恢复后的完整回答。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+    const result = await run({ messages: [{ role: 'user', content: '查询日期' }], onChunk: (chunk) => chunks.push(chunk) });
+    expect(result.providerId).toBe('p-spark');
+    expect(chunks.filter((chunk) => chunk.type === 'tool_call_delta')).toEqual([]);
+    expect(chunks.filter((chunk) => chunk.type === 'finish')).toEqual([{ type: 'finish', reason: 'stop' }]);
+  });
+
+  it('does not prematurely finish a server-tool turn when the provider labels it stop', async () => {
+    let rounds = 0;
+    mockState.adapterFn = async function* () {
+      rounds += 1;
+      if (rounds === 1) {
+        yield { type: 'tool_call_delta', delta: [{ index: 0, id: 'calendar-stop', function: { name: 'calendar', arguments: '{"query":"今天日期"}' } }] };
+        yield { type: 'finish', reason: 'stop' };
+        return;
+      }
+      yield { type: 'content', delta: '日期核验完成。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+    await run({ messages: [{ role: 'user', content: '查询日期' }], onChunk: (chunk) => chunks.push(chunk) });
+    expect(chunks.filter((chunk) => chunk.type === 'tool_call_delta')).toEqual([]);
+    expect(chunks.filter((chunk) => chunk.type === 'finish')).toEqual([{ type: 'finish', reason: 'stop' }]);
+    expect(chunks).toContainEqual(expect.objectContaining({ type: 'tool_progress', event: 'end', name: 'calendar', ok: true }));
+  });
+
+  it('executes server calls in a mixed batch and forwards only true client calls', async () => {
+    mockState.adapterFn = async function* () {
+      yield { type: 'tool_call_delta', delta: [
+        { index: 0, id: 'mixed-calendar', function: { name: 'calendar', arguments: '{"query":"今天日期"}' } },
+        { index: 1, id: 'mixed-read', function: { name: 'read_file', arguments: '{"path":"/tmp/report.md"}' } },
+      ] };
+      yield { type: 'finish', reason: 'tool_calls' };
+    };
+    const chunks = [];
+    const result = await run({ messages: [{ role: 'user', content: '查询日期并读取报告' }], tools: [{ type: 'function', function: { name: 'read_file' } }], onChunk: (chunk) => chunks.push(chunk) });
+    expect(result.toolCalls).toEqual([{ id: 'mixed-read', type: 'function', function: { name: 'read_file', arguments: '{"path":"/tmp/report.md"}' } }]);
+    expect(chunks).toContainEqual(expect.objectContaining({ type: 'tool_progress', event: 'end', name: 'calendar', ok: true }));
+    const forwarded = chunks.filter((chunk) => chunk.type === 'tool_call_delta');
+    expect(forwarded).toHaveLength(1);
+    expect(forwarded[0].delta.map((call) => call.function.name)).toEqual(['read_file']);
+    expect(chunks.filter((chunk) => chunk.type === 'finish')).toEqual([{ type: 'finish', reason: 'tool_calls' }]);
   });
 
   it('honors a strict signed-review provider order without falling through', async () => {
@@ -1059,11 +1151,159 @@ describe('Router', () => {
       expect(message.content).toContain('【Lynn 工具证据 #');
       expect(message.content).toContain('当前时间(Asia/Shanghai)');
       expect(message.content).toContain('【证据账本】');
+      expect(message.content).toContain('dateRange 只是本次工具查询范围');
+      expect(message.content).toContain('不等于用户所问时间');
+      expect(message.content).toContain('不能把扩大窗口标成');
+      expect(message.content).not.toContain('最终结论按请求范围作答');
       expect(message.content).toContain('请只基于上方工具证据回答当前事实');
       expect(message.content).toContain('不要用旧知识或记忆补充工具证据里没有的具体事实');
+      expect(message.content).toContain('明确这是样本而非全市场完整统计');
+      expect(message.content).toContain('不得推断缩量、放量、资金流入或流出');
       expect(message.content).toContain('网页发布时间只能说明来源发布时间');
       expect(message.content).toContain('The user wants');
     }
+  });
+
+  it('keeps tools available after calendar evidence so a model can fetch market facts', async () => {
+    delete process.env.BRAIN_V2_EVIDENCE_HANDOFF;
+    mockState.order = ['p-step', 'p-spark'];
+    const rounds = [];
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => Buffer.from('var hq_str_s_sh000001="Shanghai,4000,20,0.50,500,1000";'),
+    })));
+    mockState.adapterFn = async function* ({ provider, tools, messages }) {
+      rounds.push({ provider: provider.id, tools, messages });
+      if (!messages.some((message) => message.role === 'tool')) {
+        yield { type: 'tool_call_delta', delta: [{ index: 0, id: 'calendar-first', type: 'function', function: { name: 'calendar', arguments: '{"query":"今天日期"}' } }] };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      if (!messages.some((message) => message.role === 'tool' && String(message.content).includes('stock_market】'))) {
+        yield { type: 'tool_call_delta', delta: [{ index: 0, id: 'market-next', type: 'function', function: { name: 'stock_market', arguments: '{"kind":"index","symbol":"上证","query":"今天 A 股有什么异动？"}' } }] };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: '上证样本涨幅 0.50%，只覆盖指数样本，不是全市场异动榜。今天没有全市场成交量数据，所以不能判断放量或缩量。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+    const result = await run({ messages: [{ role: 'user', content: '今天 A 股有什么异动？' }], onChunk: async (chunk) => chunks.push(chunk) });
+    expect(result).toMatchObject({ ok: true, iterations: 3 });
+    expect(rounds.map((round) => round.provider)).toEqual(['p-step', 'p-step', 'p-step']);
+    expect(rounds[1].tools.some((tool) => tool.function.name === 'stock_market')).toBe(true);
+    expect(rounds[1].tools.some((tool) => tool.function.name === 'web_search')).toBe(true);
+    expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'stock_market' && chunk.event === 'end' && chunk.ok)).toBe(true);
+    expect(chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('')).toContain('不是全市场异动榜');
+  });
+
+  it('preserves verified zero-match sports evidence from parallel calls without changing models', async () => {
+    delete process.env.BRAIN_V2_EVIDENCE_HANDOFF;
+    mockState.order = ['p-step', 'p-spark'];
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ events: [] }) })));
+    const providers = [];
+    mockState.adapterFn = async function* ({ provider, messages }) {
+      providers.push(provider.id);
+      if (!messages.some((message) => message.role === 'tool')) {
+        yield { type: 'tool_call_delta', delta: [{ index: 0, id: 'parallel-zero', type: 'function', function: {
+          name: 'parallel_research', arguments: JSON.stringify({ queries: [
+            { tool: 'sports_score', args: { league: 'fifa.world', date_from: '2020-02-02', date_to: '2020-02-02', query: '指定日期赛果' } },
+            { tool: 'calendar', args: { query: '今天日期' } },
+          ] }),
+        } }] };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: '2020年2月2日该查询范围为0场比赛，没有赛果。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+    const result = await run({ messages: [{ role: 'user', content: '查询指定日期世界杯赛果' }], onChunk: async (chunk) => chunks.push(chunk) });
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    expect(providers).toEqual(['p-step', 'p-step']);
+    const end = chunks.find((chunk) => chunk.type === 'tool_progress' && chunk.event === 'end' && chunk.name === 'parallel_research');
+    const child = end.details.map((line) => JSON.parse(line.slice('subtool: '.length))).find((entry) => entry.name === 'sports_score');
+    expect(child.ok).toBe(true);
+    expect(child.details).toContain('matched: 0');
+    expect(child.details).toContain('dateRange: 20200202-20200202');
+  });
+
+  it('keeps empty and historical positive sports windows separate during synthesis', async () => {
+    delete process.env.BRAIN_V2_EVIDENCE_HANDOFF;
+    mockState.order = ['p-step', 'p-spark'];
+    vi.stubGlobal('fetch', vi.fn(async (url) => ({ ok: true, json: async () => ({ events:
+      String(url).includes('dates=20190718-20190720') ? [{
+        id: 'historical', date: '2019-07-19T02:00:00Z',
+        status: { type: { completed: true, shortDetail: 'Final' } },
+        competitions: [{ competitors: [
+          { homeAway: 'home', score: '2', team: { displayName: 'Alpha' } },
+          { homeAway: 'away', score: '1', team: { displayName: 'Beta' } },
+        ] }],
+      }] : [],
+    }) })));
+    const providers = [];
+    mockState.adapterFn = async function* ({ provider, messages }) {
+      providers.push(provider.id);
+      if (!messages.some((message) => message.role === 'tool')) {
+        yield { type: 'tool_call_delta', delta: [{ index: 0, id: 'parallel-mixed', type: 'function', function: {
+          name: 'parallel_research', arguments: JSON.stringify({ queries: [
+            { tool: 'sports_score', args: { league: 'fifa.world', date_from: '2020-02-02', date_to: '2020-02-02', query: '指定日期赛果' } },
+            { tool: 'sports_score', args: { league: 'fifa.world', date_from: '2019-07-19', date_to: '2019-07-19', query: '历史赛果' } },
+          ] }),
+        } }] };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: '2020年2月2日没有比赛记录，共0场；2019年7月19日历史比分为Alpha 2-1 Beta，不能当成指定日期的比赛。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+    const result = await run({ messages: [{ role: 'user', content: '查询指定日期世界杯赛果' }], onChunk: async (chunk) => chunks.push(chunk) });
+    expect(result).toMatchObject({ ok: true, iterations: 2 });
+    expect(providers).toEqual(['p-step', 'p-step']);
+    const end = chunks.find((chunk) => chunk.type === 'tool_progress' && chunk.event === 'end' && chunk.name === 'parallel_research');
+    const children = end.details.map((line) => JSON.parse(line.slice('subtool: '.length)));
+    expect(children.some((child) => child.details.includes('matched: 0'))).toBe(true);
+    expect(children.some((child) => child.details.includes('matched: 1'))).toBe(true);
+  });
+
+  it('corrects capability denial before any tool has run without removing tools', async () => {
+    mockState.order = ['p-step', 'p-spark'];
+    const rounds = [];
+    mockState.adapterFn = async function* ({ provider, tools, messages }) {
+      rounds.push({ provider: provider.id, tools, messages });
+      if (provider.id === 'p-step') {
+        yield { type: 'content', delta: 'Lynn CLI 无法获取实时行情，没有行情工具。' };
+      } else {
+        yield { type: 'content', delta: '需要先使用行情工具核验当前数据。' };
+      }
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+    const result = await run({ messages: [{ role: 'user', content: '今天 A 股有什么异动？' }], onChunk: async (chunk) => chunks.push(chunk) });
+    expect(result.providerId).toBe('p-spark');
+    expect(rounds[1].tools.some((tool) => tool.function.name === 'stock_market')).toBe(true);
+    expect(rounds[1].messages.some((message) => String(message.content).includes('没有尝试调用'))).toBe(true);
+    expect(chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('')).not.toContain('没有行情工具');
+  });
+
+  it('marks unavailable sports responses as failed progress and keeps fallback tools exposed', async () => {
+    let rounds = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 403 })));
+    mockState.adapterFn = async function* ({ tools }) {
+      rounds += 1;
+      expect(tools.some((tool) => tool.function.name === 'web_search')).toBe(true);
+      if (rounds === 1) {
+        yield { type: 'tool_call_delta', delta: [{ index: 0, id: 'sports-unavailable', type: 'function', function: { name: 'sports_score', arguments: '{"league":"nba","date_from":"2026-06-01","date_to":"2026-06-30","query":"NBA 总决赛"}' } }] };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: '直连数据源拒绝访问，需要继续核验官方赛果。' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+    await run({ messages: [{ role: 'user', content: 'NBA 总决赛打了几场，总比分如何？' }], onChunk: async (chunk) => chunks.push(chunk) });
+    expect(chunks.find((chunk) => chunk.type === 'tool_progress' && chunk.event === 'end')?.ok).toBe(false);
   });
 
   it('weights structured evidence instead of counting every tool as one', () => {
@@ -1148,7 +1388,7 @@ describe('Router', () => {
     )).toBe(false);
   });
 
-  it('hands off grounded evidence to the next provider instead of continuing tool loops', async () => {
+  it('hands off grounded evidence while retaining tools for incomplete questions', async () => {
     process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER = '3';
     stubSearchFetchOk();
     mockState.order = ['p-step', 'p-spark', 'p-cloud'];
@@ -1187,12 +1427,12 @@ describe('Router', () => {
     expect(result).toMatchObject({ ok: true, providerId: 'p-spark', iterations: 3 });
     expect(mockState.adapterCalls).toEqual(['p-step', 'p-step', 'p-spark']);
     const sparkTools = providerToolArgs.find((entry) => entry.provider === 'p-spark');
-    expect(sparkTools.toolCount).toBe(0);
+    expect(sparkTools.toolCount).toBeGreaterThan(0);
     const sparkMessages = providerMessages.find((entry) => entry.provider === 'p-spark').messages;
     expect(sparkMessages.some((message) => (
       message.role === 'user'
       && String(message.content).includes('工具证据')
-      && String(message.content).includes('不要再调用工具')
+      && String(message.content).includes('继续选择合适工具')
       && String(message.content).includes('工具证据和当前时间锚点是唯一事实来源')
       && String(message.content).includes('当前时间(Asia/Shanghai)')
       && String(message.content).includes('已知事实 / 来源口径 / 缺口 / 最终答案')
@@ -1252,6 +1492,37 @@ describe('Router', () => {
     expect(visible).toBe('已有比分：A 1-0 B。');
   });
 
+  it('keeps a model-written data limitation answer after tool execution', async () => {
+    process.env.BRAIN_V2_EVIDENCE_HANDOFF = '0';
+    mockState.order = ['p-step'];
+    stubSearchFetchOk();
+    let rounds = 0;
+    const answer = '当前工具只返回指数样本，无法判断实时全市场异动。';
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      rounds += 1;
+      if (rounds === 1) {
+        yield {
+          type: 'tool_call_delta',
+          delta: [{ index: 0, id: 'tc-data-limit', type: 'function', function: {
+            name: 'web_search', arguments: JSON.stringify({ query: 'A股板块异动' }),
+          } }],
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+        return;
+      }
+      yield { type: 'content', delta: answer };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    const chunks = [];
+    await expect(run({
+      messages: [{ role: 'user', content: '今天 A 股有什么异动？' }],
+      onChunk: async chunk => chunks.push(chunk),
+    })).resolves.toMatchObject({ ok: true, providerId: 'p-step', iterations: 2 });
+    expect(mockState.adapterCalls).toEqual(['p-step', 'p-step']);
+    expect(chunks.filter(chunk => chunk.type === 'content').map(chunk => chunk.delta).join('')).toBe(answer);
+  });
+
   it('hands off tool-denial answers after grounded evidence to the next provider', async () => {
     process.env.BRAIN_V2_EVIDENCE_HANDOFF_AFTER = '99';
     stubSearchFetchOk();
@@ -1297,7 +1568,7 @@ describe('Router', () => {
     expect(sparkMessages.some((message) => (
       message.role === 'user'
       && String(message.content).includes('否认了已经执行过的工具能力')
-      && String(message.content).includes('不要再调用工具')
+      && String(message.content).includes('继续选择合适工具核验')
     ))).toBe(true);
     const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
     expect(visible).toBe('深圳明天按查询结果为晴天。');
@@ -1396,8 +1667,11 @@ describe('Router', () => {
     expect(visible).not.toContain('让我先查');
   });
 
-  it('emits a deterministic scoreboard answer when providers fail after ESPN evidence', async () => {
+  it('does not fabricate a successful scoreboard answer when all models fail after ESPN evidence', async () => {
     mockState.order = ['p-step', 'p-spark'];
+    process.env.BRAIN_V2_LAST_CHANCE_RECOVERY = '0';
+    const eventTime = beijingTonightMidnightEvent();
+    const modelDate = new Date(Date.parse(eventTime.iso) + 8 * 3600_000).toISOString().slice(0, 10);
     mockState.adapterFn = async function* ({ provider }) {
       mockState.adapterCalls.push(provider.id);
       if (provider.id === 'p-step') {
@@ -1407,7 +1681,7 @@ describe('Router', () => {
             index: 0,
             id: 'tc-espn-evidence',
             type: 'function',
-            function: { name: 'sports_score', arguments: '{"league":"fifa.world","query":"今晚世界杯有几场比赛"}' },
+            function: { name: 'sports_score', arguments: JSON.stringify({ league: 'fifa.world', date_from: modelDate, date_to: modelDate, query: '今晚世界杯有几场比赛' }) },
           }],
         };
         yield { type: 'finish', reason: 'tool_calls' };
@@ -1415,7 +1689,6 @@ describe('Router', () => {
       }
       throw new Error(`${provider.id} down`);
     };
-    const eventTime = beijingTonightMidnightEvent();
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       status: 200,
@@ -1432,15 +1705,13 @@ describe('Router', () => {
     })));
 
     const chunks = [];
-    const result = await run({
+    await expect(run({
       messages: [{ role: 'user', content: '今晚世界杯有几场比赛' }],
       onChunk: async (chunk) => chunks.push(chunk),
-    });
-
-    expect(result.ok).toBe(true);
+    })).rejects.toThrow('all providers failed');
     const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
-    expect(visible).toContain('根据 ESPN scoreboard 工具证据');
-    expect(visible).toContain(`| ${eventTime.label} | Spain vs Saudi Arabia | Scheduled |`);
+    expect(visible).toBe('');
+    expect(chunks.some(chunk => chunk.type === 'tool_progress' && chunk.event === 'end' && chunk.ok)).toBe(true);
   });
 
   it('closes factual ESPN web_search evidence without cascading across synthesis providers', async () => {
@@ -1501,9 +1772,17 @@ describe('Router', () => {
     mockState.order = ['mimo-ultraspeed', 'step-3.7-flash', 'deepseek-chat'];
     const captured = [];
     const chunks = [];
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      throw new Error('ESPN unavailable in test');
-    }));
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ events: [{
+        date: '2026-06-23T00:00:00Z',
+        status: { type: { completed: true, shortDetail: 'FT' } },
+        competitions: [{ competitors: [
+          { homeAway: 'home', score: '3', team: { displayName: 'Norway' } },
+          { homeAway: 'away', score: '2', team: { displayName: 'Senegal' } },
+        ] }],
+      }] }),
+    })));
     let calls = 0;
     mockState.adapterFn = async function* ({ provider, messages, tools }) {
       mockState.adapterCalls.push(provider.id);
@@ -1511,10 +1790,10 @@ describe('Router', () => {
       calls += 1;
       if (calls === 1) {
         const sports = (tools || []).find((tool) => tool?.function?.name === 'sports_score');
-        expect(sports?.function?.parameters?.required).toEqual(expect.arrayContaining(['league']));
+        expect(sports?.function?.parameters?.required).toEqual(expect.arrayContaining(['league', 'date_from', 'date_to']));
         yield {
           type: 'tool_call_delta',
-          delta: [{ index: 0, id: 'tc-sports', type: 'function', function: { name: 'sports_score', arguments: '{"league":"fifa.world","query":"2026世界杯已经出的赛事比分"}' } }],
+          delta: [{ index: 0, id: 'tc-sports', type: 'function', function: { name: 'sports_score', arguments: '{"league":"fifa.world","date_from":"2026-06-23","date_to":"2026-06-23","query":"2026世界杯已经出的赛事比分"}' } }],
         };
         yield { type: 'finish', reason: 'tool_calls' };
         return;
@@ -1529,7 +1808,6 @@ describe('Router', () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.providerId).toBe('step-3.7-flash');
     expect(chunks.some((chunk) => chunk.type === 'tool_progress' && chunk.name === 'sports_score' && chunk.event === 'end')).toBe(true);
     const promptText = captured.at(-1)?.messages.map((message) => String(message.content || '')).join('\n') || '';
     expect(promptText).toContain('sports_score');
@@ -1981,14 +2259,21 @@ describe('Router', () => {
     expect(schema).toContain('location');
   });
 
-  it('emits a deterministic grounded evidence answer when providers fail after generic tool evidence', async () => {
+  it.each([true, false])('uses a bounded model recovery without leaking raw evidence (recovery succeeds=%s)', async (recoverySucceeds) => {
     stubSearchFetchOk();
     mockState.order = ['p-step', 'p-spark'];
     let stepRuns = 0;
-    mockState.adapterFn = async function* ({ provider }) {
+    mockState.adapterFn = async function* ({ provider, messages, tools }) {
       mockState.adapterCalls.push(provider.id);
       if (provider.id === 'p-step') {
         stepRuns += 1;
+        if (stepRuns === 3 && recoverySucceeds) {
+          expect(tools).toEqual([]);
+          expect(messages.some(message => message.role === 'tool' && String(message.content).includes('search summary'))).toBe(true);
+          yield { type: 'content', delta: '模型根据已查询来源给出的完整回答。' };
+          yield { type: 'finish', reason: 'stop' };
+          return;
+        }
         if (stepRuns === 1) {
           yield {
             type: 'tool_call_delta',
@@ -2007,17 +2292,17 @@ describe('Router', () => {
     };
 
     const chunks = [];
-    const result = await run({
+    const task = run({
       messages: [{ role: 'user', content: '查一下 generic evidence smoke' }],
       onChunk: async (chunk) => chunks.push(chunk),
     });
-
-    expect(result.ok).toBe(true);
-    const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
-    expect(visible).toContain('根据本轮已执行工具返回的证据');
-    expect(visible).toContain('web_search');
-    expect(visible).toContain('search summary');
-    expect(visible).not.toContain('all providers failed');
+    if (recoverySucceeds) await expect(task).resolves.toMatchObject({ ok: true, providerId: 'p-step' });
+    else await expect(task).rejects.toThrow('all providers failed');
+    const visible = chunks.filter(chunk => chunk.type === 'content').map(chunk => chunk.delta).join('');
+    expect(visible).toBe(recoverySucceeds ? '模型根据已查询来源给出的完整回答。' : '');
+    expect(visible).not.toContain('根据本轮已执行工具返回的证据');
+    expect(visible).not.toContain('subtool:');
+    expect(stepRuns).toBe(3);
   });
 
   it('strips process preamble from evidence handoff synthesis without touching facts', async () => {

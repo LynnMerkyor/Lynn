@@ -18,7 +18,7 @@ afterEach(() => {
   for (const home of temporaryHomes.splice(0)) fs.rmSync(home, { recursive: true, force: true });
 });
 
-function installationHarness(installRuntime = async () => '/test/runtime') {
+function installationHarness(installRuntime = async () => '/test/runtime', hardware = dedicated([24])) {
   const handlers = new Map();
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lynn-install-control-'));
   temporaryHomes.push(home);
@@ -27,6 +27,7 @@ function installationHarness(installRuntime = async () => '/test/runtime') {
   const onModelReady = vi.fn();
   createLocalModelController({
     BrowserWindow: { getAllWindows: () => [] }, shell: {}, lynnHome: home, installRuntime, onModelReady,
+    detectHardware: async () => hardware,
     wrapIpcHandler: (name, handler) => handlers.set(name, handler),
   });
   return { handlers, onModelReady, state: () => handlers.get('llamacpp:state')().download };
@@ -36,20 +37,29 @@ describe('hardware-adaptive EfficientThink installation', () => {
   it.each([24, 32, 48, 80])('recommends Q3 for a %s GiB card', memory => {
     expect(dedicated([memory]).recommended_model_id).toBe(catalog.defaultModelId);
   });
-  it('recommends Q3 from 16 GiB upward and Q2 below that', () => {
-    expect(dedicated([16]).recommended_model_id).toBe(catalog.defaultModelId);
+  it('recommends Q2 for 16 GiB and Q3 from the 24 GiB tier', () => {
+    expect(dedicated([16]).recommended_model_id).toBe(catalog.q2ModelId);
+    expect(dedicated([20]).recommended_model_id).toBe(catalog.q2ModelId);
+    expect(dedicated([23.49]).recommended_model_id).toBe(catalog.q2ModelId);
+    expect(dedicated([23.5]).recommended_model_id).toBe(catalog.defaultModelId);
+    expect(dedicated([24]).recommended_model_id).toBe(catalog.defaultModelId);
     expect(dedicated([15]).recommended_model_id).toBe(catalog.q2ModelId);
-    expect(dedicated([8]).recommended_model_id).toBe(catalog.q2ModelId);
+    expect(dedicated([14]).recommended_model_id).toBe(catalog.q2ModelId);
+    expect(dedicated([13.99]).can_enable).toBe(false);
+    expect(dedicated([13]).recommended_model_id).toBeNull();
+    expect(dedicated([8]).recommended_model_id).toBeNull();
   });
   it('does not mistake host RAM or summed cards for VRAM', () => {
-    expect(dedicated([8], 128).recommended_model_id).toBe(catalog.q2ModelId);
-    expect(dedicated([8, 8], 128).recommended_model_id).toBe(catalog.q2ModelId);
+    expect(dedicated([8], 128).recommended_model_id).toBeNull();
+    expect(dedicated([8, 8], 128).recommended_model_id).toBeNull();
+    expect(dedicated([16, 16], 128).recommended_model_id).toBe(catalog.q2ModelId);
     expect(dedicated([], 128).recommended_model_id).toBeNull();
   });
   it('recognizes Apple unified memory, not Intel Mac host RAM', () => {
-    expect(recommendLocalModel({ platform: 'darwin', arch: 'arm64', totalMemoryGib: 16 }).recommended_model_id).toBe(catalog.defaultModelId);
+    expect(recommendLocalModel({ platform: 'darwin', arch: 'arm64', totalMemoryGib: 16 }).recommended_model_id).toBe(catalog.q2ModelId);
     expect(recommendLocalModel({ platform: 'darwin', arch: 'arm64', totalMemoryGib: 24 }).recommended_model_id).toBe(catalog.defaultModelId);
-    expect(recommendLocalModel({ platform: 'darwin', arch: 'arm64', totalMemoryGib: 12 }).recommended_model_id).toBe(catalog.q2ModelId);
+    expect(recommendLocalModel({ platform: 'darwin', arch: 'arm64', totalMemoryGib: 13 }).can_enable).toBe(false);
+    expect(recommendLocalModel({ platform: 'darwin', arch: 'arm64', totalMemoryGib: 14 }).recommended_model_id).toBe(catalog.q2ModelId);
     expect(recommendLocalModel({ platform: 'darwin', arch: 'x64', totalMemoryGib: 64 }).can_enable).toBe(false);
   });
   it.each(catalog.tiers)('downloads one verified Coder390 GGUF and launches built-in MTP', tier => {
@@ -120,6 +130,33 @@ describe('hardware-adaptive EfficientThink installation', () => {
     expect(h.state().lastError).toBe('runtime-checksum-mismatch');
     expect(start).not.toHaveBeenCalled();
     expect(h.onModelReady).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [13, catalog.q2ModelId, 'insufficient-model-memory'],
+    [13.99, catalog.q2ModelId, 'insufficient-model-memory'],
+    [16, catalog.defaultModelId, 'insufficient-model-memory'],
+    [23.49, catalog.defaultModelId, 'insufficient-model-memory'],
+    [0, catalog.q2ModelId, 'unknown-model-memory'],
+  ])('blocks an unsupported %s GiB install before downloading runtime or weights', async (memory, modelId, reason) => {
+    const runtime = vi.fn();
+    const download = vi.spyOn(ModelDownloader.prototype, 'start');
+    const launch = vi.spyOn(LlamaCppManager.prototype, 'start');
+    const harness = installationHarness(runtime, dedicated([memory]));
+    expect(await harness.handlers.get('llamacpp:start-download')({}, { modelId, startAfterDownload: true })).toMatchObject({ ok: false, reason });
+    expect(runtime).not.toHaveBeenCalled();
+    expect(download).not.toHaveBeenCalled();
+    expect(launch).not.toHaveBeenCalled();
+  });
+
+  it.each([[14, catalog.q2ModelId], [16, catalog.q2ModelId], [23.5, catalog.defaultModelId], [24, catalog.defaultModelId]])('allows the supported %s GiB tier to reach runtime preparation', async (memory, modelId) => {
+    const runtime = vi.fn(async () => { throw new Error('test-runtime-stop'); });
+    const download = vi.spyOn(ModelDownloader.prototype, 'start');
+    const harness = installationHarness(runtime, dedicated([memory]));
+    expect(await harness.handlers.get('llamacpp:start-download')({}, { modelId })).toMatchObject({ ok: true });
+    await vi.waitFor(() => expect(harness.state().state).toBe('error'));
+    expect(runtime).toHaveBeenCalledOnce();
+    expect(download).not.toHaveBeenCalled();
   });
   it('does not launch or switch models after a checksum failure', async () => {
     const download = vi.spyOn(ModelDownloader.prototype, 'start').mockResolvedValueOnce({ ok: false, reason: 'checksum-mismatch' });

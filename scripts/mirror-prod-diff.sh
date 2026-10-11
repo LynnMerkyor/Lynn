@@ -16,6 +16,20 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MIRROR="$ROOT/brain-v2-mirror"
 PROD="/opt/lobster-brain-v2"
 PORT="${BRAIN_V2_PORT:-8790}"
+SSH_CONTROL_DIR=$(mktemp -d "${TMPDIR:-/tmp}/lynn-brain-check.XXXXXX") || exit 1
+ssh() {
+  command ssh -o BatchMode=yes -o ConnectTimeout=10 -o ControlMaster=auto -o ControlPersist=60 -o ControlPath="$SSH_CONTROL_DIR/control" "$@"
+}
+cleanup_ssh() {
+  command ssh -S "$SSH_CONTROL_DIR/control" -O exit "$HOST" >/dev/null 2>&1 || true
+  rm -f "$SSH_CONTROL_DIR/control"
+  rmdir "$SSH_CONTROL_DIR" 2>/dev/null || true
+}
+trap cleanup_ssh EXIT
+if ! ssh "$HOST" true; then
+  printf '%s\n' '✗ 无法连接 Brain SSH，云端一致性检查未执行。'
+  exit 1
+fi
 FAIL=0
 WARN=0
 
@@ -75,9 +89,14 @@ anchor "provider ids" \
   "grep -o \"providerId('[^']*')\" '$MIRROR/provider-registry.ts' | sed \"s/providerId('\\(.*\\)')/\\1/\" | sort -u" \
   "grep -o \"providerId('[^']*')\" '$PROD/provider-registry.js' | sed \"s/providerId('\\(.*\\)')/\\1/\" | sort -u"
 
-anchor "server tools" \
-  "grep -o \"name: '[a-z_]*'\" '$MIRROR/tool-exec/index.ts' | sed \"s/name: '\\(.*\\)'/\\1/\" | sort -u" \
-  "grep -o \"name: '[a-z_]*'\" '$PROD/tool-exec/index.js' | sed \"s/name: '\\(.*\\)'/\\1/\" | sort -u"
+local_tools=$(cd "$ROOT" && node --import tsx --input-type=module -e "const { SERVER_TOOLS } = await import('./brain-v2-mirror/tool-exec/index.ts'); console.log(SERVER_TOOLS.map(tool => tool.function.name).sort().join(' '));")
+remote_tools=$(ssh "$HOST" "cd '$PROD' && node --input-type=module -e \"const { SERVER_TOOLS } = await import('./tool-exec/index.js'); console.log(SERVER_TOOLS.map(tool => tool.function.name).sort().join(' '));\"")
+if [ -n "$local_tools" ] && [ "$local_tools" = "$remote_tools" ]; then
+  ok "server tools 一致: $local_tools"
+else
+  fail "server tools 漂移或无法读取:"
+  printf '    mirror: %s\n    prod  : %s\n' "${local_tools:-<empty>}" "${remote_tools:-<empty>}"
+fi
 
 note ""
 note "== ④ prod 运行态 smoke(ESM import / health / route)=="

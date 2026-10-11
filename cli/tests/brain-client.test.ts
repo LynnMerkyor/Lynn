@@ -20,6 +20,12 @@ beforeEach(() => {
 });
 
 describe("Brain request cancellation", () => {
+  it("preserves full server tool evidence independently of client tool-call frames", () => {
+    const toolCall = { id: "server-weather", type: "function", function: { name: "weather", arguments: '{"city":"顺德大良"}' } };
+    const events = parseBrainStreamPayload(JSON.stringify({ object: "lynn.tool_progress", tool_progress: { event: "end", name: "weather", ok: true, tool_call: toolCall, result: "完整预报与来源" } }));
+    expect(events).toEqual([expect.objectContaining({ type: "tool_progress", toolCall, result: "完整预报与来源" })]);
+    expect(events.some((event) => event.type === "tool_call.delta")).toBe(false);
+  });
   it("propagates a caller abort through the active fetch", async () => {
     const server = http.createServer(() => {
       // Keep the response open until the caller aborts it.

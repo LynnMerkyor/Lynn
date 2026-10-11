@@ -31,12 +31,14 @@ export async function parallelResearch(args, { log, dispatchFn } = {}) {
     const subResult = await dispatchFn(q.tool, q.args);
     let parsed = subResult;
     try { parsed = JSON.parse(subResult); } catch { /* keep string */ }
-    return { index: i, label, tool: q.tool, args: q.args, result: parsed, ok: true };
+    const ok = !!subResult && !parsed?.error && parsed?.ok !== false && parsed?.status !== 'no_direct_source' && parsed?.directSourceStatus !== 'unavailable';
+    return { index: i, label, tool: q.tool, args: q.args, result: parsed, ok };
     },
   }));
   const settled = await aggregateAllSettled(racers, BUDGET_MS, {
     minSuccess: Math.min(Math.max(1, MIN_SUCCESS), queries.length),
     settleWindowMs: SETTLE_WINDOW_MS,
+    isSuccess: (value) => value.ok === true,
   });
   const seen = new Set();
   const results = [];
@@ -45,7 +47,7 @@ export async function parallelResearch(args, { log, dispatchFn } = {}) {
     const index = queries.findIndex((item, idx) => (item.label || ('q' + (idx + 1))) === entry.source);
     if (!q || seen.has(entry.source)) continue;
     seen.add(entry.source);
-    if (entry.ok) {
+    if (entry.value) {
       results.push(entry.value);
     } else {
       results.push({
@@ -62,7 +64,7 @@ export async function parallelResearch(args, { log, dispatchFn } = {}) {
   const done = results.length;
   const ok = results.filter(r => r && r.ok).length;
   log && log('info', 'tool-exec/parallel_research ' + ok + '/' + queries.length + ' sub-queries returned in ' + elapsedMs + 'ms');
-  return JSON.stringify({ parallel: true, count: queries.length, returned: done, elapsedMs, budgetMs: BUDGET_MS, partial: done < queries.length, results });
+  return JSON.stringify({ ok: ok > 0, parallel: true, count: queries.length, returned: done, elapsedMs, budgetMs: BUDGET_MS, partial: done < queries.length, results });
 }
 
 export const __testing__ = { ALLOWED };

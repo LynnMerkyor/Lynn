@@ -10,14 +10,14 @@
     <title>Lynn — 开源桌面 AI Agent | Claude Code / Cursor / Codex 替代 | 智能体助手</title>
     <meta
       name="description"
-      content="Lynn 是开源桌面 AI Agent，默认使用 StepFun 3.7 Flash 主链，支持长期记忆、复查闭环、自动任务和 CLI Worker Fleet。可作为 Claude Code、Cursor、Codex 的桌面级替代。"
+      content="Lynn 是开源桌面 AI Agent，默认使用 Step 5 Preview，支持 Qwen3.8-27B Coder390 本地模型、实时语音、长期记忆、复查闭环、自动任务和 CLI Worker Fleet。"
     />
     <meta name="theme-color" content="#f7f1e6" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Lynn — 开源桌面 AI Agent | Claude Code / Cursor / Codex 替代 | 智能体助手" />
     <meta
       property="og:description"
-      content="Lynn 是开源桌面 AI Agent，默认使用 StepFun 3.7 Flash 主链，支持长期记忆、复查闭环、自动任务和 CLI Worker Fleet。可作为 Claude Code、Cursor、Codex 的桌面级替代。"
+      content="Lynn 是开源桌面 AI Agent，默认使用 Step 5 Preview，支持 Qwen3.8-27B Coder390 本地模型、实时语音、长期记忆、复查闭环、自动任务和 CLI Worker Fleet。"
     />
     <meta property="og:image" content="https://raw.githubusercontent.com/LynnMerkyor/Lynn/main/.github/assets/screenshot-main-20260407-v3.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -36,7 +36,7 @@
       "applicationCategory": "DeveloperApplication",
       "applicationSubCategory": "AI Agent",
       "operatingSystem": "macOS 12+, Windows 10+",
-      "description": "Lynn 是开源桌面 AI Agent。默认使用 StepFun 3.7 Flash 主链，支持六层记忆系统、写作工作台、Diff 视图、CLI Worker Fleet 和多 Agent 协作。可作为 Claude Code、Cursor、Codex 的桌面级替代。",
+      "description": "Lynn 是开源桌面 AI Agent。默认使用 Step 5 Preview，支持 Qwen3.8-27B Coder390 本地模型、实时语音、六层记忆系统、写作工作台、Diff 视图、CLI Worker Fleet 和多 Agent 协作。",
       "url": "https://download.merkyorlynn.com",
       "downloadUrl": "https://download.merkyorlynn.com/download",
       "screenshot": "https://raw.githubusercontent.com/LynnMerkyor/Lynn/main/.github/assets/screenshot-main-20260407-v3.png",
@@ -60,8 +60,8 @@
         "worstRating": "1"
       },
       "featureList": [
-        "StepFun 3.7 Flash 默认主链",
-        "本地 Qwen3.6-27B Coding Q4 MTP 默认推荐,9B/4B 低配降级",
+        "Step 5 Preview 默认主链",
+        "本地 Qwen3.8-27B Coder390 Q2/Q3，内置 Q4 MTP；16GB 推荐 Q2，24GB 推荐 Q3，最低 14GiB",
         "六层记忆系统：心跳/心态/工作记忆/用户画像",
         "写作工作台 + Diff 视图 + 对比外部修改",
         "本地工具：edit/write/read/bash/grep/find 全链路",
@@ -185,7 +185,7 @@
             </article>
             <article class="feature-card">
               <h3>多模型路由</h3>
-              <p>普通 GUI/CLI 对话默认走 StepFun 3.7 Flash 主链,视觉由 StepFun 承接;本地 manager 作为显式实验路径保留,不会抢占默认回答链路。</p>
+              <p>普通 GUI/CLI 对话默认使用 Step 5 Preview，实时语音使用 stepaudio-2.5-realtime。本地 Coder390 Q2/Q3 由用户明确安装和启用，不会自动抢占默认回答链路。</p>
             </article>
             <article class="feature-card">
               <h3>安全防护</h3>
@@ -234,7 +234,7 @@
           <div class="story-grid">
             <article class="story-card">
               <h3>快速设置</h3>
-              <p>新用户可以直接快速设置，不必先理解复杂的 API Key、供应商和路由配置。需要本地模型时再显式启用 27B Coding Q4 MTP；低配设备可手动选 9B / 4B。</p>
+              <p>新用户可以直接快速设置，不必先理解复杂的 API Key、供应商和路由配置。需要本地模型时再明确安装 Coder390 Q2 / Q3：16GB 推荐 Q2，24GB 及以上推荐 Q3；低于 14GiB 不可安装。</p>
             </article>
             <article class="story-card">
               <h3>更像长期协作者</h3>

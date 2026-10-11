@@ -13,6 +13,7 @@ export interface BrainChatRequest {
   reasoning: ReasoningOptions;
   fallbackProvider?: CliProviderProfile | null;
   tools?: ChatToolDefinition[];
+  toolChoice?: "none";
   signal?: AbortSignal;
 }
 
@@ -47,7 +48,7 @@ export type BrainStreamEvent =
   | { type: "reasoning.delta"; text: string; hidden?: boolean }
   | { type: "tool_call.delta"; index: number; id?: string; name?: string; arguments?: string }
   | { type: "provider"; activeProvider: string; fallbackFrom?: Array<{ id: string; reason?: string }> }
-  | { type: "tool_progress"; event: string; name: string; ms?: number; ok?: boolean; summary?: string; details?: string[]; argsSummary?: string }
+  | { type: "tool_progress"; event: string; name: string; ms?: number; ok?: boolean; summary?: string; details?: string[]; argsSummary?: string; toolCall?: unknown; result?: string }
   | { type: "review_start"; reviewId: string; reviewerName?: string; reviewerModelLabel?: string; autoReview?: boolean; reviewMode?: string | null; triggerReasons?: string[] }
   | { type: "review_progress"; reviewId: string; stage?: string; findingsCount?: number; verdict?: string; workflowGate?: string; autoReview?: boolean; reviewMode?: string | null; triggerReasons?: string[] }
   | { type: "review_result"; reviewId: string; content?: string; error?: string; reviewerName?: string; reviewerModelLabel?: string; autoReview?: boolean; reviewMode?: string | null; triggerReasons?: string[]; structured?: Record<string, unknown>; secondOpinion?: Record<string, unknown>; fallbackNote?: string }
@@ -129,7 +130,7 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
   const parsed = JSON.parse(payload) as {
     object?: string;
     meta?: { active_provider?: unknown; fallback_from?: unknown };
-    tool_progress?: { event?: unknown; name?: unknown; ms?: unknown; ok?: unknown; summary?: unknown; details?: unknown; args_summary?: unknown; argsSummary?: unknown };
+    tool_progress?: { event?: unknown; name?: unknown; ms?: unknown; ok?: unknown; summary?: unknown; details?: unknown; args_summary?: unknown; argsSummary?: unknown; tool_call?: unknown; result?: unknown };
     error?: unknown;
     code?: unknown;
     type?: unknown;
@@ -234,6 +235,8 @@ export function parseBrainStreamPayload(payload: string): BrainStreamEvent[] {
         argsSummary: typeof progress.args_summary === "string" && progress.args_summary ? progress.args_summary : typeof progress.argsSummary === "string" && progress.argsSummary ? progress.argsSummary : undefined,
         summary: typeof progress.summary === "string" && progress.summary ? progress.summary : undefined,
         details: Array.isArray(progress.details) ? progress.details.filter((line): line is string => typeof line === "string" && !!line.trim()) : undefined,
+        ...(progress.tool_call ? { toolCall: progress.tool_call } : {}),
+        ...(typeof progress.result === "string" ? { result: progress.result } : {}),
       });
     }
   }
@@ -346,7 +349,7 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
   const body = applyReasoningToBody({
     model: "step-5-preview",
     stream: true,
-    ...(request.tools?.length ? { tools: request.tools, tool_choice: "auto" } : {}),
+    ...(request.toolChoice === "none" ? { tool_choice: "none" } : request.tools?.length ? { tools: request.tools, tool_choice: "auto" } : {}),
     messages,
   }, request.reasoning);
 
@@ -469,7 +472,7 @@ export async function* streamDirectProviderChat(request: BrainChatRequest, provi
     model: provider.model,
     stream: true,
     stream_options: { include_usage: true },
-    ...(request.tools?.length ? { tools: request.tools, tool_choice: "auto" } : {}),
+    ...(request.toolChoice === "none" ? { tool_choice: "none" } : request.tools?.length ? { tools: request.tools, tool_choice: "auto" } : {}),
     messages,
   }, request.reasoning);
   let response: Response;

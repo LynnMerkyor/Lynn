@@ -131,6 +131,7 @@ type LocalQwen35Status = {
     base_url?: string;
     hardware?: {
       can_enable?: boolean;
+      memory_kind?: 'unified' | 'dedicated';
       accelerator_memory_gib?: number | null;
       recommended_model_id?: string | null;
       recommendation?: string;
@@ -220,7 +221,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   const selectedTier = getLocalModelTier(manualTierId || runningTierId || hardware.recommended_model_id);
   const selectedModelId = selectedTier.modelId;
   const runtime = hardware.recommended_runtime || {};
-  const gpu = hardware.gpus?.[0];
+  const gpu = hardware.gpus?.reduce((largest, candidate) => (candidate.memory_gib || 0) > (largest.memory_gib || 0) ? candidate : largest);
   const endpointDefaultRunning = servedModelIds.includes(selectedModelId);
   const endpointForeign = status?.runtime?.endpoint_occupied === true
     || observed.endpoint_occupied === true
@@ -251,6 +252,8 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
       : []),
     ...(hardware.warnings || []),
     ...(hardware.blockers || []),
+    ...(hardware.accelerator_memory_gib != null && hardware.accelerator_memory_gib < selectedTier.minimumMemoryGib
+      ? [`所选 ${selectedTier.quantization} 不满足容量要求：Q2 至少 14GiB，Q3 需要 24GB 档位；不能安装或启动。`] : []),
   ])];
   const hasRuntime = !endpointForeign && !!(observed.llama_server || llamaState.binaryPath);
   const defaultDownload = llamaState.download;
@@ -321,7 +324,9 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
     const idle = Math.max(0, slots.total - busy);
     return busy > 0 ? `生成中 ${busy}/${slots.total}` : `可用 ${idle}/${slots.total}`;
   })();
-  const hardwareBlocked = !manualTierId && !endpointRunning && hardware.can_enable !== true;
+  const hardwareBlocked = !endpointRunning && (hardware.can_enable !== true
+    || !Number.isFinite(hardware.accelerator_memory_gib)
+    || Number(hardware.accelerator_memory_gib) < selectedTier.minimumMemoryGib);
   const hardwareLabel = runtime.label || (loading || !status ? '正在检查硬件' : '默认使用云端模型');
   const stateLabel = useMemo(() => {
     if (endpointForeign) return '非默认本地端点运行中';
@@ -351,6 +356,10 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
   }, [endpointForeign, endpointRunning, loadStatus]);
 
   const authorizeAndSetup = async () => {
+    if (hardwareBlocked) {
+      setActionStatus({ kind: 'error', text: '显存/统一内存不足或尚未确认，不能安装。Q2 至少 14GiB、推荐 16GB；Q3 需要 24GB 档位。' });
+      return;
+    }
     const profile = `\n\n本次方案：${selectedTier.label}，上下文 ${selectedTier.contextSize}，并发 1`;
     const warning = hardwareWarnings.length ? `\n\n注意：${hardwareWarnings.join(' ')}` : '';
     const setupText = `将安装 ${selectedTier.label} 与兼容的 llama.cpp。主模型 ${(localModelInstallBytes(selectedTier) / 1e9).toFixed(2)} GB，内置 Q4 MTP，不另下草稿，不含视觉组件。Lynn 会校验文件并尝试启动；实际显存占用还包括缓存与运行缓冲。旧模型不会被删除。`;
@@ -597,7 +606,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         onHelp={() => { void requestLocalModelHelp(selectedModelId, hardware, actionStatus?.text || defaultDownload.lastError || managerFailureReason).catch(err => showToast(String(err.message), 'error')); }} />
       <div className={styles['pv-local-qwen-main']}>
         <div>
-          <div className={styles['pv-local-qwen-kicker']}>16GB 及以上默认 Q3 · 16GB 以下 Q2</div>
+          <div className={styles['pv-local-qwen-kicker']}>24GB 及以上默认 Q3 · 24GB 以下（16GB 档） Q2</div>
           <div className={styles['pv-local-qwen-title']}>{selectedTier.label}</div>
           <div className={styles['pv-local-qwen-desc']}>
             Qwen3.8-27B Coder390 EfficientThink · 内置 Q4 MTP 加速；实际速度取决于硬件及任务。
@@ -630,7 +639,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
         <span>内置 Q4 MTP</span>
         <span>Lynn imatrix 校准</span>
         <span>评测详见模型卡</span>
-        <span>{selectedTier.audience || (selectedTier.memoryGib >= 16 ? '16GB 及以上' : '16GB 以下')}</span>
+        <span>{selectedTier.audience || (selectedTier.memoryGib >= 24 ? '24GB 及以上' : '24GB 以下（16GB 档）')}</span>
         <span>GUI 交互优先</span>
         <span>本地单并发</span>
         <span>忙时 CLI 转 StepFun</span>
@@ -707,11 +716,15 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
 
       <div className={styles['pv-local-qwen-hardware']}>
         <div className={styles['pv-local-qwen-hardware-title']}>硬件判断</div>
+        <p>Apple Silicon 按系统报告的统一内存判断；Windows/Linux 的 NVIDIA 独显通过 nvidia-smi 读取单卡显存，取最大一张，不叠加多卡，也不把系统内存当作显存。</p>
+        <p>16GB 档默认 Q2（13.28GB 文件、4K 初始上下文）；24GB 档及以上默认 Q3（17.30GB 文件、8K 初始上下文）。24GB 显卡允许系统报告值略低于标称值，按至少 23.5GiB 识别。</p>
+        <p>低于 14GiB 禁止安装，13GB 容量不足；14～不足 16GiB 仅达 Q2 最低门槛。下载文件大小不等于运行占用，须额外预留上下文 KV 缓存、运行缓冲和系统空间。推荐按总容量判断，不保证当前空闲容量足够。</p>
         <div className={styles['pv-local-qwen-facts']}>
           <span>{hardwareLabel}</span>
           {hardware.chip && <span>{hardware.chip}</span>}
-          {gpu?.name && <span>{gpu.name}{gpu.memory_gib ? ` · ${gpu.memory_gib.toFixed(1)}GB` : ''}</span>}
-          {hardware.total_memory_gib && <span>内存 {hardware.total_memory_gib.toFixed(1)}GB</span>}
+          {gpu?.name && <span>{gpu.name}{gpu.memory_gib ? ` · 单卡显存 ${gpu.memory_gib.toFixed(1)} GiB` : ''}</span>}
+          {hardware.accelerator_memory_gib != null && <span>检测结果：{hardware.memory_kind === 'unified' ? '统一内存' : '单卡显存'} {hardware.accelerator_memory_gib.toFixed(1)} GiB</span>}
+          {hardware.total_memory_gib && <span>系统内存 {hardware.total_memory_gib.toFixed(1)} GiB{hardware.memory_kind === 'dedicated' ? '（不用于显存分档）' : ''}</span>}
           {runtime.ctx_size && <span>上下文 {runtime.ctx_size}</span>}
           {runtime.parallel && <span>并发 {runtime.parallel}</span>}
         </div>
@@ -836,7 +849,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           <div className={styles['pv-local-qwen-advanced-panel']}>
             <div>
               <strong>已有 GGUF / 模型目录</strong>
-              <span>默认使用 Qwen3.8-27B Coder390。16GB 及以上是 Q3，16GB 以下是 Q2。也可以导入已经下载好的 GGUF。</span>
+              <span>默认使用 Qwen3.8-27B Coder390。24GB 及以上是 Q3，24GB 以下（16GB 档）是 Q2。也可以导入已经下载好的 GGUF。</span>
               {modelPath && <code className={styles['pv-local-qwen-model-path']}>{modelPath}</code>}
               {needsMtpUpgrade && legacyModelPath && <code className={styles['pv-local-qwen-model-path']}>旧版模型：{legacyModelPath}</code>}
             </div>
@@ -913,7 +926,7 @@ function LocalQwen35Panel({ onRefresh }: { onRefresh: () => Promise<void> }) {
           disabled={settingUp || jobRunning || hardwareBlocked || endpointLoading || managerStarting || defaultDownloadActive}
         >
           {hardwareBlocked
-            ? '硬件不建议本地启用'
+            ? '容量不足或未确认，不能安装'
             : defaultDownloadActive
               ? `下载中 ${defaultDownloadPercent.toFixed(0)}%`
             : endpointLoading || managerStarting

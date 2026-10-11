@@ -64,6 +64,59 @@ describe("createLynnAgentSession native runtime", () => {
     vi.restoreAllMocks();
   });
 
+  it.each(["brain", "test-provider"])("forwards Brain tool progress only from a trusted model transport: %s", async (provider) => {
+    globalThis.fetch = vi.fn(async () => sseResponse([
+      'data: {"object":"lynn.tool_progress","tool_progress":{"name":"weather","event":"end","ok":true,"args_summary":"顺德大良","summary":"预报已核验","details":["provider: cma"]}}\n\n',
+      'data: {"choices":[{"delta":{"content":"天气已核验。"}}]}\n\n',
+      "data: [DONE]\n\n",
+    ]));
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: SessionManager.create(tempDir, tempDir),
+      model: { id: "test-model", provider, api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "test-key" },
+    });
+    const events = [];
+    session.subscribe((event) => events.push(event));
+    await session.prompt("查询天气");
+    const progress = events.filter((event) => event.type === "tool_progress");
+    if (provider === "brain") {
+      expect(progress).toEqual([expect.objectContaining({ source: "brain", name: "weather", event: "end", ok: true, argsSummary: "顺德大良", summary: "预报已核验", details: ["provider: cma"] })]);
+    } else {
+      expect(progress).toEqual([]);
+    }
+  });
+
+  it("retains full Brain tool evidence when a later round invokes a client tool", async () => {
+    const serverCall = { id: "server-weather", type: "function", function: { name: "weather", arguments: '{"city":"顺德大良"}' } };
+    const sourceResult = "顺德大良预报：明晚晴。provider: cma。完整来源结果。";
+    globalThis.fetch = vi.fn(async (_url, options) => {
+      const body = JSON.parse(options.body);
+      if (globalThis.fetch.mock.calls.length === 1) {
+        return sseResponse([
+          `data: ${JSON.stringify({ object: "lynn.tool_progress", tool_progress: { event: "end", name: "weather", ok: true, tool_call: serverCall, result: sourceResult } })}\n\n`,
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"client-read","function":{"name":"read_note","arguments":"{}"}}]}}]}\n\n',
+          "data: [DONE]\n\n",
+        ]);
+      }
+      expect(body.messages).toContainEqual(expect.objectContaining({ role: "tool", name: "weather", tool_call_id: serverCall.id, content: sourceResult }));
+      expect(body.messages).toContainEqual(expect.objectContaining({ role: "assistant", tool_calls: [serverCall] }));
+      expect(body.messages).toContainEqual(expect.objectContaining({ role: "tool", tool_call_id: "client-read" }));
+      return sseResponse(['data: {"choices":[{"delta":{"content":"预报与本地记录均已核验。"}}]}\n\n', "data: [DONE]\n\n"]);
+    });
+    const manager = SessionManager.create(tempDir, tempDir);
+    const localTool = vi.fn(async () => ({ content: [{ type: "text", text: "本地记录" }] }));
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: manager,
+      model: { id: "test-model", provider: "brain", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "test-key" },
+      tools: [{ name: "read_note", description: "read local note", parameters: { type: "object", properties: {} }, execute: localTool }],
+    });
+    await session.prompt("查询预报并读取本地记录");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(localTool).toHaveBeenCalledTimes(1);
+    expect(manager.buildSessionContext().messages).toContainEqual(expect.objectContaining({ role: "tool", name: "weather", content: sourceResult }));
+  });
+
   it("queues follow-up prompts while a turn is streaming instead of recursing or throwing", async () => {
     const fetchMock = vi.fn(async () => sseResponse([
       "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n",
@@ -1226,15 +1279,15 @@ describe("createLynnAgentSession native runtime", () => {
 
     await session.prompt("世界杯昨晚比赛结果");
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(execute).toHaveBeenCalledTimes(2);
-    const stepBody = JSON.parse(fetchMock.mock.calls[2][1].body);
+    const stepBody = JSON.parse(fetchMock.mock.calls[3][1].body);
     expect(stepBody.model).toBe("step-3.7-flash");
     expect(stepBody.tools).toBeUndefined();
-    expect(stepBody.messages).toHaveLength(2);
-    expect(stepBody.messages.at(-1).content).toContain("上一个模型已经多轮调用工具但没有产出最终答案");
-    expect(stepBody.messages.at(-1).content).toContain("tool:墨西哥2-0南非");
-    expect(stepBody.messages.some((message) => message.role === "tool")).toBe(false);
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body).tools).toBeUndefined();
+    expect(stepBody.messages.at(-1).content).toContain("上一模型已经完成多轮工具调用但没有形成最终回复");
+    expect(JSON.stringify(stepBody.messages)).toContain("tool:墨西哥2-0南非");
+    expect(stepBody.messages.some((message) => message.role === "tool")).toBe(true);
     const serialized = JSON.stringify(manager.buildSessionContext().messages);
     expect(serialized).toContain("tool:墨西哥2-0南非");
     expect(serialized).toContain("根据工具结果，比分已整理。");
@@ -1294,9 +1347,9 @@ describe("createLynnAgentSession native runtime", () => {
     expect(stepToolBody.messages.at(-1).content).toContain("必要时调用一次最相关工具");
     const stepFinalBody = JSON.parse(fetchMock.mock.calls[2][1].body);
     expect(stepFinalBody.tools).toBeUndefined();
-    expect(stepFinalBody.messages).toHaveLength(2);
+    expect(stepFinalBody.messages.at(-1).content).toContain("不要再调用工具");
     expect(JSON.stringify(stepFinalBody.messages)).toContain("search:世界杯昨晚比分:墨西哥2-0南非");
-    expect(stepFinalBody.messages.some((message) => message.role === "tool")).toBe(false);
+    expect(stepFinalBody.messages.some((message) => message.role === "tool")).toBe(true);
     expect(execute).toHaveBeenCalledWith(
       "call_search",
       { query: "世界杯昨晚比分" },
@@ -1308,7 +1361,7 @@ describe("createLynnAgentSession native runtime", () => {
     expect(serialized).not.toContain("工具链已执行多轮但没有形成最终回复");
   });
 
-  it("uses a deterministic evidence answer instead of the generic tool-loop fallback when fallbacks stay empty", async () => {
+  it("does not manufacture an evidence answer when every model stays empty", async () => {
     const fetchMock = vi.fn(async (_url, init) => {
       const body = JSON.parse(init.body);
       if (body.model === "deepseek-v4-flash") {
@@ -1349,16 +1402,17 @@ describe("createLynnAgentSession native runtime", () => {
 
     const finalMessage = manager.buildSessionContext().messages.at(-1);
     expect(finalMessage).toMatchObject({ role: "assistant" });
-    expect(finalMessage.content).toContain("tool:美国4-1巴拉圭");
-    expect(finalMessage.content).toContain("我能从工具证据中确认");
+    expect(finalMessage.content).not.toContain("tool:美国4-1巴拉圭");
+    expect(JSON.stringify(manager.buildSessionContext().messages)).toContain("tool:美国4-1巴拉圭");
+    expect(finalMessage.content).not.toContain("我能从工具证据中确认");
     expect(finalMessage.content).not.toContain("我已经拿到工具结果");
     expect(finalMessage.content).not.toContain("接管总结模型");
     expect(finalMessage.content).not.toContain("error.searchFollowupHint");
-    expect(finalMessage.content).not.toContain("工具链已执行多轮但没有形成最终回复");
-    expect(finalMessage.content).not.toContain("请缩小问题范围后重试");
+    expect(finalMessage.content).toContain("工具链已执行多轮但没有形成最终回复");
+    expect(finalMessage.content).toContain("请缩小问题范围后重试");
   });
 
-  it("compresses long sports search evidence into a visible answer when every model fallback is empty", async () => {
+  it("preserves long sports evidence for models without synthesizing an answer after failure", async () => {
     const fetchMock = vi.fn(async (_url, init) => {
       const body = JSON.parse(init.body);
       if (body.model === "deepseek-v4-flash") {
@@ -1405,15 +1459,18 @@ describe("createLynnAgentSession native runtime", () => {
 
     await session.prompt("昨晚世界杯最新的比赛结果");
 
-    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(3);
+    const finalRequest = JSON.parse(fetchMock.mock.calls.at(-1)[1].body);
+    expect(finalRequest.tools).toBeUndefined();
+    expect(finalRequest.messages.some(message => message.role === "tool" && message.content === evidence)).toBe(true);
     const finalMessage = manager.buildSessionContext().messages.at(-1);
     expect(finalMessage).toMatchObject({ role: "assistant" });
-    expect(finalMessage.content).toContain("我能从工具证据中确认");
-    expect(finalMessage.content).toContain("巴西队3-0战胜海地队");
-    expect(finalMessage.content).toContain("美国队2比0战胜澳大利亚队");
+    expect(finalMessage.content).not.toContain("我能从工具证据中确认");
+    expect(finalMessage.content).not.toContain("巴西队3-0战胜海地队");
+    expect(finalMessage.content).not.toContain("美国队2比0战胜澳大利亚队");
     expect(finalMessage.content).not.toContain("error.searchFollowupHint");
-    expect(finalMessage.content).not.toContain("工具链已执行多轮但没有形成最终回复");
-    expect(finalMessage.content).not.toContain("请缩小问题范围后重试");
+    expect(finalMessage.content).toContain("工具链已执行多轮但没有形成最终回复");
+    expect(finalMessage.content).toContain("请缩小问题范围后重试");
   });
 
   it("does not turn scraped page chrome into a final answer when evidence has no facts", async () => {
@@ -1464,13 +1521,13 @@ describe("createLynnAgentSession native runtime", () => {
 
     const finalMessage = manager.buildSessionContext().messages.at(-1);
     expect(finalMessage).toMatchObject({ role: "assistant" });
-    expect(finalMessage.content).toContain("没有提取到足够可靠的事实");
+    expect(finalMessage.content).toContain("没有形成最终回复");
     expect(finalMessage.content).not.toContain("浏览器版本过低");
     expect(finalMessage.content).not.toContain("javascript");
     expect(finalMessage.content).not.toContain("weather.sz.gov.cn");
   });
 
-  it("lets StepFun re-query when prior tool output is page chrome without usable facts", async () => {
+  it("lets the model assess full evidence without heuristic re-querying", async () => {
     let stepToolDelegationSeen = false;
     const fetchMock = vi.fn(async (_url, init) => {
       const body = JSON.parse(init.body);
@@ -1491,8 +1548,8 @@ describe("createLynnAgentSession native runtime", () => {
       if (body.model === "step-3.7-flash") {
         const serializedMessages = JSON.stringify(body.messages);
         expect(serializedMessages).toContain("暴雨橙色预警");
-        expect(serializedMessages).not.toContain("浏览器版本过低");
-        expect(serializedMessages).not.toContain("javascript:szqbl");
+        expect(serializedMessages).toContain("浏览器版本过低");
+        expect(serializedMessages).toContain("javascript:szqbl");
         return sseResponse([
           "data: {\"choices\":[{\"delta\":{\"content\":\"深圳今天有暴雨橙色预警，需关注官方预警。\"}}]}\n\n",
           "data: [DONE]\n\n",
@@ -1537,8 +1594,8 @@ describe("createLynnAgentSession native runtime", () => {
 
     await session.prompt("查一下深圳今天有没有暴雨预警");
 
-    expect(stepToolDelegationSeen).toBe(true);
-    expect(execute).toHaveBeenCalledTimes(2);
+    expect(stepToolDelegationSeen).toBe(false);
+    expect(execute).toHaveBeenCalledTimes(3);
     const finalMessage = manager.buildSessionContext().messages.at(-1);
     expect(finalMessage).toMatchObject({ role: "assistant" });
     expect(finalMessage.content).toContain("暴雨橙色预警");
@@ -1546,9 +1603,13 @@ describe("createLynnAgentSession native runtime", () => {
     expect(finalMessage.content).not.toContain("javascript");
   });
 
-  it("keeps compact measured facts instead of treating all evidence as search noise", async () => {
+  it("lets the original model produce a final answer from complete measured evidence", async () => {
     const fetchMock = vi.fn(async (_url, init) => {
       const body = JSON.parse(init.body);
+      if (body.model === "deepseek-v4-flash" && !body.tools) {
+        expect(JSON.stringify(body.messages)).toContain("1 USD = 6.7844 CNY");
+        return sseResponse([`data: ${JSON.stringify({ choices: [{ delta: { content: "1 USD = 6.7844 CNY，来源为工具返回的日度参考值。" } }] })}\n\n`, "data: [DONE]\n\n"]);
+      }
       if (body.model === "deepseek-v4-flash") {
         return sseResponse([
           "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_rate\",\"function\":{\"name\":\"exchange_rate\",\"arguments\":\"{\\\"pair\\\":\\\"USD/CNY\\\"}\"}}]}}]}\n\n",
@@ -1591,7 +1652,8 @@ describe("createLynnAgentSession native runtime", () => {
     const finalMessage = manager.buildSessionContext().messages.at(-1);
     expect(finalMessage).toMatchObject({ role: "assistant" });
     expect(finalMessage.content).toContain("1 USD = 6.7844 CNY");
-    expect(finalMessage.content).not.toContain("没有提取到足够可靠的事实");
+    expect(finalMessage.content).not.toContain("我能从工具证据中确认");
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)[1].body).model).toBe("deepseek-v4-flash");
   });
 
   it("deduplicates repeated final assistant text before persisting the turn", async () => {

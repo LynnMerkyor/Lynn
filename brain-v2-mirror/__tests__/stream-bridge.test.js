@@ -63,6 +63,15 @@ describe('stream-bridge SSE emitter', () => {
     expect(ev.choices[0].delta.tool_calls).toEqual(tcd);
   });
 
+  it('forwards complete server evidence without making it an executable client call', () => {
+    const res = makeMockRes();
+    const emitter = makeSSEEmitter(res, { id: 'evidence' });
+    const toolCall = { id: 'server-weather', type: 'function', function: { name: 'weather', arguments: '{"city":"顺德大良"}' } };
+    emitter.emitChunk({ type: 'tool_progress', event: 'end', name: 'weather', ok: true, toolCall, result: '完整天气与来源' });
+    expect(parseSSEWrites(res.writes)).toEqual([expect.objectContaining({ object: 'lynn.tool_progress', tool_progress: expect.objectContaining({ tool_call: toolCall, result: '完整天气与来源' }) })]);
+    expect(chatChunks(res.writes)).toEqual([]);
+  });
+
   it('forwards finish reason', () => {
     const res = makeMockRes();
     const e = makeSSEEmitter(res, { id: 'x' });

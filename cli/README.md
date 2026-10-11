@@ -4,18 +4,17 @@ Terminal and worker-runner interface for Lynn v0.87.1.
 
 This package is intentionally thin. It handles terminal UX, worker JSONL, local
 file/shell orchestration, and headless agent contracts. Model routing defaults
-to Lynn Brain: local Brain when available, otherwise hosted Brain at
-`https://api.merkyorlynn.com/api/v2`. The ordinary GUI/CLI default route is
-StepFun 3.7 Flash (256K context with Brain-managed reasoning / generation
-budget). Users can still configure a private OpenAI-compatible BYOK endpoint
+to hosted Lynn Brain at `https://api.merkyorlynn.com/api/v2`; an explicit
+`LYNN_BRAIN_URL` can select a local Brain instead. The ordinary GUI/CLI default route is
+Step 5 Preview (`step-5-preview`). Users can still configure a private OpenAI-compatible BYOK endpoint
 with `Lynn providers set`.
 
 Voice follows the same primary-chain rule: inside the `Lynn` chat, `/voice` and
-`lynn voice` open the Brain-hosted StepFun Realtime conversation in place with a
+`lynn voice` open the Brain-hosted `stepaudio-2.5-realtime` conversation in place with a
 live waveform. File/record transcription and `--speak` TTS are auxiliary
 utilities, not the main voice experience.
 
-v0.87.1 aligns the CLI version with the desktop window-light redesign and capability consolidation. Existing CLI commands and the Agent loop remain available. Kimi MCP authorization, conversation search, shared session files and automations continue to work.
+v0.87.1 aligns GUI and CLI defaults on Step 5 Preview and stepaudio-2.5-realtime, uses model-supplied tool parameters, and updates local tiers to Qwen3.8-27B Coder390 Q2 / Q3. Existing CLI commands and the Agent loop remain available. Kimi MCP authorization, conversation search, shared session files and automations continue to work.
 
 v0.86.7 aligns the CLI version with the hardware-adaptive Qwen3.8 local-model installer. Existing CLI commands and harness behavior are preserved; the GUI prepares compatible local endpoints for use by either interface.
 
@@ -28,6 +27,8 @@ dependencies are split into real on-demand chunks so a static import cannot
 silently pull the heavy renderers back into the main bundle.
 
 ## Quick start
+
+Local models use the GUI-managed llama.cpp endpoint: Q2 for 16GB, Q3 for 24GB or above, with built-in Q4 MTP and no separate vision/DFlash2 download. The installer reads Apple Silicon unified memory or the largest single NVIDIA GPU's VRAM, never summed GPUs or host RAM. Q2 installation requires at least 14GiB; 13GB is insufficient. Unknown capacity blocks installation, and model files need additional KV-cache/runtime headroom. Changing the selected tier does not delete older files; downloading and switching require an explicit install/start action.
 
 Prerequisite: Node.js 20 LTS or 22 LTS with npm.
 
@@ -112,10 +113,10 @@ When another agent asks what Lynn CLI does locally, the concise answer is:
 
 - Lynn CLI is a thin terminal workbench over Lynn Brain V2: interactive chat,
   `Lynn -p`, `Lynn code`, and Fleet worker mode share the same route discipline.
-- Default routing for ordinary chat and code execution is StepFun 3.7 Flash.
+- Default routing for ordinary chat and code execution is Step 5 Preview.
   Explicit manager experiments stay behind `Lynn manager run`.
 - Default voice starts inside the `Lynn` chat: `/voice` and `lynn voice` both
-  enter Brain-hosted StepFun Realtime with live mic and waveform. File,
+  enter Brain-hosted `stepaudio-2.5-realtime` with live mic and waveform. File,
   record, and speak flags remain available only for ASR/TTS utility workflows.
 - Local runtime features include stable-prefix layering for prefix-cache hits,
   rolling decode TPS and prefix-cache telemetry, automatic context compaction,
@@ -136,7 +137,7 @@ They try routes in this order:
 3. CLI-only BYOK fallback, if you configured one with `Lynn providers set`.
 4. Mock mode only when you explicitly pass `--mock-brain`.
 
-The default StepFun 3.7 Flash route lives in Lynn Brain and is usable from a
+The default Step 5 Preview route lives in Lynn Brain and is usable from a
 fresh CLI install through the hosted route. You can still configure your own
 OpenAI-compatible endpoint when you want a private or company-owned route:
 

@@ -6,6 +6,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
+import { recordGuiToolLifecycle, releaseRegressionMustFail } from "./gui-task-quality.mjs";
 import { RELEASE_CASES, RELEASE_LEVELS } from "../tests/release-regression/release-regression-cases.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -387,10 +388,11 @@ async function runStaticChecks({ level }) {
     Boolean(pkg.scripts?.["release:full-gate"]
       && pkg.scripts["release:full-gate"].includes("gate:clean-data")
       && pkg.scripts["release:full-gate"].includes("release:preflight")
-      && pkg.scripts["release:full-gate"].includes("test:agent-regression:gates")
-      && pkg.scripts["release:full-gate"].includes("gate:cli-100")
+      && pkg.scripts["release:preflight"]?.includes("npm run test:agent-regression &&")
+      && pkg.scripts["release:full-gate"].includes("release:cli-efficiency")
+      && pkg.scripts["release:full-gate"].includes("gate:cli-200")
       && pkg.scripts["release:full-gate"].includes("gate:gui-100")),
-    "formal release full gate runs clean-data, preflight, agent regression release gates, CLI100, and GUI100",
+    "formal release full gate runs clean-data, preflight with backend regression, efficiency, CLI200, and GUI100 without duplicate gate wrappers",
     String(pkg.scripts?.["release:full-gate"] || ""),
   ));
   checks.push(makeCheck(
@@ -398,10 +400,9 @@ async function runStaticChecks({ level }) {
     "critical",
     Boolean(pkg.scripts?.["release:overnight"]
       && pkg.scripts["release:overnight"].includes("release:full-gate")
-      && pkg.scripts["release:overnight"].includes("test:agent-regression:nightly")
-      && pkg.scripts["release:overnight"].includes("test:agent-regression:gates:nightly")
+      && !pkg.scripts["release:overnight"].includes("test:agent-regression:gates:nightly")
       && pkg.scripts["release:overnight"].includes("test:release:nightly")),
-    "overnight gate extends full gate with nightly agent/runtime regressions",
+    "overnight gate extends full gate with distinct nightly runtime regressions",
     String(pkg.scripts?.["release:overnight"] || ""),
   ));
   checks.push(makeCheck(
@@ -845,7 +846,7 @@ function scoreTurn(testCase, turn, turnResult, turnIndex) {
   if (!turnResult.finishedNormally) failures.push("turn did not end normally");
   if (turn.minChars && text.trim().length < turn.minChars) failures.push(`visible text too short: ${text.trim().length} < ${turn.minChars}`);
   if (turn.maxVisibleChars && text.trim().length > turn.maxVisibleChars) failures.push(`visible text too long: ${text.trim().length} > ${turn.maxVisibleChars}`);
-  if (turn.requireTool && turnResult.tools.length === 0) failures.push("expected at least one tool_start event");
+  if (turn.requireTool && turnResult.tools.length === 0) failures.push("expected at least one structured tool start event");
   if (turn.forbidTools && turnResult.tools.length > 0) failures.push(`unexpected tools: ${summarizeTools(turnResult.tools).join(", ")}`);
 
   if (turn.allowedToolHints?.length && turnResult.tools.length) {
@@ -963,6 +964,7 @@ async function runLiveCase(testCase, config) {
       active.endTimer = null;
     }
     active.events += 1;
+    recordGuiToolLifecycle(active, message);
     if (message.type === "text_delta") {
       if (active.ttftMs === null) active.ttftMs = Date.now() - active.startMs;
       active.text += message.delta || "";
@@ -983,24 +985,6 @@ async function runLiveCase(testCase, config) {
       }
     } else if (message.type === "thinking_delta") {
       active.thinkingChars += String(message.delta || "").length;
-    } else if (message.type === "tool_start" || message.type === "tool_execution_start") {
-      active.tools.push({
-        id: message.toolCallId || message.id || "",
-        name: message.name || message.toolName || "",
-        success: null,
-      });
-    } else if (message.type === "tool_end" || message.type === "tool_execution_end") {
-      const id = message.toolCallId || message.id || "";
-      const name = message.name || message.toolName || "";
-      const found = active.tools.find((tool) => (id && tool.id === id) || (name && tool.name === name && tool.success === null));
-      if (found) found.success = message.success ?? !message.isError;
-      else {
-        // A delayed tool_end from the previous turn can arrive after the next
-        // prompt starts. It is useful telemetry, but it should not count as a
-        // fresh tool invocation for the current release case unless we saw the
-        // matching tool_start in this turn.
-        active.orphanToolEnds.push({ id, name, success: message.success ?? !message.isError });
-      }
     } else if (message.type === "tool_authorization") {
       active.authorizations.push(message);
     } else if (message.type === "file_diff") {
@@ -1265,7 +1249,7 @@ async function main() {
   console.log(`\nReport: ${path.relative(ROOT, report.reportPath)}`);
   console.log(`Failed: ${report.failed.length}; blocker: ${report.blockerFailed.length}; critical: ${report.criticalFailed.length}`);
 
-  if (report.blockerFailed.length > 0 || (args.level !== "smoke" && report.criticalFailed.length > 0)) {
+  if (releaseRegressionMustFail(report, args.level)) {
     process.exit(1);
   }
 }

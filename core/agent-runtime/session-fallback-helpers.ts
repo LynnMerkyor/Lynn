@@ -238,30 +238,12 @@ export function normalizeFinalAnswerText(content: string): string {
 }
 
 export function buildFallbackSynthesisMessages(messages: ChatMessage[], reason: ModelFallbackReason): ChatMessage[] {
-  const question = latestUserQuestion(messages);
-  const rawEvidence = collectToolEvidence(messages);
-  const evidenceLines = evidenceToReadableLines(rawEvidence);
-  const evidence = evidenceLines.map((line) => `- ${line}`).join("\n");
-  const reasonText = reason === "tool_round_limit"
-    ? "上一个模型已经多轮调用工具但没有产出最终答案。"
-    : reason === "model_error"
-      ? "上一个模型请求失败。"
-      : "上一个模型没有返回可见正文。";
   return [
-    roleMessage("system", [
-      "你是接管总结模型。只根据用户问题和工具证据给出最终答案。",
-      "不要再调用工具，不要复述内部错误，不要声称没有证据，除非工具证据确实为空。",
-      "如果证据不足，明确列出已知信息和不确定点。",
-    ].join("\n")),
+    ...messages,
     roleMessage("user", [
-      reasonText,
-      "",
-      `用户问题：${question || "（未找到用户问题）"}`,
-      "",
-      "工具证据：",
-      evidence || "（没有可用工具证据）",
-      "",
-      "请直接给出面向用户的简明最终答案。",
+      fallbackInstruction(reason),
+      "工具结果保留在上文，请自行判断与原问题相关的证据，忽略无关搜索噪声。",
+      "区分已确认事实、预测与证据不足；允许说明数据缺失或上游失败，不得虚构结果，也不要逐条复述工具日志。",
     ].join("\n")),
   ];
 }

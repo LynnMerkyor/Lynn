@@ -7,6 +7,17 @@ function read(path: string) {
 }
 
 describe('Local Qwen provider UX guards', () => {
+  it('explains detected capacity and never bypasses installation memory checks', () => {
+    const source = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
+    const choice = read('desktop/src/react/components/input/LocalModelSetupChoice.tsx');
+    expect(source).toContain('nvidia-smi');
+    expect(source).toContain('不叠加多卡');
+    expect(source).toContain('13GB 容量不足');
+    expect(source).toContain('selectedTier.minimumMemoryGib');
+    expect(source).not.toContain('!manualTierId && !endpointRunning');
+    expect(choice).toContain('手动选档不能跳过显存检查');
+    expect(choice).not.toContain('已了解显存要求，手动选择此方案');
+  });
   it('shows inline feedback for endpoint and registration actions', () => {
     const source = read('desktop/src/react/settings/tabs/providers/ProviderDetail.tsx');
     expect(source).toContain('setActionStatus');
@@ -43,7 +54,7 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('GPQA-Diamond 80.3%');
     expect(source).toContain('端到端编排 26.6s');
     expect(source).toContain('32GB 显存/统一内存+ 可选');
-    expect(source).toContain('默认推荐 Qwen3.8-27B Coder390：16GB 及以上 Q3，16GB 以下 Q2。');
+    expect(source).toContain('默认推荐 Qwen3.8-27B Coder390：24GB 及以上 Q3，24GB 以下（16GB 档） Q2。');
     expect(source).not.toContain('默认仍首推 27B Q4');
     expect(source).not.toContain('Spark/远端兜底');
     expect(source).toContain('https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF');
@@ -79,7 +90,7 @@ describe('Local Qwen provider UX guards', () => {
     expect(source).toContain('定位当前模型文件');
     expect(source).not.toContain('下载/查看');
     expect(source).toContain('chooseGgufModel');
-    expect(source).toContain('16GB 及以上是 Q3，16GB 以下是 Q2');
+    expect(source).toContain('24GB 及以上是 Q3，24GB 以下（16GB 档）是 Q2');
     expect(source).not.toContain('9B、4B 仅作为低配降级');
     expect(renderedSource).not.toContain('thinking-on 可能长思考后无正文');
     expect(source).toContain('localModelActionErrorText');

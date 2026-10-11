@@ -12,6 +12,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { resolveBetterSqliteRuntime } from "./native-node-runtime.mjs";
+import { captureGuiToolEvent, validateGuiTaskEvidence } from "./gui-task-quality.mjs";
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -19,6 +20,8 @@ const DEFAULT_PROMPT = "请只回复四个字：桐门已亮。不要解释，�
 const PROMPT = process.env.LYNN_GUI_GATE_PROMPT || DEFAULT_PROMPT;
 const EXPECT = process.env.LYNN_GUI_GATE_EXPECT || "桐门已亮";
 const TIMEOUT_MS = Number(process.env.LYNN_GUI_GATE_TIMEOUT_MS || "180000");
+const REQUIRED_TOOLS = String(process.env.LYNN_GUI_GATE_REQUIRE_TOOL || "").split(",").map((name) => name.trim()).filter(Boolean);
+const REPORT_PATH = path.resolve(ROOT, process.env.LYNN_GUI_GATE_OUTPUT || "output/gate-gui-task.json");
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -70,6 +73,7 @@ class CdpClient {
     this.ws = new WebSocket(wsUrl);
     this.nextId = 1;
     this.pending = new Map();
+    this.onEvent = null;
     this.ws.on("message", (raw) => {
       let msg;
       try {
@@ -77,7 +81,10 @@ class CdpClient {
       } catch {
         return;
       }
-      if (!msg.id) return;
+      if (!msg.id) {
+        this.onEvent?.(msg.method, msg.params || {});
+        return;
+      }
       const pending = this.pending.get(msg.id);
       if (!pending) return;
       this.pending.delete(msg.id);
@@ -226,6 +233,11 @@ async function main() {
 
   let cdp = null;
   let completed = false;
+  let answer = "";
+  let turnFinished = false;
+  let recording = false;
+  let failure = null;
+  const toolEvents = [];
   const assertRunning = () => {
     if (childExit) throw new Error(`Electron exited early: code=${childExit.code} signal=${childExit.signal}`);
   };
@@ -236,7 +248,23 @@ async function main() {
     await cdp.open();
     await cdp.call("Runtime.enable");
     await cdp.call("Page.enable");
-    if (process.env.LYNN_UI_NO_FRONT !== "1") {
+    cdp.onEvent = (method, params) => {
+      if (!recording || method !== "Network.webSocketFrameReceived") return;
+      let message;
+      try {
+        message = JSON.parse(params.response?.payloadData || "");
+      } catch {
+        return;
+      }
+      const messages = Array.isArray(message.events) ? message.events : [message.type === "stream_event" ? message.event : message];
+      for (const event of messages) {
+        if (event?.type === "turn_end") turnFinished = true;
+        const toolEvent = captureGuiToolEvent(event);
+        if (toolEvent) toolEvents.push(toolEvent);
+      }
+    };
+    await cdp.call("Network.enable");
+    if (process.env.LYNN_UI_HEADLESS !== "1" && process.env.LYNN_UI_NO_FRONT !== "1") {
       await cdp.call("Page.bringToFront");
     }
 
@@ -271,6 +299,7 @@ async function main() {
     `, 30000);
 
     assertRunning();
+    recording = true;
     await cdp.evaluate(`(() => {
       const btn = document.querySelector('button[class*="send-btn"]:not(:disabled)');
       if (!btn) throw new Error('send button disabled');
@@ -280,21 +309,20 @@ async function main() {
 
     console.log("[gate-gui-task] 等待真实 assistant 消息渲染...");
     assertRunning();
-    const answer = await waitForExpression(cdp, `
+    answer = await waitForExpression(cdp, `
       (() => {
+        if (document.querySelector('button[class*="send-btn"][class*="is-streaming"]')) return '';
         const assistantTexts = Array.from(document.querySelectorAll('[class*="messageAssistant"]'))
-          .map((el) => (el.innerText || '').trim())
+          .map((el) => Array.from(el.querySelectorAll(':scope > .md-content')).map((block) => (block.innerText || '').trim()).join('\\n'))
           .filter(Boolean);
         const joined = assistantTexts.join('\\n');
-        const hasExpected = joined.includes(${JSON.stringify(EXPECT)});
-        return hasExpected ? joined : '';
+        return joined;
       })()
     `, TIMEOUT_MS);
 
     const allText = await cdp.evaluate(`document.body.innerText || ''`).catch(() => "");
-    if (!String(answer || "").includes(EXPECT)) {
-      throw new Error(`assistant visible answer did not include ${EXPECT}; body=${String(allText).slice(0, 1200)}`);
-    }
+    const qualityFailure = validateGuiTaskEvidence({ answer, expected: EXPECT, finished: turnFinished, toolEvents, requiredTools: REQUIRED_TOOLS });
+    if (qualityFailure) throw new Error(`${qualityFailure}; answer=${String(answer).slice(0, 1800)}; body=${String(allText).slice(0, 1200)}`);
     const hasRefusal = /(?:无法|不能|没有|缺少|未能|无法确认).{0,28}(?:本地|文件|文件系统|目录|工具|权限|访问|读取)/.test(String(answer))
       || /(?:抱歉).{0,28}(?:无法|不能|没有|缺少|未能|无法确认)/.test(String(answer));
     if (hasRefusal) {
@@ -304,10 +332,16 @@ async function main() {
     console.log("[gate-gui-task] PASS — 真实 GUI 对话链路完成");
     console.log(`[gate-gui-task] assistant excerpt: ${String(answer).replace(/\\s+/g, " ").slice(0, 240)}`);
     completed = true;
+  } catch (error) {
+    failure = String(error?.message || error);
+    throw error;
   } finally {
     cdp?.close();
     await fs.mkdir(path.join(ROOT, "output"), { recursive: true }).catch(() => {});
     await fs.writeFile(path.join(ROOT, "output", "gate-gui-task.log"), logs.join("")).catch(() => {});
+    await fs.mkdir(path.dirname(REPORT_PATH), { recursive: true });
+    await fs.writeFile(REPORT_PATH, JSON.stringify({ at: new Date().toISOString(), prompt: PROMPT, expected: EXPECT, hidden: process.env.LYNN_UI_HEADLESS === "1", completed, turnFinished, answer, toolEvents, requiredTools: REQUIRED_TOOLS, failure }, null, 2) + "\n");
+    await fs.writeFile(REPORT_PATH.replace(/\.json$/u, "") + ".electron.log", logs.join(""));
     await terminateProcess(child);
   }
   if (!completed) throw new Error("GUI live gate ended before completing the real task");

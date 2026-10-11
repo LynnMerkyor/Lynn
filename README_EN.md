@@ -11,8 +11,8 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://github.com/MerkyorLynn/Lynn/releases)
-[![HuggingFace Models](https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d)](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
-[![ModelScope Models](https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff)](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
+[![HuggingFace Models](https://img.shields.io/badge/HuggingFace-Lynn%20Models-ffcc4d)](https://huggingface.co/nerkyor)
+[![ModelScope Models](https://img.shields.io/badge/ModelScope-Lynn%20Models-624aff)](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer)
 
 ---
 
@@ -48,9 +48,20 @@ GUI and CLI use Step 5 Preview by default and restore stepaudio-2.5-realtime voi
 
 ## 🧠 Part 1 · Engine & Models
 
-### ① Purpose-distilled task-orchestrator model (Lynn Agent's brain)
+### ① Step 5 cloud routing and Qwen3.8-27B Coder390 local models
 
-Lynn Agent's core is an orchestrator that **decomposes → delegates → verifies**, fast. We distilled a model for exactly this: LoRA (**r=64 / α=128 / dropout 0.05**, **1,842 distillation samples**) transferring **DeepSeek-V4-Pro's thinking-on reasoning style** into **Qwen3.6-35B-A3B** (MoE, 3B active).
+V0.87.1 uses **Step 5 Preview (`step-5-preview`)** by default in both GUI and CLI, with **`stepaudio-2.5-realtime`** for realtime voice. The recommended local model is now **Qwen3.8-27B Coder390 EfficientThink**. Local installation and startup require explicit user action; switching tiers does not delete existing model files.
+
+| Local tier | Recommended capacity | Model file | Initial context |
+|---|---|---|---|
+| Coder390 Q2 | 16GB GPU VRAM / Apple unified memory; minimum 14GiB | 13.28GB | 4K, one slot |
+| Coder390 Q3 | 24GB or above; at least 23.5GiB reported | 17.30GB | 8K, one slot |
+
+Use the **llama.cpp Q2 / Q3** files in the [model repository's `GGUF/` directory](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer/tree/master/GGUF), both with built-in **Q4 MTP**. This is not the `GGUF-NInfer/` variant: no NInfer runtime, separate DFlash2 draft or vision component is installed. NVIDIA capacity means the largest single GPU's VRAM, never summed GPUs or host RAM. Installation is blocked below 14GiB or when detection fails. The 14–under-16GiB range only meets Q2's minimum; KV cache, runtime buffers and the OS require additional headroom.
+
+#### Historical orchestrator research (not the current default)
+
+The following is historical A3B orchestrator research, not Coder390 benchmark data or the current GUI/CLI default. This optional model remains available through explicit `Lynn manager run`. We distilled an orchestrator that **decomposes → delegates → verifies** using LoRA (**r=64 / α=128 / dropout 0.05**, **1,842 distillation samples**) transferring **DeepSeek-V4-Pro's thinking-on reasoning style** into **Qwen3.6-35B-A3B** (MoE, 3B active).
 
 Same harness, thinking-on, vs the base A3B:
 
@@ -63,7 +74,7 @@ Same harness, thinking-on, vs the base A3B:
 
 Distilled and base have **identical single-stream TPS** (~224 tok/s on R6000) — the orchestration speedup comes from **fewer tokens to a decision** (we distilled the *thinking style*, not raw speed). Hard tasks (e.g. concurrency) are still backstopped by **harness objective verification + a DS-V4 Flash escape hatch**.
 
-📦 **Default edge model**: [`Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF`](https://modelscope.cn/models/Merkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF); **HuggingFace mirror**: [nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF](https://huggingface.co/nerkyor/Qwen3.6-27B-DSV4Pro-GLM52-SFT-GPT55-RL-Coding-GGUF)
+📦 **Current local recommendation**: [Qwen3.8-27B Coder390 EfficientThink Q2 / Q3](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer), using llama.cpp and built-in Q4 MTP. The historical orchestrator numbers above do not describe this model.
 
 ### ② Engine route: we chose the fastest edge framework — llama.cpp — and give back
 
@@ -96,7 +107,7 @@ NVFP4's real payoff is **batched throughput**. Same R6000, `VLLM_MOE_FORCE_MARLI
 
 ## 🔭 V0.80 Origin: CLI Workers, V0.86 Security Boundaries And Runtime Reliability
 
-V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. In V0.86 the right rail becomes a clearer **current session + recent sessions + files + acceptance** surface, while Brain and the local Agent enforce tool exposure, permission boundaries, fallback handoff, and per-turn state reset as regression-tested runtime contracts. The public 27B Coding Q4 MTP GGUF remains the default edge model, while parallel worker power stays in the CLI for terminals, CI, and other agents.
+V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. In V0.86 the right rail becomes a clearer **current session + recent sessions + files + acceptance** surface, while Brain and the local Agent enforce tool exposure, permission boundaries, fallback handoff, and per-turn state reset as regression-tested runtime contracts. V0.87.1 recommends Qwen3.8-27B Coder390 Q2 / Q3 GGUF with built-in Q4 MTP for local use, while parallel worker power stays in the CLI for terminals, CI, and other agents.
 
 This is not Lynn stepping away from code. It is the opposite:code tasks, research tasks, and business tasks should share the same orchestration layer.
 
@@ -117,16 +128,16 @@ Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.0.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.1.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.87.0
+Lynn --version  # should print 0.87.1
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
-Default Brain V2 route: **StepFun 3.7 Flash (256K context with Brain-managed reasoning / generation budget)** for normal GUI/CLI chat, `Lynn -p`, and coding execution. Voice is Brain-hosted **StepFun Realtime** by default: the GUI microphone and `/voice` / `lynn voice` inside the CLI chat enter continuous realtime conversation with live status and waveform. Local manager routes remain explicit experiments and do not take over the ordinary GUI/CLI path.
+Default Brain V2 route: **Step 5 Preview (`step-5-preview`)** for normal GUI/CLI chat, `Lynn -p`, and coding execution. Voice is Brain-hosted **StepFun Realtime (`stepaudio-2.5-realtime`)** by default: the GUI microphone and `/voice` / `lynn voice` inside the CLI chat enter continuous realtime conversation with live status and waveform. Local manager routes remain explicit experiments and do not take over the ordinary GUI/CLI path.
 
 Long runs follow a Reasonix-style **prefix-cache discipline**: stable instructions, tool specs, runtime constraints, and resume summaries stay in deterministic context layers so turns do not reorder the cacheable prefix. Cache hits now appear as `prefix-cache ... hit` in usage, sessions, replay, and `Lynn cache doctor --json`, not as an anxiety-inducing context meter.
 
@@ -1030,12 +1041,14 @@ Memory and skill distillation work together: the more you use Lynn, the more acc
 
 ## Local models — hardware ladder
 
-Qwen3.8-27B Coder390 EfficientThink: Q3 is the default at 16GB and above (17.30 GB main model). Below 16GB uses Q2 (13.28 GB). Both GGUF files include built-in Q4 MTP. This install does not download a separate DFlash2 draft or a vision component. Q3 starts at 8K context and Q2 at 4K, with one slot. KV cache, compute buffers and the operating system need additional memory. Installation and startup require explicit user action. Older downloaded files remain until the user deletes them.
+Hardware detection uses unified memory on Apple Silicon and the largest single NVIDIA GPU's VRAM reported by `nvidia-smi` on Windows/Linux. Host RAM and separate GPUs are never added to VRAM. Recommend Q2 at 16GB and Q3 at 24GB or above (at least 23.5GiB reported for the 24GB tier). Installation is blocked below 14GiB or when detection fails; manual selection cannot bypass this check. A 13GB device is insufficient. At 14 to under 16GiB, Q2 only meets the minimum and has limited context headroom. Model files, KV cache, runtime buffers and the OS all require memory; total capacity does not guarantee enough memory is currently available.
+
+Qwen3.8-27B Coder390 EfficientThink: Q3 is the default at 24GB and above (17.30 GB main model). Below 24GB (16GB tier) uses Q2 (13.28 GB). Both GGUF files include built-in Q4 MTP. This install does not download a separate DFlash2 draft or a vision component. Q3 starts at 8K context and Q2 at 4K, with one slot. KV cache, compute buffers and the operating system need additional memory. Installation and startup require explicit user action. Older downloaded files remain until the user deletes them.
 
 | Tier | Model | Size | Recommended hardware | Context | Capability signal |
 |------|-------|:----:|---------------------|:-------:|-------------------|
-| **16GB and above** | **Qwen3.8-27B Coder390 EfficientThink Q3** | 17.30 GB | Default at 16GB and above | 8K | Built-in Q4 MTP; one slot |
-| **Below 16GB** | **Qwen3.8-27B Coder390 EfficientThink Q2** | 13.28 GB | Below 16GB | 4K | Built-in Q4 MTP; tighter memory budget |
+| **24GB and above** | **Qwen3.8-27B Coder390 EfficientThink Q3** | 17.30 GB | Default at 24GB and above | 8K | Built-in Q4 MTP; one slot |
+| **Below 24GB (16GB tier)** | **Qwen3.8-27B Coder390 EfficientThink Q2** | 13.28 GB | Below 24GB (16GB tier) | 4K | Built-in Q4 MTP; tighter memory budget |
 | Legacy option | Qwen3.6-35B-A3B DSV4Pro Distill Q5_K_M imatrix MTP | 25.3 GB | 32GB VRAM/unified memory+ | 32K | Legacy 35B orchestrator path kept for existing users and comparison tests |
 
 > See the [model card](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer) for model details. Model-file sizes are not runtime memory guarantees. Old model files are never silently deleted.
@@ -1054,12 +1067,12 @@ Qwen3.8-27B Coder390 EfficientThink: Q3 is the default at 16GB and above (17.30 
 - Download `GGUF/Qwen3.8-27B-Coder390-EfficientThink-Q3LynnStyle-MTP.gguf` or `GGUF/Qwen3.8-27B-Coder390-EfficientThink-Q2LynnStyle-MTP.gguf`. Both include built-in Q4 MTP; no separate DFlash2 draft is downloaded.
 - Each GGUF file is checked against its pinned byte size and SHA-256; no vision component is included in this install.
 
-**Low-config 9B / 4B and high-end 35B** (explicit hardware choices):
+**Historical 9B / 4B / 35B models (not current recommended tiers)**: these links are for existing users or manual deployment. The current Settings page no longer offers 9B / 4B installation; legacy models do not bypass Coder390 capacity checks.
 - 9B: [Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP](https://modelscope.cn/models/Merkyor/Qwen3.5-9B-GGUF-imatrix-MTP) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.5-9B-GGUF-imatrix) (`Qwen3.5-9B-Q4_K_M-imatrix-mtp.gguf`, **5.38 GB**) — low-config downgrade
 - 4B: [Merkyor/Qwen3.5-4B-GGUF-imatrix](https://modelscope.cn/models/Merkyor/Qwen3.5-4B-GGUF-imatrix) (`Qwen3.5-4B-Q4_K_M-imatrix.gguf`, **2.6 GB**) — lower-config downgrade; thinking-off recommended
 - 35B legacy: [Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF](https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) / [Hugging Face](https://huggingface.co/nerkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF) (`Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf`, **25.3 GB**) — legacy orchestrator path for existing users and comparison tests
 
-In the app: **Settings → Models → Local Qwen3.8-27B → Select a tier → Install and start**. Qwen3.8-27B Coder390 EfficientThink uses Q3 at 16GB and above (17.30 GB) and Q2 below 16GB (13.28 GB), with built-in Q4 MTP. Q3 starts at 8K context and Q2 at 4K, with one slot. Use **Let Lynn help me deploy** to bring a diagnostic draft into chat. Existing models and manual GGUF import remain available.
+In the app: **Settings → Models → Local Qwen3.8-27B → Select a tier → Install and start**. Qwen3.8-27B Coder390 EfficientThink uses Q3 at 24GB and above (17.30 GB) and Q2 below 24GB (16GB tier) (13.28 GB), with built-in Q4 MTP. Q3 starts at 8K context and Q2 at 4K, with one slot. Use **Let Lynn help me deploy** to bring a diagnostic draft into chat. Existing models and manual GGUF import remain available.
 
 ## Install and Go
 
@@ -1073,17 +1086,17 @@ Interface available in 5 languages: Chinese, English, Japanese, Korean, and Trad
 
 Lynn doesn't just slap an OpenAI-compatible wrapper and call it a day. From 9B small models to GLM-5 reasoning models, every tier has purpose-built adaptations:
 
-**Free built-in models (Brain v2)** — Quick Start ships with a built-in model pool. v0.84 uses StepFun 3.7 Flash as the ordinary GUI/CLI default route, with vendor fallbacks and an explicit local manager path:
+**Free built-in models (Brain v2)** — Quick Start ships with a built-in model pool. V0.87.1 uses Step 5 Preview as the ordinary GUI/CLI default route, with vendor fallbacks and an explicit local manager path:
 
 ```
-T1  ⭐ StepFun 3.7 Flash (256K context, high reasoning, 48K reasoning/generation budget, text/coding head)
+T1  ⭐ Step 5 Preview (step-5-preview, text/coding route)
 T2  DS-V4 Flash (vendor fallback for StepFun outage or specific high-risk work)
 T3  Local manager (explicit `Lynn manager run` experimental path)
 T4  Vision: StepFun `step-1o-turbo-vision` (selected automatically for image content)
 T5  Zhipu GLM / Kimi / MiniMax (vendor backup lanes)
 ```
 
-No API key needed — device authentication only. The normal text/coding lane is StepFun 3.7 Flash first; local manager and alternate providers are explicit or fallback paths.
+No API key needed — device authentication only. The normal text/coding lane is Step 5 Preview first; local manager and alternate providers are explicit or fallback paths.
 
 **Three-tier tool layering** — Tools are automatically pruned based on context window:
 - Small models (<32K, e.g. ERNIE 8K, Moonshot 8K, Step 8K): only `web_search` + `web_fetch`, preventing tool descriptions from blowing out the context
@@ -1198,7 +1211,7 @@ Linux builds are planned.
 Two paths on first launch:
 
 - **Quick Start**: Enter your name → set permissions → jump right in. A built-in default model works out of the box — no API key required.
-- **Local model**: Settings → Models → Local Qwen3.8-27B. Qwen3.8-27B Coder390 EfficientThink uses Q3 at 16GB and above (17.30 GB) and Q2 below 16GB (13.28 GB), with built-in Q4 MTP. Q3 starts at 8K and Q2 at 4K, one slot. [Full model card](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer).
+- **Local model**: Settings → Models → Local Qwen3.8-27B. Qwen3.8-27B Coder390 EfficientThink uses Q3 at 24GB and above (17.30 GB) and Q2 below 24GB (16GB tier) (13.28 GB), with built-in Q4 MTP. Q3 starts at 8K and Q2 at 4K, one slot. [Full model card](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer).
 - **Advanced Setup**: Enter your name → connect your own provider (API key + base URL) → choose a **chat model** and a **utility model** → pick a theme → set permissions → enter.
 
 Lynn uses the OpenAI-compatible protocol, so any provider that supports it will work (OpenAI, DeepSeek, Qwen, local models via Ollama, SiliconFlow, etc.). Some providers (e.g. MiniMax) also support OAuth login. All model settings can be adjusted later in Settings.

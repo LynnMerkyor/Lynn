@@ -22,6 +22,25 @@ describe('tool-exec dispatcher', () => {
     expect(JSON.parse(r).error).toMatch(/not handled by brain server/);
   });
 
+  it('includes a coverage boundary in market evidence without guessing user entities', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => Buffer.from('var hq_str_s_sh000001="Shanghai,4000,20,0.50,500,1000";'),
+    })));
+    const result = await executeServerTool('stock_market', { kind: 'index', symbol: '上证', query: '今天 A 股有什么异动？' });
+    expect(result).toContain('不是全市场异动完整统计');
+    expect(result).toContain('样本');
+  });
+
+  it('upgrades stale client server-tool schemas without duplicating or replacing local tools', () => {
+    const localTool = { type: 'function', function: { name: 'read', parameters: { type: 'object' } } };
+    const sportsTool = { type: 'function', function: { name: 'sports_score', parameters: { type: 'object', required: ['query'] } } };
+    const merged = mergeWithServerTools([localTool, sportsTool], [{ role: 'user', content: 'NBA 总决赛打了几场，总比分如何？' }]);
+    expect(merged.find((tool) => tool.function.name === 'read')).toBe(localTool);
+    expect(merged.filter((tool) => tool.function.name === 'sports_score')).toHaveLength(1);
+    expect(merged.find((tool) => tool.function.name === 'sports_score').function.parameters.required).toEqual(expect.arrayContaining(['date_from', 'date_to', 'league']));
+  });
+
   it('handles invalid JSON args gracefully', async () => {
     const r = await executeServerTool('web_search', 'not json');
     expect(JSON.parse(r).error).toMatch(/invalid tool args/);
@@ -73,7 +92,7 @@ describe('tool-exec dispatcher', () => {
     expect(tools).toContain('web_fetch');
   });
 
-  it('does not expose external evidence tools for timeless planning or writing turns', () => {
+  it('lets the model choose whether read-only evidence is needed on ordinary turns', () => {
     for (const content of [
       '第一次去杭州三天两晚，帮我安排一个不赶路的行程',
       '设计一个三幕式小说大纲，主题是记忆租赁',
@@ -81,14 +100,14 @@ describe('tool-exec dispatcher', () => {
     ]) {
       const messages = [{ role: 'user', content }];
       const tools = mergeWithServerTools([], messages).map((tool) => tool.function.name);
-      expect(shouldExposeExternalEvidenceTools(messages)).toBe(false);
-      expect(tools).not.toContain('web_search');
-      expect(tools).not.toContain('weather');
-      expect(tools).not.toContain('parallel_research');
+      expect(shouldExposeExternalEvidenceTools(messages)).toBe(true);
+      expect(tools).toContain('web_search');
+      expect(tools).toContain('weather');
+      expect(tools).toContain('parallel_research');
     }
   });
 
-  it('removes client-supplied evidence and deliverable tools when the turn does not allow them', () => {
+  it('retains read-only evidence tools while gating client-supplied deliverable tools', () => {
     const clientTools = [
       { type: 'function', function: { name: 'read' } },
       { type: 'function', function: { name: 'web-search' } },
@@ -100,7 +119,7 @@ describe('tool-exec dispatcher', () => {
     }]).map((tool) => tool.function.name);
 
     expect(tools).toContain('read');
-    expect(tools).not.toContain('web-search');
+    expect(tools).toContain('web-search');
     expect(tools).not.toContain('create-artifact');
   });
 
@@ -138,17 +157,17 @@ describe('tool-exec dispatcher', () => {
     expect(shouldPreferWeatherTool(messages)).toBe(true);
   });
 
-  it('prefers the dedicated sports score tool for direct sports schedule prompts', () => {
+  it('exposes sports and fallback search tools for model-directed schedules', () => {
     const messages = [{ role: 'user', content: '今天世界杯赛程发我一下' }];
     const tools = mergeWithServerTools([], messages).map((tool) => tool.function.name);
 
     expect(shouldPreferSportsScoreTool(messages)).toBe(true);
     expect(tools).toContain('sports_score');
-    expect(tools).not.toContain('web_search');
-    expect(tools).not.toContain('web_fetch');
-    expect(tools).not.toContain('live_news');
-    expect(tools).not.toContain('calendar');
-    expect(tools).not.toContain('parallel_research');
+    expect(tools).toContain('web_search');
+    expect(tools).toContain('web_fetch');
+    expect(tools).toContain('live_news');
+    expect(tools).toContain('calendar');
+    expect(tools).toContain('parallel_research');
   });
 
   it('prefers the stock market tool for direct index quote prompts', () => {
@@ -157,13 +176,13 @@ describe('tool-exec dispatcher', () => {
 
     expect(shouldPreferStockMarketTool(messages)).toBe(true);
     expect(tools).toContain('stock_market');
-    expect(tools).not.toContain('web_search');
-    expect(tools).not.toContain('web_fetch');
-    expect(tools).not.toContain('live_news');
-    expect(tools).not.toContain('parallel_research');
+    expect(tools).toContain('web_search');
+    expect(tools).toContain('web_fetch');
+    expect(tools).toContain('live_news');
+    expect(tools).toContain('parallel_research');
   });
 
-  it('routes Hugging Face, arXiv, and earthquake metadata to web_search without stock or news tools', () => {
+  it('leaves evidence tool selection to the model for metadata queries', () => {
     for (const content of [
       'https://huggingface.co/google/gemma-4-E4B-it 的 SHA 和文件数是多少',
       '请核验 arXiv 2606.04101 的论文标题',
@@ -172,9 +191,9 @@ describe('tool-exec dispatcher', () => {
       const messages = [{ role: 'user', content }];
       const tools = mergeWithServerTools([], messages).map((tool) => tool.function.name);
       expect(tools).toContain('web_search');
-      expect(tools).not.toContain('stock_market');
-      expect(tools).not.toContain('live_news');
-      expect(tools).not.toContain('sports_score');
+      expect(tools).toContain('stock_market');
+      expect(tools).toContain('live_news');
+      expect(tools).toContain('sports_score');
     }
   });
 
@@ -184,10 +203,10 @@ describe('tool-exec dispatcher', () => {
 
     expect(shouldPreferWeatherTool(messages)).toBe(true);
     expect(tools).toContain('weather');
-    expect(tools).not.toContain('web_search');
-    expect(tools).not.toContain('web_fetch');
-    expect(tools).not.toContain('live_news');
-    expect(tools).not.toContain('parallel_research');
+    expect(tools).toContain('web_search');
+    expect(tools).toContain('web_fetch');
+    expect(tools).toContain('live_news');
+    expect(tools).toContain('parallel_research');
   });
 
   it('prefers the weather tool for direct forecast prompts', () => {
@@ -196,10 +215,10 @@ describe('tool-exec dispatcher', () => {
 
     expect(shouldPreferWeatherTool(messages)).toBe(true);
     expect(tools).toContain('weather');
-    expect(tools).not.toContain('web_search');
-    expect(tools).not.toContain('live_news');
-    expect(tools).not.toContain('calendar');
-    expect(tools).not.toContain('parallel_research');
+    expect(tools).toContain('web_search');
+    expect(tools).toContain('live_news');
+    expect(tools).toContain('calendar');
+    expect(tools).toContain('parallel_research');
   });
 
   it('formats exchange rates with correct pct field and JPY unit', async () => {
@@ -359,11 +378,20 @@ describe('tool-exec dispatcher', () => {
       }),
     })));
 
-    const r = await executeServerTool('sports_score', { league: 'fifa.world', query: '世界杯比分' });
+    const r = await executeServerTool('sports_score', { league: 'fifa.world', date_from: '2026-06-12', date_to: '2026-06-12', query: '世界杯比分' });
     expect(r).toContain('provider: espn_scoreboard');
     expect(r).toContain('league: FIFA World Cup');
     expect(r).toContain('Mexico 2-0 South Africa');
     expect(global.fetch.mock.calls[0][0]).toContain('site.api.espn.com');
+  });
+
+  it('requires structured dates for every sports source before making requests', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    for (const league of ['fifa.world', 'nba', 'mlb', 'nhl']) {
+      const result = JSON.parse(await executeServerTool('sports_score', { league, query: '2026年6月12日比赛' }));
+      expect(result.error).toContain('missing_date_range');
+    }
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('uses the official MLB schedule API before the broad ESPN fallback', async () => {
@@ -388,7 +416,7 @@ describe('tool-exec dispatcher', () => {
     }));
 
     try {
-      const result = await executeServerTool('sports_score', { league: 'mlb', query: '今天 MLB 有哪些比赛？' });
+      const result = await executeServerTool('sports_score', { league: 'mlb', date_from: '2026-08-22', date_to: '2026-08-22', query: '去年 NBA 总决赛' });
 
       expect(result).toContain('provider: mlb_official');
       expect(result).toContain('北京时间查询日期: 2026-08-22');
@@ -418,7 +446,7 @@ describe('tool-exec dispatcher', () => {
     }));
 
     try {
-      const result = await executeServerTool('sports_score', { league: 'nhl', query: '明天 NHL 赛程' });
+      const result = await executeServerTool('sports_score', { league: 'nhl', date_from: '2026-10-08', date_to: '2026-10-08', query: '明天 NHL 赛程' });
 
       expect(result).toContain('provider: nhl_official');
       expect(result).toContain('北京时间查询日期: 2026-10-08');
@@ -442,7 +470,7 @@ describe('tool-exec dispatcher', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('filters ESPN scoreboard rows by Beijing tonight window and hides scheduled 0-0 scores', async () => {
+  it('filters ESPN scoreboard rows by model-selected Beijing dates and hides scheduled 0-0 scores', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-21T11:05:00Z'));
     vi.stubGlobal('fetch', vi.fn(async () => ({
@@ -479,7 +507,7 @@ describe('tool-exec dispatcher', () => {
     })));
 
     try {
-      const r = await executeServerTool('sports_score', { league: 'fifa.world', query: '今晚世界杯有几场比赛' });
+      const r = await executeServerTool('sports_score', { league: 'fifa.world', date_from: '2026-06-22', date_to: '2026-06-22', query: '今晚世界杯有几场比赛' });
       expect(r).toContain('Spain vs Saudi Arabia');
       expect(r).not.toContain('Spain 0-0 Saudi Arabia');
       expect(r).not.toContain('Japan 4-0 Tunisia');
@@ -518,18 +546,18 @@ describe('tool-exec dispatcher', () => {
     })));
 
     try {
-      const r = await executeServerTool('sports_score', { league: 'fifa.world', query: '今天世界杯赛程发我一下' });
+      const r = await executeServerTool('sports_score', { league: 'fifa.world', date_from: '2026-06-23', date_to: '2026-06-23', query: '今天世界杯赛程发我一下' });
       expect(r).toContain('provider: espn_scoreboard');
-      expect(r).toContain('dateRange: 20260622-20260624');
+      expect(r).toContain('dateRange: 20260623-20260623');
       expect(r).toContain('Argentina vs Austria');
       expect(r).not.toContain('Portugal vs Uzbekistan');
-      expect(global.fetch.mock.calls[0][0]).toContain('dates=20260621-20260625');
+      expect(global.fetch.mock.calls[0][0]).toContain('dates=20260622-20260624');
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('treats yesterday/last-night sports result queries as the previous Beijing day plus this morning', async () => {
+  it('uses model-selected dates for last-night sports result queries', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-22T17:30:00Z')); // 2026-06-23 01:30 Beijing
     vi.stubGlobal('fetch', vi.fn(async () => ({
@@ -558,7 +586,7 @@ describe('tool-exec dispatcher', () => {
     })));
 
     try {
-      const r = await executeServerTool('sports_score', { league: 'fifa.world', query: '昨晚世界杯最新的比赛结果' });
+      const r = await executeServerTool('sports_score', { league: 'fifa.world', date_from: '2026-06-22', date_to: '2026-06-22', query: '昨晚世界杯最新的比赛结果' });
       expect(r).toContain('Spain 4-0 Saudi Arabia');
       expect(r).not.toContain('Argentina vs Austria');
     } finally {
@@ -566,7 +594,7 @@ describe('tool-exec dispatcher', () => {
     }
   });
 
-  it('uses bundled World Cup schedule fallback when ESPN is temporarily unreachable', async () => {
+  it('reports source failure without inventing a bundled World Cup result', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-21T11:05:00Z'));
     vi.stubGlobal('fetch', vi.fn(async () => {
@@ -574,15 +602,12 @@ describe('tool-exec dispatcher', () => {
     }));
 
     try {
-      const pending = executeServerTool('sports_score', { league: 'fifa.world', query: '你能预测今晚世界杯比分么？' });
+      const pending = executeServerTool('sports_score', { league: 'fifa.world', date_from: '2026-06-22', date_to: '2026-06-22', query: '你能预测今晚世界杯比分么？' });
       await vi.advanceTimersByTimeAsync(1000);
       const r = await pending;
-      expect(r).toContain('directSourceStatus: fallback_static_schedule');
-      expect(r).toContain('userIntent: score_prediction');
-      expect(r).toContain('Spain vs Saudi Arabia');
-      expect(r).toContain('Belgium vs Iran');
-      expect(r).toContain('Uruguay vs Cape Verde');
-      expect(r).toContain('New Zealand vs Egypt');
+      expect(JSON.parse(r).directSourceStatus).toBe('unavailable');
+      expect(r).not.toContain('fallback_static_schedule');
+      expect(r).not.toContain('Spain vs Saudi Arabia');
       expect(r).not.toContain('请改用 web_search');
     } finally {
       vi.useRealTimers();
@@ -626,9 +651,9 @@ describe('mergeWithServerTools document-intent gating', () => {
 
   it('gates out the document generators on a plain turn', () => {
     const n = names(null, [{ role: 'user', content: '今天心情很好，帮我改写正式一点' }]);
-    expect(n).not.toContain('web_search');
-    expect(n).not.toContain('web_fetch');
-    expect(n).not.toContain('weather');
+    expect(n).toContain('web_search');
+    expect(n).toContain('web_fetch');
+    expect(n).toContain('weather');
     expect(n).not.toContain('create_report');
     expect(n).not.toContain('create_pptx');
     expect(n).not.toContain('create_pdf');
@@ -638,8 +663,8 @@ describe('mergeWithServerTools document-intent gating', () => {
   it('prefers the weather tool for ordinary weather prompts', () => {
     const n = names(null, [{ role: 'user', content: '今天北京天气怎么样' }]);
     expect(n).toContain('weather');
-    expect(n).not.toContain('web_search');
-    expect(n).not.toContain('web_fetch');
+    expect(n).toContain('web_search');
+    expect(n).toContain('web_fetch');
   });
 
   it('injects HTML/report tools when the user asks to export results as an image', () => {
@@ -667,10 +692,10 @@ describe('mergeWithServerTools document-intent gating', () => {
     expect(names(null, [{ role: 'user', content: 'make a powerpoint deck' }])).toContain('create_pptx');
   });
 
-  it('keeps external evidence tools out of ordinary chat turns', () => {
+  it('makes read-only tools available without forcing the model to call them', () => {
     const n = names(null, [{ role: 'user', content: 'hello there' }]);
-    expect(n).not.toContain('web_search');
-    expect(n).not.toContain('web_fetch');
+    expect(n).toContain('web_search');
+    expect(n).toContain('web_fetch');
   });
 
   it('detects intent across the recent user turns, not just the last', () => {
@@ -695,6 +720,32 @@ describe('SERVER_TOOLS schema', () => {
 });
 
 describe('parallelResearch', () => {
+  it('does not count returned source errors as successful evidence or drop their details', async () => {
+    const result = JSON.parse(await parallelResearch({ queries: [
+      { tool: 'web_search', args: {} },
+      { tool: 'sports_score', args: {} },
+    ] }, { dispatchFn: async (tool) => JSON.stringify(tool === 'web_search'
+      ? { ok: false, error: 'search source failed', sources: [] }
+      : { directSourceStatus: 'unavailable', error: 'ESPN HTTP 403' }) }));
+    expect(result.ok).toBe(false);
+    expect(result.results.map((entry) => entry.ok)).toEqual([false, false]);
+    expect(result.results[0].result.error).toBe('search source failed');
+    expect(result.results[1].result.error).toBe('ESPN HTTP 403');
+  });
+
+  it('waits for actual evidence when two failed queries settle before a successful source', async () => {
+    const result = JSON.parse(await parallelResearch({ queries: [
+      { label: 'failed-1', tool: 'web_search', args: { delay: 1, failure: true } },
+      { label: 'failed-2', tool: 'web_search', args: { delay: 2, failure: true } },
+      { label: 'valid-3', tool: 'sports_score', args: { delay: 200, failure: false } },
+    ] }, { dispatchFn: (_tool, args) => new Promise((resolve) => setTimeout(() => resolve(JSON.stringify(args.failure
+      ? { ok: false, error: 'source failed' }
+      : { directSourceStatus: 'ok', matched: 0 })), args.delay)) }));
+    expect(result.ok).toBe(true);
+    expect(result.returned).toBe(3);
+    expect(result.results.map((entry) => entry.ok)).toEqual([false, false, true]);
+  });
+
   it('returns early with partial results once enough sub-queries settle', async () => {
     const startedAt = Date.now();
     const resultText = await parallelResearch({

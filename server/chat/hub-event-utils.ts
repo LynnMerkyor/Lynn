@@ -14,6 +14,7 @@ export function isAssistantStreamScopedEvent(event: any) {
   return event?.type === "message_update"
     || event?.type === "tool_execution_start"
     || event?.type === "tool_execution_end"
+    || event?.type === "tool_progress"
     || event?.type === "turn_end"
     || event?.type === "provider_meta"
     || event?.type === "provider_update"

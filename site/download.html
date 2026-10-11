@@ -203,7 +203,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
             </article>
             <article class="requirement-card">
               <h3>网络与模型</h3>
-              <p>可直接使用 Lynn 默认 Brain V2 路由(本地优先,远端兜底),也可以在设置 → 模型中显式启用本地 Qwen3.6-27B Coding Q4 MTP；低配设备可手动选择 9B / 4B 降级。CLI 需要 Node.js 20 LTS 或 22 LTS,安装后用 <code>Lynn</code> / <code>Lynn code</code> 启动。</p>
+              <p>GUI / CLI 默认使用 Step 5 Preview，也可以在设置 → 模型中明确安装并启用本地 Qwen3.8-27B Coder390 EfficientThink：16GB 推荐 Q2，24GB 及以上推荐 Q3，两档均为 llama.cpp GGUF、内置 Q4 MTP，不另下载 DFlash2 或视觉组件。Apple Silicon 按统一内存、NVIDIA 按最大单卡显存判断；低于 14GiB 或无法检测时禁止安装，仍需为上下文缓存和系统留空间。CLI 需要 Node.js 20 LTS 或 22 LTS，安装后用 <code>Lynn</code> / <code>Lynn code</code> 启动。</p>
             </article>
           </div>
         </section>

@@ -140,5 +140,29 @@ describe('Responses HTTP bridge', () => {
     expect(events.some((event) => event.type === 'response.output_item.added' && event.item?.type === 'function_call' && event.item?.name === 'read_file')).toBe(true);
     expect(events.some((event) => event.type === 'response.function_call_arguments.done' && event.arguments === '{"path":"README.md"}')).toBe(true);
     expect(events.filter((event) => event.type === 'response.completed')).toHaveLength(1);
+
+    const synthesisPath = '/v1/chat/completions';
+    const synthesisTimestamp = Date.now();
+    const synthesisNonce = crypto.randomBytes(12).toString('hex');
+    const synthesisSignature = crypto.createHmac('sha256', agentSecret)
+      .update(['v1', 'POST', synthesisPath, String(synthesisTimestamp), synthesisNonce, agentKey].join('\n')).digest('hex');
+    const synthesisResponse = await fetch(`http://127.0.0.1:${brainPort}${synthesisPath}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-agent-key': agentKey,
+        'x-lynn-timestamp': String(synthesisTimestamp),
+        'x-lynn-nonce': synthesisNonce,
+        'x-lynn-signature': `v1:${synthesisSignature}`,
+      },
+      body: JSON.stringify({ model: 'fake-chat-model', stream: true, tool_choice: 'none',
+        messages: [{ role: 'user', content: 'Give the final answer without any more tools.' }],
+        tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object' } } }],
+      }),
+    });
+    const synthesisRaw = await synthesisResponse.text();
+    expect(synthesisResponse.status).toBe(200);
+    expect(providerRequest.tools).toBeUndefined();
+    expect(synthesisRaw).not.toContain('lynn.tool_progress');
   });
 });

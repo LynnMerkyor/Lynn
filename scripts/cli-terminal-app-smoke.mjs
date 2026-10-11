@@ -11,6 +11,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const cliEntry = path.join(root, "cli", "bin", "lynn.mjs");
 const turns = Number.parseInt(process.env.LYNN_CLI_TERMINAL_APP_TURNS || "6", 10);
 const fullTui = process.argv.includes("--full-tui") || process.env.LYNN_CLI_TERMINAL_FULL_TUI === "1";
+const hidden = process.env.LYNN_UI_HEADLESS === "1";
 
 if (process.platform !== "darwin") {
   console.log("[cli-terminal-app-smoke] skipped: Terminal.app is macOS-only");
@@ -76,7 +77,15 @@ end run
 await fs.writeFile(appleScriptPath, appleScript, "utf8");
 const appleScriptTimeoutMs = Math.max(75_000, commands.length * 1_500 + 55_000);
 try {
-  await execFileAsync("osascript", [appleScriptPath, root, statusPath, transcriptPath, String(commands.length), inputPath, nodeBin, fullTui ? "1" : "0"], { timeout: appleScriptTimeoutMs });
+  if (hidden) {
+    await execFileAsync('/bin/sh', ['-c', '"$1" "$2" --mock-brain < "$3" > "$4" 2>&1; result=$?; printf "%s\\n" "$result" > "$5"; exit "$result"', 'lynn-terminal-background', nodeBin, cliEntry, inputPath, transcriptPath, statusPath], {
+      cwd: root,
+      timeout: appleScriptTimeoutMs,
+      env: { ...process.env, TERM_PROGRAM: 'Apple_Terminal', LYNN_CLI_UPDATE_CHECK: '0', LYNN_LANG: 'zh', LYNN_CLI_APPLE_TERMINAL_FULL_TUI: fullTui ? '1' : '0' },
+    });
+  } else {
+    await execFileAsync("osascript", [appleScriptPath, root, statusPath, transcriptPath, String(commands.length), inputPath, nodeBin, fullTui ? "1" : "0"], { timeout: appleScriptTimeoutMs });
+  }
 } catch (error) {
   if (String(error?.message || error).includes("not allowed assistive access")) {
     console.error("[cli-terminal-app-smoke] skipped: osascript/System Events needs Accessibility permission");
@@ -99,7 +108,7 @@ if (status !== "0") {
   throw new Error(`[cli-terminal-app-smoke] Lynn exited ${status}; temp=${tmp}`);
 }
 
-console.log(`[cli-terminal-app-smoke] passed Terminal.app scripted smoke (${commands.length - 1} turns before exit${fullTui ? ", full Ink TUI" : ""}); temp=${tmp}`);
+console.log(`[cli-terminal-app-smoke] passed ${hidden ? 'background scripted smoke (no Terminal.app UI)' : 'Terminal.app scripted smoke'} (${commands.length - 1} turns before exit${fullTui ? ", full Ink TUI" : ""}); temp=${tmp}`);
 
 function execFileAsync(command, args, options) {
   return new Promise((resolve, reject) => {

@@ -5,6 +5,7 @@ const { execFileSync } = require("child_process");
 const { LlamaCppManager } = require("./llamacpp-manager.cjs");
 const { ModelDownloader } = require("./model-downloader.cjs");
 const { ensureDflashRuntime } = require('./llamacpp-runtime-installer.cjs');
+const { detectLocalModelHardware } = require('../shared/local-model-hardware.cjs');
 const {
   MODEL_DOWNLOADER_SOURCES,
   buildLlamacppArgsForAlias,
@@ -125,6 +126,7 @@ function createLocalModelController(deps) {
     getMainWindow,
     onModelReady,
     installRuntime = ensureDflashRuntime,
+    detectHardware = detectLocalModelHardware,
     shell,
     wrapIpcHandler,
     lynnHome,
@@ -133,6 +135,22 @@ function createLocalModelController(deps) {
     resolveCanonicalPath,
     isPathInsideRoot,
   } = deps;
+
+async function checkModelMemory(profile) {
+  if (!profile.managedLocal) return null;
+  const hardware = await detectHardware();
+  const memory = hardware.accelerator_memory_gib;
+  if (!Number.isFinite(memory) || memory <= 0) {
+    return ipcError('unknown-model-memory', { detail: '无法确认显存/统一内存，暂不允许安装。请先完成硬件检测。' });
+  }
+  if (memory < profile.minimumMemoryGib) {
+    return ipcError('insufficient-model-memory', {
+      detail: `检测到 ${memory.toFixed(1)} GiB。${profile.quantization} 需要${profile.quantization === 'Q3' ? ' 24GB 档位' : '至少 14GiB'}显存/统一内存，不能安装或启动；还需为上下文 KV 缓存和运行缓冲留出空间。`,
+      modelId: profile.modelId,
+    });
+  }
+  return null;
+}
 
 // ─────────────────────────────────────────────────────────────
 // llama.cpp local inference runtime(2026-05-20). It is now strictly opt-in:
@@ -282,6 +300,10 @@ async function startLlamacppCustomModel(modelPath, preparedBinary, signal) {
   const launchProfile = buildLlamacppArgsForAlias(rawAlias, modelPath);
   const modelAlias = launchProfile.alias;
   const profile = resolveLlamacppDownloadProfile(modelAlias);
+  if (profile.known) {
+    const memoryError = await checkModelMemory(profile.profile);
+    if (memoryError) return memoryError;
+  }
   if (profile.known && profile.profile.requiresDflash && profile.profile.draftFileName) {
     const draft = path.join(path.dirname(modelPath), path.basename(profile.profile.draftFileName));
     if (!fs.existsSync(draft)) throw new Error('dflash-model-missing: 请使用一键安装补齐 Q4 DFlash2 文件');
@@ -379,6 +401,8 @@ wrapIpcHandler(LOCAL_MODEL_IPC.startDownload, async (event, payload = {}) => {
     });
   }
   const profile = resolvedProfile.profile;
+  const memoryError = await checkModelMemory(profile);
+  if (memoryError) return memoryError;
   if (activeInstallJob) return activeInstallJob.modelId === profile.modelId
     ? ipcOk({ alreadyRunning: true, modelId: profile.modelId })
     : ipcError('another-download-running', { modelId: activeInstallJob.modelId });

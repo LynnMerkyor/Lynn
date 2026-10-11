@@ -637,7 +637,7 @@ async function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): Pro
         recommended_runtime: {
           name: selected.modelId,
           model_id: detected.recommended_model_id,
-          label: usable ? selected.label : '未确认满足显存要求，请手动选择或让 Lynn 协助',
+          label: usable ? selected.label : '显存/统一内存不足或未确认，不能安装；Q2 至少 14GiB',
           ctx_size: ctxSize,
           parallel,
           gpu_layers: 999,
@@ -650,7 +650,7 @@ async function fastReadyPlan(runtime: RuntimeDetails, _variant = "imatrix"): Pro
             label: "Qwen3.6-35B-A3B DSV4Pro Thinking Distill MTP Q5_K_M imatrix",
             profile: "32GB 显存/统一内存+ 可选 · 更高配本地编排器",
             metrics: ["25.3 GB Q5_K_M imatrix", "MTP 原生头", "GPQA-Diamond 80.3%", "端到端编排 26.6s"],
-            reason: "35B-A3B Q5_K_M 是手动可选的旧版模型，文件和缓存占用更大。默认推荐 Qwen3.8-27B Coder390：16GB 及以上 Q3，16GB 以下 Q2。",
+            reason: "35B-A3B Q5_K_M 是手动可选的旧版模型，文件和缓存占用更大。默认推荐 Qwen3.8-27B Coder390：24GB 及以上 Q3，24GB 以下（16GB 档） Q2。低于 14GiB 不能安装。",
             modelscope_url: "https://modelscope.cn/models/Merkyor/Qwen3.6-35B-A3B-DSV4Pro-Thinking-Distill-GGUF",
             download_label: "下载到本机",
             file_name: "Qwen3.6-35B-A3B-DSV4Pro-Distill-MTP-Q5_K_M-imatrix.gguf",

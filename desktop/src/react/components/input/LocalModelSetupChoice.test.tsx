@@ -16,9 +16,11 @@ describe('local model setup choice', () => {
     expect(html).not.toContain('Coding100 82/100');
     expect(html).toContain('内置 Q4 MTP');
   });
-  it('keeps unknown hardware explicit and offers manual selection', () => {
+  it('keeps unknown hardware blocked even after manual selection', () => {
     const html = renderToStaticMarkup(<LocalModelSetupChoice value={localModelCatalog.defaultModelId} onChange={() => {}} onHelp={() => {}} />);
-    expect(html).toContain('手动选择此方案');
+    expect(html).toContain('手动选档不能跳过显存检查');
+    expect(html).toContain('低于 14GiB 不能安装');
+    expect(html).not.toContain('已了解显存要求，手动选择此方案');
     expect(html).not.toContain('本机推荐');
   });
   it('requests a draft handoff only after the user invokes help', async () => {

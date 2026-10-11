@@ -51,10 +51,10 @@ npm run release:preflight
 #   + gate:cli-task(CLI 真任务执行:可见答案 / usage 单行 / fast 档 —— 思考不说话回归网)
 
 npm run release:full-gate
-# = release:preflight + agent-regression release bank + CLI200 + GUI100
+# = release:preflight + efficiency + CLI200 + GUI100
 
 npm run release:overnight
-# = release:full-gate + agent-regression nightly + release nightly
+# = release:full-gate + release nightly
 ```
 
 hotfix 打包前至少跑 `release:preflight`。正式版本发布必须跑 `release:full-gate`。大版本、模型链路改动、
@@ -62,6 +62,8 @@ GUI/CLI 行为改动、或用户体验疑难问题收敛,必须跑 `release:over
 
 分步跑/跳过用 `npm run release:gate -- --help` 看开关。阻断规则(blocker/critical/extended)见
 [RELEASE-REGRESSION-GATES.md](../RELEASE-REGRESSION-GATES.md)。
+
+发布串联只执行一次相同的检查。统一 gate bank 的 GUI/CLI 冒烟和真实任务已由 preflight 覆盖，后台 bank 当前 nightly 与 release 用例相同，因此不再重复调用这些包装入口；独立入口仍可用于诊断。契约测试确保未来新增 nightly 用例时必须同步更新发布编排。CLI200、GUI100、效率和 release nightly 各自保留。
 
 - ⚠ `LYNN_UI_SMOKE=1` 的 UI smoke **不覆盖 server 启动链**(它 createMainWindow 后直接 return)——
   #72 当年就是这么漏的。`gate:startup` 跑的才是真启动链,两者都要绿。

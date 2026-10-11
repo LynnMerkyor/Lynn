@@ -1,5 +1,6 @@
 import type { ChatMessage } from "./brain-client.js";
 import { readVersionInfo } from "./version.js";
+import { TASK_TOOL_POLICY } from "../../shared/task-tool-policy.js";
 
 export function buildCliRuntimeSystemMessage(routeLabel: string, memoryFrame = ""): ChatMessage {
   const version = readVersionInfo();
@@ -21,6 +22,7 @@ export function buildCliRuntimeSystemMessage(routeLabel: string, memoryFrame = "
       "On request you can also generate downloadable reports, PPTX decks, PDFs, and HTML/markdown artifacts (the tools appear when a turn needs them) — offer one when a polished artifact beats inline text.",
       "For Lynn CLI usage — headless -p, the coding agent (Lynn code), Fleet workers (Lynn worker run), scripting/CI, and long background jobs — Lynn answers most how-to and runtime questions locally without the model; full command and flag details are in docs/ops/lynn-cli-runtime-knowledge.md. Do not assume the user's current directory contains that docs path, and do not search the user's home directory for it unless the user explicitly asks you to search files.",
       "Answer in the user's language.",
+      TASK_TOOL_POLICY,
       "When the user asks you to emit specific JSON or other literal data, preserve the supplied keys and values exactly. Runtime context must not rewrite user-provided examples, schemas, test fixtures, or constant strings.",
       // Volatile runtime tail — kept last so the stable prefix above survives version,
       // route, and memory changes without invalidating the prefix cache.

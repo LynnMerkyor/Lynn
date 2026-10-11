@@ -8,6 +8,19 @@ import {
 } from "../server/chat/tool-turn-finalizer.js";
 
 describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
+  it.each([
+    '明天有小雨，建议带伞。无法查询实时航班状态，请出发前查看航空公司通知。',
+    '1美元=6.6925人民币。ECB日度参考汇率不能替代银行结售汇牌价或实时成交价。',
+    '当前工具只返回指数样本，无法判断实时全市场异动。',
+  ])('preserves model answers that distinguish evidence limits from tool capability: %s', (text) => {
+    expect(selectToolEvidenceVisibleText({ successfulToolCount: 1 }, text)).toBe(text);
+  });
+
+  it('still rejects explicit denial of declared tools', () => {
+    const text = '当前工具不支持天气查询。';
+    expect(selectToolEvidenceVisibleText({ successfulToolCount: 1 }, text)).not.toBe(text);
+  });
+
   it("returns empty when no tools ran (keeps V0.79 no-synthetic-text rule)", () => {
     expect(buildToolCompletionSummary({ successfulToolCount: 0 })).toBe("");
     expect(buildToolCompletionSummary(null)).toBe("");

@@ -80,14 +80,17 @@ export const SERVER_TOOLS = [
     type: 'function',
     function: {
       name: 'sports_score',
-      description: 'Get scores or fixtures. You identify the league and pass league. Supported direct sources: fifa.world, nba, mlb, nhl. If you cannot identify one of these, say so instead of guessing a league from a team nickname list.',
+      description: 'Get scores or fixtures. You identify the league, date range and teams. Supported direct sources: fifa.world, nba, mlb, nhl. For historical events, resolve their actual dates rather than querying the current week. If no season is specified, identify the latest completed edition from current time instead of mixing seasons. If the direct source fails or does not cover the event, use web_search/web_fetch to verify an official source.',
       parameters: {
         type: 'object',
         properties: {
           league: { type: 'string', description: 'League you identified: fifa.world | nba | mlb | nhl.' },
-          query: { type: 'string', description: 'Original question, used only for date words such as tonight/yesterday and team filters.' },
+          date_from: { type: 'string', description: 'First Beijing calendar date, YYYY-MM-DD, resolved by you from the question and current time.' },
+          date_to: { type: 'string', description: 'Last Beijing calendar date, YYYY-MM-DD. Daily fallback supports up to 31 calendar days per query; split larger ranges without leaving gaps.' },
+          teams: { type: 'array', items: { type: 'string' }, description: 'Optional exact team names from the source, usually English. If unknown, omit the filter first, inspect returned team names, then use those names. No local nickname dictionary is used.' },
+          query: { type: 'string', description: 'Original question for context. Supply structured dates for historical events.' },
         },
-        required: ['league', 'query'],
+        required: ['league', 'date_from', 'date_to', 'query'],
       },
     },
   },
@@ -146,7 +149,7 @@ export const SERVER_TOOLS = [
     type: 'function',
     function: {
       name: 'stock_market',
-      description: 'Get a market quote. You analyze the question and pass symbol or name. Do not expect the tool to guess a company from a hardcoded name list. For a broad index question, pass symbol such as 纳指, 上证, 恒指, or the index ticker.',
+      description: 'Get stock, index and market snapshots, including A-share overview and movement analysis. You analyze the question and pass symbol or name. For broad markets, select representative index symbols and state the sample boundary; use additional searches for a full-market anomaly list. Do not claim market tools are unavailable without trying them.',
       parameters: {
         type: 'object',
         properties: {
@@ -260,7 +263,7 @@ export async function executeServerTool(name, argsStr, { log } = {}) {
       case 'weather':          return await weather({ location: args.location || args.city || args.place || '', fallback_locations: args.fallback_locations || [], query: args.query || '' }, { log, webSearchFn: (q) => webSearch(q, { log }) });
       case 'exchange_rate':    return await exchangeRate({ base: args.base, quote: args.quote, pair: args.pair });
       case 'express_tracking': return await expressTracking(args.query || args.number || '');
-      case 'sports_score':     return await sportsScore({ league: args.league, query: args.query || '' });
+      case 'sports_score':     return await sportsScore({ league: args.league, date_from: args.date_from, date_to: args.date_to, teams: args.teams, query: args.query || '' });
       case 'calendar':         return calendar(args.query || '');
       case 'unit_convert':     return unitConvert(args.query || '');
       case 'create_artifact':  return await createArtifact(args, { log });
@@ -451,15 +454,7 @@ export function shouldExposeExternalEvidenceTools(messages) {
     .slice(-1)
     .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''))
     .join('\n');
-  return EXPLICIT_EXTERNAL_LOOKUP_RE.test(text)
-    || INHERENTLY_LIVE_LOOKUP_RE.test(text)
-    || shouldPreferSportsScoreTool(messages)
-    || shouldPreferStockMarketTool(messages)
-    || shouldPreferExchangeRateTool(messages)
-    || shouldPreferCalendarTool(messages)
-    || shouldPreferWeatherTool(messages)
-    || shouldPreferOfficialModelSearchTool(messages)
-    || shouldPreferStructuredOfficialSearchTool(messages);
+  return !!text.trim() && !shouldSuppressWebToolsForInternalLynnUx(messages);
 }
 
 function policyToolName(name) {
@@ -479,28 +474,14 @@ export function mergeWithServerTools(clientTools, messages) {
     if (!allowGated && GATED_TOOLS.has(name)) return false;
     if (!allowExternalEvidence && EXTERNAL_EVIDENCE_TOOL_NAMES.has(name)) return false;
     return true;
-  });
+  }).map((tool) => SERVER_TOOLS.find((serverTool) => serverTool.function.name === tool?.function?.name) || tool);
   const seen = new Set(list.filter(t => t?.function?.name).map(t => policyToolName(t.function.name)));
   const suppressInternalReasoningTools = messages !== undefined && shouldSuppressWebToolsForInternalLynnUx(messages);
-  const preferSportsScore = messages !== undefined && shouldPreferSportsScoreTool(messages);
-  const preferStockMarket = messages !== undefined && shouldPreferStockMarketTool(messages);
-  const preferExchangeRate = messages !== undefined && shouldPreferExchangeRateTool(messages);
-  const preferCalendar = messages !== undefined && shouldPreferCalendarTool(messages);
-  const preferWeather = messages !== undefined && shouldPreferWeatherTool(messages);
-  const preferOfficialModelSearch = messages !== undefined && shouldPreferOfficialModelSearchTool(messages);
-  const preferStructuredOfficialSearch = messages !== undefined && shouldPreferStructuredOfficialSearchTool(messages);
   for (const st of SERVER_TOOLS) {
     if (seen.has(policyToolName(st.function.name))) continue;
     if (!allowGated && GATED_TOOLS.has(st.function.name)) continue;
     if (!allowExternalEvidence && EXTERNAL_EVIDENCE_TOOL_NAMES.has(st.function.name)) continue;
     if (suppressInternalReasoningTools) continue;
-    if (preferSportsScore && ['web_search', 'web_fetch', 'live_news', 'calendar', 'parallel_research'].includes(st.function.name)) continue;
-    if (preferStockMarket && ['web_search', 'web_fetch', 'live_news', 'calendar', 'parallel_research'].includes(st.function.name)) continue;
-    if (preferExchangeRate && ['web_search', 'web_fetch', 'live_news', 'calendar', 'parallel_research', 'stock_market'].includes(st.function.name)) continue;
-    if (preferCalendar && ['web_search', 'web_fetch', 'live_news', 'parallel_research'].includes(st.function.name)) continue;
-    if (preferWeather && ['web_search', 'web_fetch', 'live_news', 'calendar', 'parallel_research'].includes(st.function.name)) continue;
-    if (preferOfficialModelSearch && ['web_fetch', 'live_news', 'parallel_research', 'calendar'].includes(st.function.name)) continue;
-    if (preferStructuredOfficialSearch && ['web_fetch', 'live_news', 'parallel_research', 'calendar', 'stock_market', 'stock_research', 'sports_score', 'weather', 'exchange_rate', 'express_tracking'].includes(st.function.name)) continue;
     list.push(st);
   }
   // MCP 工具(akshare 等):同步快照注入;预热未完时为空,下一回合自然出现。

@@ -10,6 +10,7 @@ import {
   isBrainManagedCustomToolName,
 } from "../brain-managed-tools.js";
 import { isBrainProvider } from "../../shared/brain-provider.js";
+import { brainToolEvidenceMessages } from "../../shared/brain-tool-evidence.js";
 import {
   STEP_EXECUTE_TOOL_NAME,
   ModelCallTimeoutError,
@@ -37,7 +38,6 @@ import {
   fallbackRank,
   finalizeToolCalls,
   hasAnyToolEvidence,
-  hasUsableToolEvidence,
   isExecutableToolCall,
   isStepExecutorModel,
   isUnsafeFinalAnswerText,
@@ -60,7 +60,6 @@ import {
   type RuntimeTool,
   type StreamToolCallAccumulator,
 } from "./session-runtime-helpers.js";
-import { buildEvidenceSafetyAnswer } from "../../shared/evidence-safety-answer.js";
 import {
   filterToolsForTurn,
   hasExplicitDeliverableIntent,
@@ -537,29 +536,19 @@ export class LynnAgentSession {
     turnSignal?: AbortSignal,
   ): Promise<boolean> {
     if (turnSignal?.aborted) return false;
-    const originalEvidenceMessages = hasAnyToolEvidence(baseMessages) ? [...baseMessages] : [];
-    const candidates = this.fallbackModels(fromModel);
-    if (!candidates.length) {
-      const evidenceSafetyAnswer = buildEvidenceSafetyAnswer(originalEvidenceMessages.length ? originalEvidenceMessages : baseMessages);
-      if (evidenceSafetyAnswer) {
-        this.finishAssistantAnswer(evidenceSafetyAnswer, undefined, { streamedText: false });
-        return true;
-      }
-      return false;
-    }
+    const candidates = hasAnyToolEvidence(baseMessages)
+      ? [fromModel, ...this.fallbackModels(fromModel)]
+      : this.fallbackModels(fromModel);
     let sharedMessages = [...baseMessages];
-    let latestEvidenceMessages = originalEvidenceMessages.length ? [...originalEvidenceMessages] : [];
     for (const candidate of candidates) {
       try {
         if (turnSignal?.aborted) return false;
         this.emitFallbackRoute(candidate, fromModel, reason);
         const existingAnyEvidence = hasAnyToolEvidence(sharedMessages);
-        const existingUsableEvidence = hasUsableToolEvidence(sharedMessages);
-        if (existingAnyEvidence) latestEvidenceMessages = [...sharedMessages];
         const availableFallbackTools = this.getFallbackTools();
-        const allowTools = !existingUsableEvidence && availableFallbackTools.length > 0;
+        const allowTools = !existingAnyEvidence && availableFallbackTools.length > 0;
         const fallbackTools = allowTools ? availableFallbackTools : [];
-        let workingMessages = existingUsableEvidence
+        let workingMessages = existingAnyEvidence
           ? buildFallbackSynthesisMessages(sharedMessages, reason)
           : [
             ...sharedMessages,
@@ -605,9 +594,6 @@ export class LynnAgentSession {
           }
           this.agent.replaceMessages(this.sessionManager.buildSessionContext().messages || []);
           if (hasAnyToolEvidence(workingMessages)) {
-            latestEvidenceMessages = [...workingMessages];
-          }
-          if (hasUsableToolEvidence(workingMessages)) {
             workingMessages = buildFallbackSynthesisMessages(workingMessages, reason);
           }
         }
@@ -618,15 +604,6 @@ export class LynnAgentSession {
       }
     }
     if (turnSignal?.aborted) return false;
-    const evidenceSafetyAnswer = buildEvidenceSafetyAnswer(
-      latestEvidenceMessages.length
-        ? latestEvidenceMessages
-        : originalEvidenceMessages.length ? originalEvidenceMessages : sharedMessages,
-    );
-    if (evidenceSafetyAnswer) {
-      this.finishAssistantAnswer(evidenceSafetyAnswer, undefined, { streamedText: false });
-      return true;
-    }
     return false;
   }
 
@@ -692,11 +669,6 @@ export class LynnAgentSession {
           if (isUnsafeFinalAnswerText(content, { hasToolEvidence: hasAnyToolEvidence(messages) })) {
             const handled = await this.finishWithFallback(messages, "empty_response", turnModel, turnController.signal);
             if (handled) return;
-            const evidenceSafetyAnswer = buildEvidenceSafetyAnswer(messages);
-            if (evidenceSafetyAnswer) {
-              this.finishAssistantAnswer(evidenceSafetyAnswer, undefined, { streamedText: false });
-              return;
-            }
             this.finishAssistantAnswer(
               "模型返回的答案与当前日期或已有证据冲突。本轮已停止输出以避免误导；请点击「编辑重发」重新查询。",
               result.reasoning,
@@ -742,11 +714,6 @@ export class LynnAgentSession {
       }
       const handled = await this.finishWithFallback(messages, "tool_round_limit", turnModel, turnController.signal);
       if (handled) return;
-      const evidenceSafetyAnswer = buildEvidenceSafetyAnswer(messages);
-      if (evidenceSafetyAnswer) {
-        this.finishAssistantAnswer(evidenceSafetyAnswer, undefined, { streamedText: false });
-        return;
-      }
       this.finishAssistantAnswer(
         "工具链已执行多轮但没有形成最终回复。本轮已安全结束，请缩小问题范围后重试。",
         undefined,
@@ -808,6 +775,7 @@ export class LynnAgentSession {
     );
     const streamTextImmediately = options.streamText ?? tools.length === 0;
     const body = buildRequestBody(model, messages, tools, this.thinkingLevel);
+    if (options.tools?.length === 0) body.tool_choice = "none";
     const headers: Record<string, string> = {
       "content-type": "application/json",
       accept: "text/event-stream",
@@ -845,7 +813,7 @@ export class LynnAgentSession {
         buffer = parsed.rest;
         for (const payload of parsed.payloads) {
           if (payload === "[DONE]") continue;
-          this.handleLynnSideEvent(payload);
+          this.handleLynnSideEvent(payload, isBrainProvider(model.provider), messages);
           const chunk = parsePayload(payload);
           if (!chunk) continue;
           if (chunk.error && !chunk.choices) throw new Error(typeof chunk.error === "string" ? chunk.error : maybeJson(chunk.error));
@@ -901,22 +869,31 @@ export class LynnAgentSession {
     }
   }
 
-  private handleLynnSideEvent(payload: string): void {
+  private handleLynnSideEvent(payload: string, trustedBrain: boolean, messages: ChatMessage[]): void {
     const parsed = parsePayload(payload);
     if (!parsed) return;
     if (parsed.object === "lynn.provider") {
       this.emit({ type: "provider_meta", meta: parsed.meta || {} });
     }
-    if (parsed.object === "lynn.tool_progress") {
+    if (parsed.object === "lynn.tool_progress" && trustedBrain) {
       const progress = asRecord(parsed.tool_progress);
+      const evidenceMessages = brainToolEvidenceMessages({ ...progress, toolCall: progress.tool_call });
+      if (evidenceMessages.length && !messages.some((message) => message.role === "tool" && message.tool_call_id === evidenceMessages[1].tool_call_id && message.content === evidenceMessages[1].content)) {
+        for (const message of evidenceMessages) {
+          messages.push(message);
+          this.sessionManager.appendMessage(message);
+        }
+      }
       this.emit({
         type: "tool_progress",
+        source: "brain",
         name: String(progress.name || ""),
         event: String(progress.event || ""),
         ms: typeof progress.ms === "number" ? progress.ms : undefined,
         ok: typeof progress.ok === "boolean" ? progress.ok : undefined,
         summary: typeof progress.summary === "string" ? progress.summary : undefined,
         details: Array.isArray(progress.details) ? progress.details : undefined,
+        argsSummary: typeof progress.args_summary === "string" ? progress.args_summary : undefined,
       });
     }
   }
