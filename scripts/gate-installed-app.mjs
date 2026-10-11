@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 import YAML from "js-yaml";
 import WebSocket from "ws";
+import { selectInstalledVisionModel } from "./installed-vision-selection.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_APP = "/Applications/Lynn.app";
@@ -18,24 +19,10 @@ const REVIEW_TIMEOUT_MS = Number(process.env.LYNN_INSTALLED_GATE_REVIEW_TIMEOUT_
 const ONLY_LIVE_VISION = process.argv.includes("--only-live-vision");
 const ONLY_REVIEW_CONCURRENCY = process.argv.includes("--only-review-concurrency");
 const CONNECT_EXISTING = process.argv.includes("--connect-existing");
-const REQUIRE_LIVE_VISION = process.env.LYNN_INSTALLED_GATE_REQUIRE_VISION === "1" || ONLY_LIVE_VISION;
-const VISION_MODEL_ID = String(process.env.LYNN_INSTALLED_GATE_VISION_MODEL || "mimo-v2.5").trim();
+const VISION_MODEL_ID = String(process.env.LYNN_INSTALLED_GATE_VISION_MODEL || "").trim();
 const VISION_PROVIDER = String(process.env.LYNN_INSTALLED_GATE_VISION_PROVIDER || "").trim().toLowerCase();
-const VISION_FIXTURE_PROVIDER = VISION_PROVIDER || "mimo";
-const VISION_API_KEY = String(
-  process.env.LYNN_INSTALLED_GATE_VISION_KEY
-  || process.env.MIMO_TOKEN_PLAN_KEY
-  || process.env.MIMO_API_KEY
-  || process.env.MIMO_SEARCH_KEY
-  || "",
-).trim();
-const VISION_BASE_URL = String(
-  process.env.LYNN_INSTALLED_GATE_VISION_BASE_URL
-  || process.env.MIMO_TOKEN_PLAN_BASE_URL
-  || process.env.MIMO_SEARCH_BASE
-  || "https://token-plan-cn.xiaomimimo.com/v1",
-).trim();
-const MIMO_PROVIDER_HINTS = new Set(["mimo", "xiaomi", "xiaomi-mimo", "token-plan"]);
+const VISION_API_KEY = String(process.env.LYNN_INSTALLED_GATE_VISION_KEY || "").trim();
+const VISION_BASE_URL = String(process.env.LYNN_INSTALLED_GATE_VISION_BASE_URL || "").trim();
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -205,27 +192,10 @@ function tail(text, lines = 60) {
   return String(text || "").split(/\n/).filter(Boolean).slice(-lines).join("\n");
 }
 
-function buildMimoFixtureModels() {
-  const models = new Map();
-  const add = (id, meta = {}) => {
-    const normalized = String(id || "").trim();
-    if (!normalized) return;
-    models.set(normalized, {
-      id: normalized,
-      name: normalized === "mimo-v2.5-pro" ? "MiMo V2.5 Pro" : normalized === "mimo-v2.5" ? "MiMo V2.5" : normalized,
-      context: 262144,
-      maxOutput: normalized === "mimo-v2.5-pro" ? 64000 : 32000,
-      reasoning: true,
-      ...meta,
-    });
-  };
-  add("mimo-v2.5-pro", { vision: false });
-  add("mimo-v2.5", { vision: true });
-  add(VISION_MODEL_ID, { vision: VISION_MODEL_ID === "mimo-v2.5" || VISION_MODEL_ID === "mimo-v2-omni" });
-  return [...models.values()];
-}
-
 async function prepareGateHome() {
+  if (VISION_API_KEY && (!VISION_MODEL_ID || !VISION_PROVIDER || !VISION_BASE_URL)) {
+    throw new Error("[installed-gate] an explicit vision key requires explicit model, provider and base URL");
+  }
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-installed-gate-"));
   const lynnHome = path.join(tmp, ".lynn");
   await writeJson(path.join(lynnHome, "user", "preferences.json"), {
@@ -236,11 +206,11 @@ async function prepareGateHome() {
     await writeYaml(path.join(lynnHome, "added-models.yaml"), {
       _migrated: true,
       providers: {
-        [VISION_FIXTURE_PROVIDER]: {
+        [VISION_PROVIDER]: {
           api_key: VISION_API_KEY,
           base_url: VISION_BASE_URL,
           api: "openai-completions",
-          models: buildMimoFixtureModels(),
+          models: [{ id: VISION_MODEL_ID, name: VISION_MODEL_ID, vision: true }],
         },
       },
     });
@@ -392,46 +362,6 @@ function makeSolidColorPngBase64({ width = 64, height = 64, rgba = [231, 41, 41,
   ]).toString("base64");
 }
 
-function modelMatchesLiveVision(model) {
-  const provider = String(model?.provider || "").trim().toLowerCase();
-  const id = String(model?.id || "").trim().toLowerCase();
-  if (!id || !provider) return false;
-  if (VISION_PROVIDER && provider !== VISION_PROVIDER) return false;
-  if (VISION_MODEL_ID && id !== VISION_MODEL_ID.toLowerCase()) return false;
-  return MIMO_PROVIDER_HINTS.has(provider) || /mimo/iu.test(provider) || /mimo/iu.test(id);
-}
-
-function pickLiveVisionModel(modelsPayload) {
-  const models = Array.isArray(modelsPayload?.models) ? modelsPayload.models : [];
-  const exact = models.find((model) => modelMatchesLiveVision(model) && model.vision === true);
-  if (exact) return exact;
-  return models.find((model) => modelMatchesLiveVision(model)) || null;
-}
-
-function summarizeVisionCandidates(modelsPayload) {
-  const models = Array.isArray(modelsPayload?.models) ? modelsPayload.models : [];
-  const candidates = models
-    .filter((model) => {
-      const provider = String(model?.provider || "").toLowerCase();
-      const id = String(model?.id || "").toLowerCase();
-      return provider.includes("mimo") || id.includes("mimo") || MIMO_PROVIDER_HINTS.has(provider);
-    })
-    .slice(0, 12)
-    .map((model) => ({
-      provider: model?.provider,
-      id: model?.id,
-      name: model?.name,
-      vision: model?.vision,
-      reasoning: model?.reasoning,
-      isCurrent: model?.isCurrent,
-    }));
-  return {
-    total: models.length,
-    visionTotal: models.filter((model) => model?.vision === true).length,
-    candidates,
-  };
-}
-
 async function waitForPromptTurn(ws, payload, timeoutMs = 120000) {
   return await new Promise((resolve, reject) => {
     let text = "";
@@ -492,20 +422,7 @@ async function waitForPromptTurn(ws, payload, timeoutMs = 120000) {
 
 async function runLiveVisionGate(baseUrl, wsUrl, token) {
   const modelsPayload = await httpJson(baseUrl, token, "/api/models", { timeoutMs: 20000 });
-  const selected = pickLiveVisionModel(modelsPayload);
-  if (!selected) {
-    const summary = summarizeVisionCandidates(modelsPayload);
-    const message = `[installed-gate] live vision skipped: no configured MiMo vision model matched ${VISION_PROVIDER || "*"} / ${VISION_MODEL_ID || "*"}; models=${JSON.stringify(summary)}`;
-    if (REQUIRE_LIVE_VISION) throw new Error(message);
-    console.warn(message);
-    return;
-  }
-  if (selected.vision !== true) {
-    const message = `[installed-gate] live vision candidate is not marked vision-capable: ${selected.provider}/${selected.id}`;
-    if (REQUIRE_LIVE_VISION) throw new Error(message);
-    console.warn(`${message}; skipping.`);
-    return;
-  }
+  const selected = selectInstalledVisionModel(modelsPayload, { modelId: VISION_MODEL_ID, provider: VISION_PROVIDER });
 
   const previous = Array.isArray(modelsPayload?.models)
     ? modelsPayload.models.find((model) => model?.isCurrent)

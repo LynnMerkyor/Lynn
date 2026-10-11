@@ -87,6 +87,7 @@ npm run release:installed-gate
 - 打包版 server smoke:原生模块 ABI、冷启动、health、污染配置修复。
 - 打包版 CLI smoke:从 `Lynn.app/Contents/Resources/cli/` 直接启动,确认不是全局旧拷贝。
 - 打包版 Settings/Provider smoke:真实 Electron 窗口 + CDP 点击,覆盖 Provider 去重、Key 状态、删模型不回流。
+- 打包版视觉 smoke:读取 `/api/models` 中 `isCurrent` 的实际默认模型，用现有客户端鉴权发图验证；不写死供应商，也不要求独立 MiMo Key。默认模型缺失、视觉能力不符或识图失败直接阻断，不静默跳过。专门测试其他模型时才显式设置 `LYNN_INSTALLED_GATE_VISION_MODEL` / `LYNN_INSTALLED_GATE_VISION_PROVIDER`。
 - 真实 GUI server 并发复查:对当前安装包发 3 个并发 Hanako 自动复查请求,必须收到非空 `review_result`,防止空卡/串模型/并发覆盖。
 
 人工按钮矩阵(必须逐项点击并记录截图或日志路径):
