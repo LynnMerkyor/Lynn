@@ -16,114 +16,50 @@
 
 ---
 
-## New in v0.87.1
+## Lynn V0.87.1 · Step 5 Cloud + Coder390 Local
 
-GUI and CLI use Step 5 Preview by default and restore stepaudio-2.5-realtime voice. The model supplies weather, sports, market and currency parameters rather than whole-question entity guessing. Local tiers are Qwen3.8-27B Coder390 Q3 / Q2 with built-in Q4 MTP, no separate DFlash2 draft, and no vision component downloaded by this installation.
+Lynn is an open-source AI agent with a desktop GUI and standalone CLI for search, files, coding and realtime voice. It also runs as a headless worker for other agents and CI. **GUI and CLI are both V0.87.1; the default working model is Step 5 Preview, not Step 3.7.**
 
-The default cloud Step 5 model handles images natively without a separate vision API key. Local Coder390 installation does not include vision components. Manual review now carries the required Brain client authentication; release acceptance requires a real model review, not an error fallback.
+[Download mirror (recommended)](https://download.merkyorlynn.com/download.html) · [V0.87.1 release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.1) · [Primary GitHub](https://github.com/MerkyorLynn/Lynn) · [Backup GitHub](https://github.com/LynnMerkyor/Lynn) · [Gitee](https://gitee.com/merkyor/Lynn)
 
-[V0.87.1 release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.1) · [Download page](https://download.merkyorlynn.com/download.html) · [Gitee source](https://gitee.com/merkyor/Lynn)
+### Current Models and Runtime
 
-Non-blocking review-relevance and redundant vision-completion observations are recorded in the [follow-up list](docs/ops/v0871-follow-ups.md), not presented as fixed.
+| Purpose | Current model | Access |
+|---|---|---|
+| Default chat, coding and tool tasks | **Step 5 Preview** (`step-5-preview`) | Brain-hosted by default in GUI / CLI |
+| Default cloud image understanding | **Step 5 native vision** | Send images directly; no separate vision API key |
+| Realtime voice conversation | **StepAudio 2.5 Realtime** (`stepaudio-2.5-realtime`) | GUI microphone; `/voice` or `lynn voice` inside CLI chat |
+| Local text and coding | **Qwen3.8-27B Coder390 EfficientThink** | Explicit installation and startup of llama.cpp Q2 / Q3 in Settings |
+| Your own models | User-configured providers or compatible endpoints | Select in model settings; route aliases are not actual model names |
 
-## Previous release: v0.87.0
+### Local Models: Coder390 Q2 / Q3
 
-<details>
-<summary><strong>Lynn v0.87.0</strong> · 2026-09-08 · Window light and a simpler workspace</summary>
+Source: [Merkyor / Qwen3.8-27B-Coder390-EfficientThink](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer). Lynn uses the repository's [`GGUF/` directory](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer/tree/master/GGUF), **not the NInfer variant**.
 
-- Original SVG leaves and soft window light; the original Lynn portrait stays. Opt in under Interface settings, with background pause and reduced-motion support.
-- Persistent task modes become editable slash templates. Deep research, writing layout and security controls stay available.
-- Images join the file panel's All / Images filter; translation moves into each message's More menu.
-- Chat no longer promotes local-model installation; installation remains in model settings.
-- Professional advisors and roundtables become an [optional plugin](optional-plugins/expert-roundtable/README.md); existing agents and history remain.
-- Direct prose replaces newly generated mood/reflection blocks. Routine searches and light edits trigger fewer automatic reviews; manual and important-result reviews remain.
-- Kimi MCP sign-in, conversation search, session files, automations and mobile continuation continue to be available.
-
-[Release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.0)
-
-</details>
-
-
-## Ecosystem Links
-
-- **Source and app**: [Primary GitHub repository · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn) · [GitHub mirror · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases) · [download mirror](https://download.merkyorlynn.com/download.html)
-- **Models and GGUF mirrors**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
-- **Recommended edge model**: [Qwen3.8-27B Coder390 EfficientThink Q3 / Q2 with built-in Q4 MTP](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer)
-
----
-
-## 🧠 Part 1 · Engine & Models
-
-### ① Step 5 cloud routing and Qwen3.8-27B Coder390 local models
-
-V0.87.1 uses **Step 5 Preview (`step-5-preview`)** by default in both GUI and CLI, with **`stepaudio-2.5-realtime`** for realtime voice. The recommended local model is now **Qwen3.8-27B Coder390 EfficientThink**. Local installation and startup require explicit user action; switching tiers does not delete existing model files.
-
-| Local tier | Recommended capacity | Model file | Initial context |
+| Tier | Recommended capacity | Model file size | Initial context |
 |---|---|---|---|
-| Coder390 Q2 | 16GB GPU VRAM / Apple unified memory; minimum 14GiB | 13.28GB | 4K, one slot |
-| Coder390 Q3 | 24GB or above; at least 23.5GiB reported | 17.30GB | 8K, one slot |
+| **Coder390 Q2** | **16GB** GPU VRAM / Apple unified memory | 13.28GB | 4K, one slot |
+| **Coder390 Q3** | **24GB or above**; at least 23.5GiB reported | 17.30GB | 8K, one slot |
 
-Use the **llama.cpp Q2 / Q3** files in the [model repository's `GGUF/` directory](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer/tree/master/GGUF), both with built-in **Q4 MTP**. This is not the `GGUF-NInfer/` variant: no NInfer runtime, separate DFlash2 draft or vision component is installed. NVIDIA capacity means the largest single GPU's VRAM, never summed GPUs or host RAM. Installation is blocked below 14GiB or when detection fails. The 14–under-16GiB range only meets Q2's minimum; KV cache, runtime buffers and the OS require additional headroom.
+- Both are **llama.cpp GGUF with built-in Q4 MTP**. No separate DFlash2 draft, NInfer runtime or local vision component is installed.
+- Apple Silicon uses unified-memory capacity. NVIDIA uses the largest single GPU's VRAM, not summed GPUs or system RAM.
+- **Installation and startup are blocked below 14GiB or when detection fails.** The 14–under-16GiB range only meets Q2's minimum; it is not the recommended tier.
+- File size is not runtime memory use: KV cache, compute buffers and the OS need additional headroom.
+- Installation and startup require explicit user action. Switching tiers preserves existing files; Settings offers Q2 / Q3 rather than recommending the old 9B / 4B models.
 
-#### Historical orchestrator research (not the current default)
+### V0.87.1 Highlights
 
-The following is historical A3B orchestrator research, not Coder390 benchmark data or the current GUI/CLI default. This optional model remains available through explicit `Lynn manager run`. We distilled an orchestrator that **decomposes → delegates → verifies** using LoRA (**r=64 / α=128 / dropout 0.05**, **1,842 distillation samples**) transferring **DeepSeek-V4-Pro's thinking-on reasoning style** into **Qwen3.6-35B-A3B** (MoE, 3B active).
+- **The model supplies parameters; tools execute them.** Weather, sports, markets and currency tools receive model-provided locations, dates, leagues, tickers and currency pairs instead of extracting entities from whole questions. Compound locations retain their meaning; the model can supply a parent location or coordinates when needed.
+- **One default across GUI / CLI:** Step 5 handles ordinary chat, coding, tool tasks and cloud image understanding.
+- **Realtime voice restored:** StepAudio 2.5 Realtime uses the shared Brain-hosted path. Enter voice inside CLI chat and return with `Ctrl+C`.
+- **Review and evidence:** manual review now carries device authentication. Real image recognition, manual review and concurrent review are verified against installed packages; failure fallbacks do not count as successful results.
+- **Explicit local requirements:** recommend the Coder390 tier by detected capacity, verify pinned sizes and SHA-256 values, and preserve older files and manual import.
 
-Same harness, thinking-on, vs the base A3B:
+Non-blocking review-relevance and redundant vision-completion observations are retained in the [follow-up list](docs/ops/v0871-follow-ups.md). Historical models and research results later in this README do not describe current defaults or Coder390 benchmark results.
 
-| Metric | Distilled orchestrator | Base A3B | |
-|---|---|---|---|
-| End-to-end orchestration latency | **26.6s** | 60.7s | 2.3× faster — decisive, not verbose |
-| GPQA-Diamond-198 | **80.3%** | 72.7% | **+7.6pp** hard reasoning |
-| MMLU-500 | 90.2% | 91.4% | knowledge flat |
-| False-verify (20×5) | **0/20** | 0/20 | self-claim matches reality |
+### GUI and CLI
 
-Distilled and base have **identical single-stream TPS** (~224 tok/s on R6000) — the orchestration speedup comes from **fewer tokens to a decision** (we distilled the *thinking style*, not raw speed). Hard tasks (e.g. concurrency) are still backstopped by **harness objective verification + a DS-V4 Flash escape hatch**.
-
-📦 **Current local recommendation**: [Qwen3.8-27B Coder390 EfficientThink Q2 / Q3](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer), using llama.cpp and built-in Q4 MTP. The historical orchestrator numbers above do not describe this model.
-
-### ② Engine route: we chose the fastest edge framework — llama.cpp — and give back
-
-We built our own NVFP4 engine and spent weeks on Blackwell kernels. The hard conclusion: **single-stream decode is a bandwidth/launch game; a hand-written kernel can't out-run mature llama.cpp.**
-
-| Single-stream decode (same model, same GPU) | tok/s |
-|---|---|
-| llama.cpp Q4_K_M (Spark sm_121) | **69.77** (+MTP **79**) |
-| self-built NVFP4 (Spark, fused) | ~45 |
-| llama.cpp Q4_K_M (R6000) | ~207 |
-| self-built NVFP4 (R6000 strict) | ~108 |
-
-So **edge inference = llama.cpp** (fastest single-stream, mature, cross-platform), and we contribute our validated improvements upstream:
-- [#24273](https://github.com/ggml-org/llama.cpp/pull/24273) NVFP4 conversion / backend / benchmarking guidance doc (open, under review)
-
-Not abandonment — "use what wins, contribute what helps." **The self-built engine narrows to a research asset; frontier NVFP4 research continues.**
-
-### ③ NVFP4 not abandoned — the frontier is concurrent serving, proven on vLLM
-
-NVFP4's real payoff is **batched throughput**. Same R6000, `VLLM_MOE_FORCE_MARLIN=1`:
-
-| concurrency | 1 | 16 | 64 (soak) |
-|---|---|---|---|
-| output tok/s | 175 | 1289 | **2434** (0 failed) |
-
-**NVFP4 beats FP8 by 1.14–1.34× at every tier** (same machine, same harness). We contributed the regression tests / docs / correctness gate for this W4A16 NVFP4 Marlin path to vLLM (3 open PRs, under review):
-- [#44671](https://github.com/vllm-project/vllm/pull/44671) ModelOpt W4A16 lm_head regression tests
-- [#44672](https://github.com/vllm-project/vllm/pull/44672) ModelOpt W4A16 NVFP4 Marlin path docs
-- [#44673](https://github.com/vllm-project/vllm/pull/44673) speculative decoding correctness gate
-
-## 🔭 V0.80 Origin: CLI Workers, V0.86 Security Boundaries And Runtime Reliability
-
-V0.80 brought Lynn back to programming work, but not as another single CLI or IDE plugin. In V0.86 the right rail becomes a clearer **current session + recent sessions + files + acceptance** surface, while Brain and the local Agent enforce tool exposure, permission boundaries, fallback handoff, and per-turn state reset as regression-tested runtime contracts. V0.87.1 recommends Qwen3.8-27B Coder390 Q2 / Q3 GGUF with built-in Q4 MTP for local use, while parallel worker power stays in the CLI for terminals, CI, and other agents.
-
-This is not Lynn stepping away from code. It is the opposite:code tasks, research tasks, and business tasks should share the same orchestration layer.
-
-- **GUI Session Progress**: capture the current thread, attention signals, recent sessions, evidence, files, and branch relationships.
-- **Headless CLI workers**: dispatch Codex, Claude Code, Qwen, codebuddy, Kimi, opencode, or custom CLIs, each optionally in its own worktree.
-- **Task protocol**: generate task briefs with owned files, forbidden files, done criteria, test commands, and commit rules.
-- **Acceptance flow**: worker output returns to GUI diffs, evidence, test gates, and release flow for review.
-- **`@lynn/cli`**: the CLI package supports `Lynn -p`, `Lynn code`, `Lynn agents`, and `Lynn worker run`, usable directly in terminals and callable by other agents.
-
-Cursor solves "I am editing this piece of code." Claude Code / Codex CLI solve "I want one agent to work in this terminal." Lynn V0.86 targets the next layer: **how long sessions, evidence, files, tasks, and branches stay safely visible, inspectable, and shippable.**
+Use the desktop for conversations, files, task progress and change acceptance. Use the CLI for terminal chat, coding and headless workers. Both share the default model and tool-execution capabilities. JSON / JSONL output lets terminals, CI and other agents call Lynn without automating desktop windows.
 
 ### CLI Quick Install
 

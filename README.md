@@ -23,107 +23,54 @@
 
 ---
 
-## V0.87.1
+## Lynn V0.87.1 · Step 5 云端 + Coder390 本地
 
-默认工作模型为 Step 5 Preview，实时语音为 stepaudio-2.5-realtime。天气、体育、财经工具只执行模型已经填好的参数，不再从整句问题里猜地点、联赛或代码。本地模型换成 Qwen3.8-27B Coder390：24GB 及以上默认 Q3，24GB 以下（16GB 档）使用 Q2，两档内置 Q4 MTP。GUI 与 CLI 版本统一为 V0.87.1。
+Lynn 是同时提供桌面 GUI 与独立 CLI 的开源 AI Agent：用对话完成搜索、文件处理、代码任务和实时语音，也可以作为其他 Agent 或 CI 的无头 worker。**当前 GUI / CLI 均为 V0.87.1，默认工作模型为 Step 5 Preview，不是 Step 3.7。**
 
-默认云端模型 Step 5 直接处理图片，无需另配视觉 API Key；本地 Coder390 安装不包含视觉组件。手动复查补齐 Brain 客户端鉴权，发布验收要求真实模型复查结果，错误兜底不算通过。
+[国内下载页（推荐）](https://download.merkyorlynn.com/download.html) · [V0.87.1 发布说明](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.1) · [GitHub 主仓](https://github.com/MerkyorLynn/Lynn) · [GitHub 备份仓](https://github.com/LynnMerkyor/Lynn) · [Gitee](https://gitee.com/merkyor/Lynn)
 
-[V0.87.1 发布说明](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.1) · [国内下载页](https://download.merkyorlynn.com/download.html) · [Gitee 源码](https://gitee.com/merkyor/Lynn)
+### 当前模型与运行方式
 
-非阻断的复查相关性与识图重复收尾观察已记入[后续版本跟进清单](docs/ops/v0871-follow-ups.md)，不冒充已修复。
+| 用途 | 当前方案 | 使用方式 |
+|---|---|---|
+| 默认对话、编码与工具任务 | **Step 5 Preview**（`step-5-preview`） | GUI / CLI 默认由 Brain 托管 |
+| 默认云端图片理解 | **Step 5 原生视觉** | 直接发送图片，无需另配视觉 API Key |
+| 实时语音对话 | **StepAudio 2.5 Realtime**（`stepaudio-2.5-realtime`） | GUI 麦克风；CLI 对话内 `/voice` 或 `lynn voice` |
+| 本地文本与代码任务 | **Qwen3.8-27B Coder390 EfficientThink** | 设置中明确选择、安装、启动 llama.cpp Q2 / Q3 |
+| 自备模型 | 用户配置的服务商或兼容端点 | 在模型设置中选择，不以路由别名冒充实际模型 |
 
-## 生态入口
+### 本地模型：Coder390 Q2 / Q3
 
-- **源码与应用**: [GitHub 主仓 · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn) · [GitHub 镜像仓 · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases) · [国内下载镜像](https://download.merkyorlynn.com/download.html)
-- **模型与 GGUF 镜像**: [HuggingFace · nerkyor](https://huggingface.co/nerkyor) · [ModelScope · Merkyor](https://modelscope.cn/profile/Merkyor)
-- **端侧推荐模型**：[Qwen3.8-27B Coder390 EfficientThink Q3 / Q2](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer)
+模型来源：[Merkyor / Qwen3.8-27B-Coder390-EfficientThink](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer)。Lynn 使用该仓库的 [`GGUF/` 目录](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer/tree/master/GGUF)，**不是 NInfer 版本**。
 
----
-
-## 🧠 第一部分 · 引擎与模型
-
-### ① Step 5 云端主链 + Qwen3.8-27B Coder390 本地模型
-
-V0.87.1 的 GUI / CLI 默认对话与任务执行统一使用 **Step 5 Preview（`step-5-preview`）**。端侧推荐模型已迭代到 **Qwen3.8-27B Coder390 EfficientThink**，由用户在设置中明确选择、安装和启动；切换方案不会删除已有模型文件。
-
-| 本地方案 | 推荐容量 | 模型文件 | 初始上下文 |
+| 方案 | 推荐容量 | 模型文件大小 | 初始上下文 |
 |---|---|---|---|
-| Coder390 Q2 | 16GB 显存 / Apple 统一内存；最低 14GiB | 13.28GB | 4K，单并发 |
-| Coder390 Q3 | 24GB 及以上；系统报告值至少 23.5GiB | 17.30GB | 8K，单并发 |
+| **Coder390 Q2** | **16GB** 显存 / Apple 统一内存 | 13.28GB | 4K，单并发 |
+| **Coder390 Q3** | **24GB 及以上**；系统报告值至少 23.5GiB | 17.30GB | 8K，单并发 |
 
-使用[指定模型仓库的 `GGUF/` 目录](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer/tree/master/GGUF)中的 **llama.cpp Q2 / Q3**，两档均内置 **Q4 MTP**；不是 `GGUF-NInfer/`，不安装 NInfer，不另下载 DFlash2 或视觉组件。NVIDIA 按最大单卡显存判断，不叠加多卡或系统内存。低于 14GiB（例如 13GB）及容量检测失败时禁止安装；14～不足 16GiB 仅达 Q2 最低门槛，仍需给上下文缓存、运行缓冲和系统留空间。
+- 两档均为 **llama.cpp GGUF，内置 Q4 MTP**；不另下载 DFlash2，不安装 NInfer，本次本地安装不含视觉组件。
+- Apple Silicon 检测统一内存；NVIDIA 检测最大单卡显存，不叠加多卡，也不以系统内存代替显存。
+- **低于 14GiB（例如 13GB）或检测失败，禁止安装和启动。** 14～不足 16GiB 仅达到 Q2 最低门槛，不等于推荐配置。
+- 模型文件大小不等于实际内存占用；上下文缓存、运行缓冲与系统仍需空间。
+- 安装与启动由用户明确操作；切换档位不静默删除已有模型文件。设置页提供 Q2 / Q3，不再以旧 9B / 4B 作为当前安装推荐。
 
-语音主入口使用 **Brain 托管 StepAudio（`stepaudio-2.5-realtime`）**:GUI 麦克风直接进入实时语音;CLI 在当前 `Lynn` chat 里输入 `/voice` 或 `lynn voice` 会就地切到实时语音,状态和采样波形显示在聊天框下方,`Ctrl+C` 返回聊天。`Lynn voice --file/--record` 转写、`Lynn voice --speak` 朗读保存只是辅助工具,不再作为语音主体验。
+### V0.87.1 重点更新
 
-#### 历史编排器研究（非当前默认模型）
+- **模型决定参数，工具只执行**：天气、体育、行情和汇率接收模型提供的地点、日期、联赛、代码及货币对，不从整句问题硬编码抽取实体。复合地点保留原意，必要时由模型补充上级地点或坐标。
+- **GUI / CLI 同一默认模型**：Step 5 处理日常对话、编码、工具任务与云端图片理解。
+- **实时语音恢复**：StepAudio 2.5 Realtime 共用 Brain 托管链路；CLI 语音可在当前对话进入，`Ctrl+C` 返回聊天。
+- **复查与证据**：修复手动复查遗漏设备鉴权；实际识图、手动复查和并发复查纳入安装包验证，错误兜底不冒充成功结果。
+- **本地安装条件明确**：按硬件容量推荐 Coder390 档位，校验固定文件大小与 SHA-256，保留旧文件和手动导入入口。
 
-以下为旧 A3B 编排器的研究记录，不是 Coder390 的评测结果，也不代表 GUI / CLI 当前默认模型。本地蒸馏 A3B manager 仅作为显式 `Lynn manager run` 能力保留。
+非阻断的复查相关性、识图重复收尾等观察见[后续版本跟进清单](docs/ops/v0871-follow-ups.md)。后文历史版本记录中的旧模型和研究数据不代表当前默认配置或 Coder390 的评测结果。
 
-我们同时储备了一个会**快速 拆分 → 分派 → 验收**任务的本地编排器模型:用 LoRA（**r=64 / α=128 / dropout 0.05**,**1842 条蒸馏样本**)把 **DeepSeek-V4-Pro 在「思考开启(thinking-on)」时的多步推理与自我验证思维方式**蒸进 **Qwen3.6-35B-A3B**(MoE,3B 激活)。
+### GUI 与 CLI 怎么分工
 
-编排器有三个硬条件——**快、会拆解验收、不乱报完成**。实测(同一 harness,thinking-on):
-
-| 维度 | 蒸馏编排器 | 原版 A3B | 说明 |
-|---|---|---|---|
-| 端到端编排耗时 | **26.6s** | 60.7s | 决断不啰嗦,比原版快 2.3×、比云 API 快 2–3× |
-| GPQA-Diamond-198 | **80.3%**(32K) | 72.7% | 硬推理 **+7.6pp** |
-| MMLU-500 | 90.2% | 91.4% | 知识广度持平 |
-| 编排假验证(20×5) | **0 / 20** | 0 / 20 | 自报完成与真实状态一致 |
-
-关键:蒸馏与原版**单流 TPS 相同**(R6000 ~224 tok/s),但端到端编排**快一倍**——**蒸的是「思维方式」,红利是更少 token 到结论**。难题仍以 **harness 客观验证** 为准,不把模型自报完成当作验收。
-
-📦 **当前端侧默认模型**：[Qwen3.8-27B Coder390 EfficientThink](https://modelscope.cn/models/Merkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-GGUF-NInfer)。24GB 及以上默认 Q3，24GB 以下（16GB 档）使用 Q2，加速为内置 Q4 MTP。上面的旧编排器对照数据不代表这一模型。
-> 上述历史 A3B 编排器研究与早期 `Lynn-V4-Pro-Distill` 的区别是蒸馏 **thinking-on 的思维方式**，目标为 Agent 编排；这不是当前 Coder390 的训练或评测说明。
-
-### ② 引擎路线:端侧选最快的 llama.cpp,并回馈上游
-
-我们自研过 NVFP4 推理引擎,在 Blackwell 上认真啃了几周内核。结论很硬:**单流 decode 是带宽 / launch 游戏,自写内核打不过成熟的 llama.cpp**。
-
-| 单流 decode(同模型同卡) | tok/s |
-|---|---|
-| llama.cpp Q4_K_M(Spark sm_121) | **69.77**(+MTP **79**) |
-| 自研 NVFP4(Spark,内核融合后) | ~45 |
-| llama.cpp Q4_K_M(R6000) | ~207 |
-| 自研 NVFP4(R6000 strict) | ~108 |
-
-所以**端侧主推理我们选 llama.cpp**(单流最快、生态成熟、全平台),并把实测验证的改进**回馈上游**:
-- [#24273](https://github.com/ggml-org/llama.cpp/pull/24273) NVFP4 转换 / 后端 / 基准实测指南文档(open,review 中)
-
-不是放弃,是「打得过就用、用得上就贡献」——**自研引擎收束为研究资产,前沿 NVFP4 仍在持续科研**。
-
-### ③ 不放弃 NVFP4:前沿在并发服务侧,已用 vLLM 求证
-
-NVFP4 的真正红利不在单流 decode,而在**并发吞吐**。同一张 R6000,`VLLM_MOE_FORCE_MARLIN=1`:
-
-| 并发 | 1 | 16 | 64(release soak) |
-|---|---|---|---|
-| 输出 tok/s | 175 | 1289 | **2434**(0 failed) |
-
-**NVFP4 vs FP8(同机同 harness):每档都赢 1.14–1.34×**。我们把这条 W4A16 NVFP4 Marlin 路径的**回归测试 / 文档 / 正确性门禁回馈给 vLLM**(3 个 open PR,maintainer review 中):
-- [#44671](https://github.com/vllm-project/vllm/pull/44671) Add ModelOpt W4A16 lm_head regression tests
-- [#44672](https://github.com/vllm-project/vllm/pull/44672) Document ModelOpt W4A16 NVFP4 Marlin path
-- [#44673](https://github.com/vllm-project/vllm/pull/44673) Add speculative decoding correctness gate
-
----
-
-## 🔭 V0.80 起源:CLI Worker, V0.86 安全边界与运行时可靠性更新
-
-V0.80 把 Lynn 带回编程主战场,但不是再做一个单 CLI 或 IDE 插件。最初的方向是探索多 CLI Agent 编排;到 V0.86,GUI 右侧收敛为更直接的 **当前会话 + 最近会话 + 文件 + 确认改动**,Brain 与本地 Agent 也把工具暴露、空答接班、权限边界和单轮状态重置变成可回归的运行时契约。V0.87.1 推荐的端侧模型已升级为 Qwen3.8-27B Coder390 Q2 / Q3（内置 Q4 MTP）；并行 worker 能力保留在 CLI,给终端、CI 和其他 Agent 无头调用。
-
-这不是“不服务代码”。恰恰相反,Lynn 要把代码任务和业务任务放到同一个调度系统里:
-
-- **GUI 会话进度**:在 Lynn 桌面端沉淀当前会话、需要处理的信号、最近会话、证据、文件和分支关系。
-- **CLI 无头 worker**:统一调度 Codex、Claude Code、Qwen、codebuddy、Kimi、opencode 或自定义 CLI,每个 worker 可进入独立 worktree。
-- **任务协议化**:自动生成 task brief,包含 owned files、forbidden files、验收标准、测试命令和提交要求。
-- **验收收口**:worker 完成后回到 GUI 的 diff、证据、测试门禁和发布流里验收。
-- **`@lynn/cli`**:CLI 包支持 `Lynn -p`、`Lynn code`、`Lynn agents` 和 `Lynn worker run`,既能给终端用户使用,也能被其他 Agent 调用。
-
-Cursor 解决“我正在编辑这段代码”;Claude Code / Codex CLI 解决“我在终端里让一个 Agent 干活”。Lynn V0.86 解决的是下一层问题:**长会话、证据、文件、任务和分支关系怎么被安全地看见、同步、验收和收口。**
+桌面端管理对话、文件、任务进度与改动确认；CLI 提供终端交互、代码任务和无头 worker。两者共享默认模型与工具执行能力。CLI 可输出机器可读的 JSON / JSONL，供终端、CI 或其他 Agent 调用，无需把桌面窗口当作自动化接口。
 
 ### CLI 快速安装
 
-V0.80 的 CLI 是 Lynn 的终端版:跑在命令行里的 AI 编码助手,带终端 TUI、完整 Markdown 渲染、流式输出、工具调用和长任务续跑。它可以独立给人使用,也可以给其他智能体和 CI 当无交互 worker。**一行命令装好,不用克隆仓库、不用编译。**
+Lynn CLI 提供终端 TUI、Markdown 渲染、流式输出、工具调用和长任务续跑，既可交互使用，也可作为其他智能体和 CI 的无头 worker。**一行命令安装 V0.87.1，不用克隆仓库或自行编译。**
 
 ```bash
 # 1. Node requirement: Node.js 20 LTS or 22 LTS with npm.
