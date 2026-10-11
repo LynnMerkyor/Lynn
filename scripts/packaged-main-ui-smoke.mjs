@@ -347,7 +347,10 @@ async function main() {
 
     await waitFor(cdp, `(() => document.readyState === 'complete' && !!window.platform && !!document.querySelector('#inputBox'))()`, 60000, "main composer");
     await cdp.evaluate(`window.platform?.settingsChanged?.('models-changed', { source: 'packaged-main-ui-smoke' })`);
-    await waitFor(cdp, `(() => !!document.querySelector('[class*="model-pill"]'))()`, 60000, "model selector button");
+    await waitFor(cdp, `(() => {
+      const button = document.querySelector('button[class*="model-pill"]');
+      return !!button?.title.trim() && !button.className.includes('model-pill-disabled');
+    })()`, 60000, "loaded model selector button");
 
     const baseLayout = await cdp.evaluate(`(() => {
       const rectOf = (el) => {

@@ -10,6 +10,12 @@ function readPackage() {
 }
 
 describe('release gate contract', () => {
+  it('waits for loaded model metadata before measuring packaged main UI', () => {
+    const runner = fs.readFileSync(path.join(ROOT, 'scripts/packaged-main-ui-smoke.mjs'), 'utf8');
+    expect(runner).toContain("!!button?.title.trim() && !button.className.includes('model-pill-disabled')");
+    expect(runner).toContain('60000, "loaded model selector button"');
+    expect(runner).toContain('within("modelButton", baseLayout.modelButton, { minWidth: 80, minHeight: 28 })');
+  });
   it('covers every gate-bank operation once through preflight instead of repeating wrappers', () => {
     const scripts = readPackage().scripts;
     const chain = ['release:preflight', 'release:full-gate', 'release:overnight'].map(name => scripts[name]).join(' && ');
