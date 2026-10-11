@@ -20,9 +20,13 @@
 
 GUI and CLI use Step 5 Preview by default and restore stepaudio-2.5-realtime voice. The model supplies weather, sports, market and currency parameters rather than whole-question entity guessing. Local tiers are Qwen3.8-27B Coder390 Q3 / Q2 with built-in Q4 MTP, no separate DFlash2 draft, and no vision component downloaded by this installation.
 
+The default cloud Step 5 model handles images natively without a separate vision API key. Local Coder390 installation does not include vision components. Manual review now carries the required Brain client authentication; release acceptance requires a real model review, not an error fallback.
+
+[V0.87.1 release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.1) · [Download page](https://download.merkyorlynn.com/download.html) · [Gitee source](https://gitee.com/merkyor/Lynn)
+
 ## Previous release: v0.87.0
 
-<details open>
+<details>
 <summary><strong>Lynn v0.87.0</strong> · 2026-09-08 · Window light and a simpler workspace</summary>
 
 - Original SVG leaves and soft window light; the original Lynn portrait stays. Opt in under Interface settings, with background pause and reduced-motion support.
@@ -158,9 +162,10 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 
 ## 🆕 Recent Updates
 
+The current version is **V0.87.1**; see the introduction for current models and installation requirements. The entries below are historical release notes. Their models, memory tiers and routing describe those older versions, not current installation recommendations.
 
-<details open>
-<summary><strong>Lynn v0.86.8</strong> · 2026-09-08 · Kimi QR sign-in, conversation search and mobile continuation <em>(latest)</em></summary>
+<details>
+<summary><strong>Lynn v0.86.8</strong> · 2026-09-08 · Kimi QR sign-in, conversation search and mobile continuation</summary>
 
 - **Kimi Datasource**: sign in with your own account from MCP settings; the included official datasource connects automatically, with no Kimi CLI installation.
 - **MCP OAuth**: HTTP/SSE discovery, PKCE, local callbacks and token refresh.
@@ -1092,7 +1097,7 @@ Lynn doesn't just slap an OpenAI-compatible wrapper and call it a day. From 9B s
 T1  ⭐ Step 5 Preview (step-5-preview, text/coding route)
 T2  DS-V4 Flash (vendor fallback for StepFun outage or specific high-risk work)
 T3  Local manager (explicit `Lynn manager run` experimental path)
-T4  Vision: StepFun `step-1o-turbo-vision` (selected automatically for image content)
+T4  Vision: native Step 5 Preview (image content retained; no separate vision key required)
 T5  Zhipu GLM / Kimi / MiniMax (vendor backup lanes)
 ```
 
@@ -1198,7 +1203,7 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the latest `.dmg` from the [download mirror](https://download.merkyorlynn.com/download.html); release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases). The V0.86.4 Apple Silicon and Intel DMGs are Developer ID signed, Apple-notarized, stapled, and Gatekeeper-validated.
+**macOS (Apple Silicon / Intel):** download the `.dmg` for your architecture from the [download mirror](https://download.merkyorlynn.com/download.html); see the [V0.87.1 release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.1). Official DMGs must pass Developer ID signing, Apple notarization, stapling and Gatekeeper validation before publication.
 
 **Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases).
 

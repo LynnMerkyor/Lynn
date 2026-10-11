@@ -27,6 +27,10 @@
 
 默认工作模型为 Step 5 Preview，实时语音为 stepaudio-2.5-realtime。天气、体育、财经工具只执行模型已经填好的参数，不再从整句问题里猜地点、联赛或代码。本地模型换成 Qwen3.8-27B Coder390：24GB 及以上默认 Q3，24GB 以下（16GB 档）使用 Q2，两档内置 Q4 MTP。GUI 与 CLI 版本统一为 V0.87.1。
 
+默认云端模型 Step 5 直接处理图片，无需另配视觉 API Key；本地 Coder390 安装不包含视觉组件。手动复查补齐 Brain 客户端鉴权，发布验收要求真实模型复查结果，错误兜底不算通过。
+
+[V0.87.1 发布说明](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.1) · [国内下载页](https://download.merkyorlynn.com/download.html) · [Gitee 源码](https://gitee.com/merkyor/Lynn)
+
 ## 生态入口
 
 - **源码与应用**: [GitHub 主仓 · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn) · [GitHub 镜像仓 · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases) · [国内下载镜像](https://download.merkyorlynn.com/download.html)
@@ -136,7 +140,7 @@ Lynn --version  # should print 0.87.1
 Lynn agents     # copyable headless worker commands for other agents
 ```
 
-默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到 Lynn 远端 Brain。V0.87.1 的 GUI/CLI 普通对话与任务执行统一回到 **Step 5 Preview (`step-5-preview`)** 一条龙主链,优先保证能正常对话、能完成工具任务、能给出最终答案。视觉由 StepFun `step-1o-turbo-vision` 承接;语音由 Brain 托管 **StepFun Realtime (`stepaudio-2.5-realtime`)** 承接,CLI 当前 chat 内 `/voice` / `lynn voice` 与 GUI 麦克风默认就是实时语音对话。本地 manager 作为显式 `Lynn manager run` 实验链路保留,不会抢占默认 GUI/CLI 路径。纯 CLI 用户也可以用 `Lynn providers set ...` 绑定自己的 OpenAI 兼容端点。
+默认走 Brain V2 路由:本地 Lynn Brain 可用时优先本地,不可用时自动回到 Lynn 远端 Brain。V0.87.1 的 GUI/CLI 普通对话与任务执行统一使用 **Step 5 Preview (`step-5-preview`)**，默认视觉也由 Step 5 直接处理，无需独立视觉 API Key；语音由 Brain 托管 **StepFun Realtime (`stepaudio-2.5-realtime`)** 承接,CLI 当前 chat 内 `/voice` / `lynn voice` 与 GUI 麦克风默认就是实时语音对话。本地 manager 作为显式 `Lynn manager run` 实验链路保留,不会抢占默认 GUI/CLI 路径。纯 CLI 用户也可以用 `Lynn providers set ...` 绑定自己的 OpenAI 兼容端点。
 
 长任务默认采用 Reasonix 风格的**前置缓存纪律**:稳定前缀、工具定义、运行时约束和 resume 摘要分层固定,避免每轮重排导致 prefix drift;缓存命中以 `prefix-cache ... hit` 进入 usage、session、replay 和 `Lynn cache doctor --json`,不在界面里制造上下文焦虑。
 
@@ -177,9 +181,10 @@ Lynn worker run --brief task.md --worktree . --agent qwen-cli --jsonl
 
 ## 🆕 近期更新
 
+当前版本为 **V0.87.1**，更新与安装要求见本文顶部。以下为历史版本记录，其中的模型、容量和路由仅描述对应旧版本，不是当前安装建议。
 
-<details open>
-<summary><strong>Lynn v0.87.0</strong> · 2026-09-08 · 窗边树影与更简洁的工作界面 <em>(最新)</em></summary>
+<details>
+<summary><strong>Lynn v0.87.0</strong> · 2026-09-08 · 窗边树影与更简洁的工作界面</summary>
 
 - **Lynn 窗边树影**：右上角小叶影轻微摇曳，默认开启；顶部“树影”可查看关闭路径并打开设置，后台暂停，减少动态效果时静止。
 - **更轻的输入栏**：任务模式改为可编辑的斜杠模板；深度调研、写作布局和执行权限仍可直接使用。
@@ -1299,7 +1304,7 @@ Qwen3.8-27B Coder390 EfficientThink：24GB 及以上默认 Q3（主模型 17.30 
 T1  ⭐ Step 5 Preview（step-5-preview，文本/编码主路）
 T2  DS-V4 Flash（供应商备用链路,用于 StepFun 不可用或特定高风险场景）
 T3  本地 manager（显式 `Lynn manager run`,用于实验性拆分/验收）
-T4  视觉:StepFun `step-1o-turbo-vision`（图片识别,由 Brain 按 image content 自动切)
+T4  视觉:默认 Step 5 Preview 原生识图（保留 image content，无需独立视觉 Key）
 T5  智谱 GLM / Kimi / MiniMax（供应商备用链路）
 ```
 
@@ -1487,7 +1492,7 @@ Agent 也可以从 GitHub 安装技能或自己编写新技能，安装经独立
 
 ### 下载安装
 
-**macOS（Apple Silicon / Intel）**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.dmg`，版本记录见 [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)。V0.86.4 的 Apple Silicon / Intel DMG 已完成 Developer ID 签名、Apple notarization、staple 和 Gatekeeper 验证。
+**macOS（Apple Silicon / Intel）**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载对应架构的 `.dmg`，版本记录见 [V0.87.1 发布说明](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.1)。正式 DMG 必须经过 Developer ID 签名、Apple 公证、装订和 Gatekeeper 验证后发布。
 
 **Windows**：从 [国内下载镜像](https://download.merkyorlynn.com/download.html) 下载最新 `.exe`，直接运行；版本记录见 [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases)。
 
@@ -1617,7 +1622,7 @@ npm run dist:local            # 仅本地测试包（macOS DMG，跳过公证；
 
 ### Q4：没 API Key 能用吗？
 
-**能**。Quick Start 60 秒进主界面直接聊，全程零配置。后台默认走 Brain v2 的 Step 5 Preview（`step-5-preview`）主链，供应商异常时再切到 DS-V4 Flash / GLM / Kimi / MiniMax 等备用链路。图片识别由 StepFun `step-1o-turbo-vision` 承接（Brain 按 image content 自动切）。
+**能**。Quick Start 60 秒进主界面直接聊，全程零配置。后台默认走 Brain v2 的 Step 5 Preview（`step-5-preview`）主链，供应商异常时再切到 DS-V4 Flash / GLM / Kimi / MiniMax 等备用链路。默认图片识别也由 Step 5 原生处理，无需另外配置视觉 API Key；本地 Coder390 安装不包含视觉组件。
 
 ### Q5：Windows 能用吗？
 
