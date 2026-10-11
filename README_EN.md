@@ -24,6 +24,8 @@ The default cloud Step 5 model handles images natively without a separate vision
 
 [V0.87.1 release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.1) · [Download page](https://download.merkyorlynn.com/download.html) · [Gitee source](https://gitee.com/merkyor/Lynn)
 
+Non-blocking review-relevance and redundant vision-completion observations are recorded in the [follow-up list](docs/ops/v0871-follow-ups.md), not presented as fixed.
+
 ## Previous release: v0.87.0
 
 <details>

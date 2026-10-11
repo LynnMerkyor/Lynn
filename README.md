@@ -31,6 +31,8 @@
 
 [V0.87.1 发布说明](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.1) · [国内下载页](https://download.merkyorlynn.com/download.html) · [Gitee 源码](https://gitee.com/merkyor/Lynn)
 
+非阻断的复查相关性与识图重复收尾观察已记入[后续版本跟进清单](docs/ops/v0871-follow-ups.md)，不冒充已修复。
+
 ## 生态入口
 
 - **源码与应用**: [GitHub 主仓 · MerkyorLynn/Lynn](https://github.com/MerkyorLynn/Lynn) · [GitHub 镜像仓 · LynnMerkyor/Lynn](https://github.com/LynnMerkyor/Lynn) · [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases) · [国内下载镜像](https://download.merkyorlynn.com/download.html)
