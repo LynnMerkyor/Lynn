@@ -126,7 +126,7 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
   // image blocks so it isn't fed image content it may reject.
   const hasRecentVisionInput = hasRecentImage(messages);
   const wantsVisionModel = !!provider.vision_model && hasRecentVisionInput;
-  const nativeVisionOnBaseModel = Boolean(provider.capability?.vision && !provider.vision_model && hasRecentVisionInput);
+  const nativeVisionOnBaseModel = Boolean(provider.capability?.vision && !provider.vision_model);
   const model = (wantsVisionModel ? provider.vision_model : provider.model) as ModelId;
   const routedMessages = (wantsVisionModel || nativeVisionOnBaseModel) ? messages : stripImageContent(messages);
   // Some providers (DeepSeek) reject tool/function names outside ^[a-zA-Z0-9_-]+$;

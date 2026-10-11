@@ -28,8 +28,13 @@ describe("parseMessageModelRef", () => {
 });
 
 describe("formatProviderRouteName", () => {
+  it("does not infer a model version from a retained provider route ID", () => {
+    expect(formatProviderRouteName("step-3.7-flash")).toBe("StepFun");
+    expect(formatProviderRouteName("step-5-preview")).toBe("StepFun");
+    expect(formatProviderRouteName("step-future-route")).toBe("StepFun");
+  });
   it("maps vendors and tidies qwen ids", () => {
-    expect(formatProviderRouteName("step-3.7-flash")).toBe("Step 3.7 Flash");
+    expect(formatProviderRouteName("step-3.7-flash")).toBe("StepFun");
     expect(formatProviderRouteName("spark-apex")).toBe("Spark");
     expect(formatProviderRouteName("gpt-5")).toBe("OpenAI");
     expect(formatProviderRouteName("qwen35-9b")).toBe("Qwen 9b");
@@ -46,7 +51,7 @@ describe("providerRoute label/title", () => {
   it("builds a hover title with hop reasons", () => {
     expect(providerRouteTitle(route)).toContain("Spark");
     expect(providerRouteTitle(route)).toContain("timeout");
-    expect(providerRouteTitle(route)).toContain("Step 3.7 Flash -> Spark");
+    expect(providerRouteTitle(route)).toContain("StepFun -> Spark");
     expect(providerRouteTitle({ activeProvider: "spark", fallbackFrom: [] } as any)).toContain("Spark");
   });
 });

@@ -287,6 +287,20 @@ describe('OpenAI-compat wire adapter', () => {
       expect(body.tool_choice).toBeUndefined();
     });
 
+    it.each(['image_url', 'input_image'])('keeps older %s blocks for native vision models instead of guessing they are irrelevant', async (type) => {
+      const image = { type, image_url: { url: 'https://example.com/original.png' } };
+      const messages = [
+        { role: 'user', content: [{ type: 'text', text: 'Remember this image' }, image] },
+        ...Array.from({ length: 8 }, (_, index) => ({ role: index % 2 ? 'user' : 'assistant', content: 'Context turn' })),
+        { role: 'user', content: 'What color was the object in the image?' },
+      ];
+      const request = mockFetch(ok(makeSSEBody(sseEvent({ content: 'ok' }), sseDone())));
+      await drain(callOpenAI({ provider: { ...provider, model: 'native-vision-model', capability: { vision: true, tools: true } }, messages }));
+      const body = JSON.parse(request.mock.calls[0][1].body);
+      expect(body.model).toBe('native-vision-model');
+      expect(body.messages[0].content[1]).toEqual(image);
+    });
+
     it('keeps native audio content for multimodal providers', async () => {
       const mimoProvider = {
         id: 'mimo-multimodal',
@@ -341,15 +355,8 @@ describe('OpenAI-compat wire adapter', () => {
       expect(body.tools).toBeUndefined();
     });
 
-    it('still strips stale images before sending native multimodal base models', async () => {
-      const mimoProvider = {
-        id: 'mimo-multimodal',
-        endpoint: 'https://token-plan-cn.xiaomimimo.com/v1',
-        apiKey: 'sk-mimo',
-        model: 'mimo-v2.5',
-        capability: { vision: true, audio: true, video: true, tools: false, thinking: true },
-        default_thinking: true,
-      };
+    it('still strips images before sending models without vision capability', async () => {
+      const textOnlyProvider = { ...provider, capability: { vision: false, tools: true, thinking: true } };
       const messages = [
         { role: 'user', content: [{ type: 'image_url', image_url: { url: 'https://example.com/old.png' } }] },
         { role: 'assistant', content: 'seen' },
@@ -360,7 +367,7 @@ describe('OpenAI-compat wire adapter', () => {
         { role: 'user', content: '继续聊,不要看旧图' },
       ];
       const f = mockFetch(ok(makeSSEBody(sseEvent({ content: 'ok' }), sseDone())));
-      await drain(callOpenAI({ provider: mimoProvider, messages }));
+      await drain(callOpenAI({ provider: textOnlyProvider, messages }));
       const body = JSON.parse(f.mock.calls[0][1].body);
       expect(body.messages[0].content[0]).toEqual({ type: 'text', text: '[earlier image omitted]' });
     });

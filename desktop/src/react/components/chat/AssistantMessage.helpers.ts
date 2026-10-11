@@ -88,7 +88,6 @@ export function formatProviderRouteName(id?: string | null): string {
     return 'GLM';
   }
   if (lower.includes('step')) {
-    if (lower.includes('3.7') || lower.includes('37')) return 'Step 3.7 Flash';
     return 'StepFun';
   }
   if (lower.includes('spark') || lower.includes('apex')) return 'Spark';

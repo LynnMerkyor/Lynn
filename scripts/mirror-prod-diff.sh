@@ -151,6 +151,15 @@ else
 fi
 
 note ""
+note "== ⑥ 原生视觉适配器行为门禁(无外部模型请求) =="
+if (cd "$ROOT" && node --import tsx scripts/probe-brain-native-vision.mjs "$MIRROR/wire-adapter/openai-compat.ts") \
+  && ssh "$HOST" "node --input-type=module - '$PROD/wire-adapter/openai-compat.js'" < "$ROOT/scripts/probe-brain-native-vision.mjs"; then
+  ok "本地与云端原生视觉图片保留行为通过"
+else
+  fail "原生视觉适配器行为不一致或丢失图片"
+fi
+
+note ""
 if [ "$FAIL" -ne 0 ]; then
   note "== 结果:硬信号失败(tsc 门 / 锚点 / 运行态 smoke,见 ✗)。部署前必须人工 reconcile,严禁 wholesale 转译覆盖 prod。=="
   exit 1

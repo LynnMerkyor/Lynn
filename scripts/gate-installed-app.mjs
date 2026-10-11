@@ -366,6 +366,7 @@ async function waitForPromptTurn(ws, payload, timeoutMs = 120000) {
   return await new Promise((resolve, reject) => {
     let text = "";
     const errors = [];
+    const providerRoutes = [];
     const started = Date.now();
     let sawTurnEnd = false;
     let endTimer = null;
@@ -384,7 +385,7 @@ async function waitForPromptTurn(ws, payload, timeoutMs = 120000) {
       if (endTimer) clearTimeout(endTimer);
       endTimer = setTimeout(() => {
         cleanup();
-        resolve({ text, errors, elapsedMs: Date.now() - started });
+        resolve({ text, errors, providerRoutes, elapsedMs: Date.now() - started });
       }, 500);
     };
     const onError = (error) => {
@@ -404,6 +405,8 @@ async function waitForPromptTurn(ws, payload, timeoutMs = 120000) {
       }
       if (msg.type === "text_delta") {
         text += msg.delta || "";
+      } else if (msg.type === "provider_meta") {
+        providerRoutes.push({ activeProvider: msg.activeProvider, fallbackFrom: msg.fallbackFrom || [] });
       } else if (msg.type === "error") {
         errors.push(msg.message || JSON.stringify(msg));
       } else if (msg.type === "turn_end") {
@@ -461,6 +464,13 @@ async function runLiveVisionGate(baseUrl, wsUrl, token) {
       if (result.errors.length) {
         throw new Error(`[installed-gate] live vision returned errors: ${result.errors.join("; ")}`);
       }
+      if (selected.provider === "brain" && result.providerRoutes.length === 0) {
+        throw new Error("[installed-gate] live vision did not identify its actual Brain route");
+      }
+      if (result.providerRoutes.some(route => route.fallbackFrom.length > 0)) {
+        throw new Error(`[installed-gate] selected model vision was not proven: provider fallback ${JSON.stringify(result.providerRoutes)}`);
+      }
+      console.log(`[installed-gate] live vision actual routes=${JSON.stringify(result.providerRoutes)}`);
       const normalized = result.text.replace(/\s+/g, "");
       if (!/(红|red)/iu.test(normalized)) {
         throw new Error(`[installed-gate] live vision answer did not identify red image: ${JSON.stringify(result.text.slice(0, 500))}`);

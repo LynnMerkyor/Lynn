@@ -9,7 +9,7 @@ describe("assistant message provider route helpers", () => {
     expect(providerRouteLabel({
       activeProvider: "step-3.7-flash",
       fallbackFrom: [{ id: "deepseek-v4-flash", reason: "planner" }],
-    })).toBe("Step 3.7 Flash");
+    })).toBe("StepFun");
   });
 
   it("keeps long fallback chains out of the visible label", () => {
@@ -33,7 +33,7 @@ describe("assistant message provider route helpers", () => {
       ],
     });
 
-    expect(title).toContain("完整链路：DS V4 Flash -> Step 3.7 Flash -> Spark -> GLM 5.0 Turbo");
+    expect(title).toContain("完整链路：DS V4 Flash -> StepFun -> Spark -> GLM 5.0 Turbo");
     expect(title).toContain("Spark: fallback");
   });
 });
