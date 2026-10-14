@@ -45,12 +45,16 @@ export function isStreamScopedMessage(msg: any): boolean {
   return !!(msg && msg.sessionPath && (msg.streamId || Number.isFinite(msg.seq)));
 }
 
-export function updateSessionStreamMeta(meta: any = {}): void {
+export function updateSessionStreamMeta(meta: any = {}): boolean {
   const sessionPath = meta.sessionPath || useStore.getState().currentSessionPath;
-  if (!sessionPath) return;
+  if (!sessionPath) return true;
 
   const entry = getSessionStreamMeta(sessionPath);
-  if (!entry) return;
+  if (!entry) return true;
+
+  if (meta.streamId && meta.streamId === entry.streamId && Number.isFinite(meta.seq) && meta.seq <= entry.lastSeq) {
+    return false;
+  }
 
   if (meta.streamId) {
     if (entry.streamId && entry.streamId !== meta.streamId) {
@@ -62,6 +66,7 @@ export function updateSessionStreamMeta(meta: any = {}): void {
   if (Number.isFinite(meta.seq)) {
     entry.lastSeq = Math.max(entry.lastSeq || 0, meta.seq);
   }
+  return true;
 }
 
 export function isStreamResumeRebuilding(): string | null {
@@ -149,9 +154,8 @@ export function replayStreamResume(msg: any): void {
 
   const meta = getSessionStreamMeta(sessionPath);
   if (meta && msg.streamId) {
-    if (msg.reset) meta.lastSeq = 0;
     if (meta.streamId && meta.streamId !== msg.streamId) {
-      meta.lastSeq = 0;
+      return;
     }
     meta.streamId = msg.streamId;
   }

@@ -23,6 +23,7 @@ Lynn --version
 - 去除英文短答案的标点/长度续写猜测；仅明确截断或推理后空答案才尝试一次恢复。内置 Qwen 桥接超时不再冒充成功结束，也不无提示切到云端。
 - 对话菜单增加二次确认删除，归档列表支持单条删除与批量清空；关闭在途请求和迟到写盘，删除后重启不会复现。外部工作区原文件不删除。
 - 偏好设置写盘成功后才更新缓存，保存失败不再造成内存与磁盘不一致。
+- GUI 重连回放按会话、流与序号去重，避免实时片段被重复显示；旧流的普通回放不再结束当前流。
 - 保持 Step 5 Preview、StepAudio 2.5 Realtime 与 Coder390 llama.cpp Q2 / Q3 默认配置；模型决定工具参数，工具只执行。本次不更换模型权重或本地安装框架。
 
 ## English
@@ -32,6 +33,7 @@ Lynn --version
 - Complete short answers no longer trigger punctuation-based continuation. Only explicit truncation or reasoning-only empty output receives one recovery attempt; timeouts remain visible failures.
 - Confirmed session deletion and archived-session clearing cancel in-flight work, remove session files and prevent late writes from recreating deleted conversations. External workspace originals are preserved.
 - Preference caches update only after successful atomic persistence.
+- GUI stream replay deduplicates chunks by session, stream and sequence; stale non-reset replays no longer close the current stream.
 - Step 5, realtime voice and Coder390 Q2/Q3 defaults are unchanged.
 
 ## 仓库 / Repositories

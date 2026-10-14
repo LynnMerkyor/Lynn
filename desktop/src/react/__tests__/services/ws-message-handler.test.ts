@@ -1,6 +1,56 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleServerMessage, humanizeTurnFailureError } from '../../services/ws-message-handler';
 import { useStore } from '../../stores';
+import { streamBufferManager } from '../../hooks/use-stream-buffer';
+import { injectHandlers, replayStreamResume } from '../../services/stream-resume';
+
+describe('ws-message-handler replay isolation', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('does not render a live chunk twice when an overlapping resume response replays it', () => {
+    const sessionPath = '/sessions/replay-overlap';
+    useStore.setState({ currentSessionPath: sessionPath });
+    const render = vi.spyOn(streamBufferManager, 'handle').mockImplementation(() => {});
+    injectHandlers(handleServerMessage, () => {});
+    const event = { type: 'text_delta', delta: 'hello' };
+    handleServerMessage({ ...event, sessionPath, streamId: 'overlap-stream', seq: 1 });
+    replayStreamResume({ sessionPath, streamId: 'overlap-stream', events: [{ seq: 1, event }], isStreaming: true });
+    expect(render).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts the next sequence and does not deduplicate across different streams', () => {
+    const sessionPath = '/sessions/replay-sequences';
+    useStore.setState({ currentSessionPath: sessionPath });
+    const render = vi.spyOn(streamBufferManager, 'handle').mockImplementation(() => {});
+    const event = { type: 'text_delta', delta: 'hello', sessionPath };
+    handleServerMessage({ ...event, streamId: 'first-stream', seq: 1 });
+    handleServerMessage({ ...event, streamId: 'first-stream', seq: 2 });
+    handleServerMessage({ ...event, streamId: 'first-stream', seq: 1 });
+    handleServerMessage({ ...event, streamId: 'next-stream', seq: 1 });
+    expect(render).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not let a stale non-reset replay close the current stream', () => {
+    const sessionPath = '/sessions/replay-stale';
+    useStore.setState({ currentSessionPath: sessionPath });
+    const render = vi.spyOn(streamBufferManager, 'handle').mockImplementation(() => {});
+    const applyStatus = vi.fn();
+    injectHandlers(handleServerMessage, applyStatus);
+    handleServerMessage({ type: 'text_delta', delta: 'new answer', sessionPath, streamId: 'current-stream', seq: 1 });
+    replayStreamResume({ sessionPath, streamId: 'old-stream', events: [{ seq: 2, event: { type: 'turn_end' } }], isStreaming: false });
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(applyStatus).not.toHaveBeenCalled();
+  });
+
+  it('keeps unsequenced legacy chunks and independent sessions working', () => {
+    const render = vi.spyOn(streamBufferManager, 'handle').mockImplementation(() => {});
+    for (const sessionPath of ['/sessions/sequence-a', '/sessions/sequence-b']) {
+      handleServerMessage({ type: 'text_delta', delta: 'text', sessionPath, streamId: 'shared-id', seq: 1 });
+      handleServerMessage({ type: 'text_delta', delta: 'legacy', sessionPath });
+    }
+    expect(render).toHaveBeenCalledTimes(4);
+  });
+});
 
 describe('ws-message-handler turn failure feedback', () => {
   beforeEach(() => {

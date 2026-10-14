@@ -177,7 +177,7 @@ export function handleServerMessage(msg: ServerEvent | any): void {
   }
 
   if (msg.type !== 'stream_resume' && isStreamScopedMessage(msg)) {
-    updateSessionStreamMeta(msg);
+    if (!updateSessionStreamMeta(msg)) return;
   }
 
   // ── React 聊天渲染路径：聊天相关事件走 StreamBufferManager ──

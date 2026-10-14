@@ -387,6 +387,18 @@ async function main(): Promise<void> {
       for (const failure of failures) console.log(`  - ${failure}`);
     }
 
+    if (!visualOnly && !historyOnly) {
+      const valid = await cdp.evaluate('window.__lynnRunStreamReplaySmoke()');
+      await waitForExpression(cdp, 'document.body.innerText.includes("UI_SMOKE_REPLAY_ONCE")');
+      const occurrences = await cdp.evaluate('(document.body.innerText.match(/UI_SMOKE_REPLAY_ONCE/g) || []).length');
+      const failures = valid === true && occurrences === 1 ? [] : ['overlapping resume duplicated rendered text'];
+      const screenshot = await cdp.call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }) as { data?: string };
+      const screenshotPath = path.join(outputDir, 'stream-replay.png');
+      await fs.writeFile(screenshotPath, Buffer.from(String(screenshot.data || ''), 'base64'));
+      results.push({ id: 'stream-replay', ok: failures.length === 0, failures, screenshot: path.relative(ROOT, screenshotPath) });
+      console.log(`[ui-smoke] stream-replay: ${failures.length === 0 ? 'PASS' : 'FAIL'}`);
+    }
+
     // Real shared setup component: native Electron rendering without model downloads.
     // New screenshots are evidence, not silently promoted pixel baselines.
     for (const theme of visualOnly || historyOnly ? [] : ['warm-paper', 'midnight']) {

@@ -11,6 +11,7 @@ declare global {
     __lynnShowLocalModelSmoke?: (unknown?: boolean) => void;
     __lynnUiSmokeScenario?: SmokeScenario;
     __lynnSetUiSmokeScenario?: (scenario: SmokeScenario) => boolean;
+    __lynnRunStreamReplaySmoke?: () => Promise<boolean>;
     __lynnPrepareUiSmokeCapture?: (preserveFocus?: boolean) => boolean;
     __lynnAutomationSmokeRequest?: (url: string, options?: RequestInit) => Promise<Response>;
     __lynnAutomationFailNextRun?: boolean;
@@ -313,6 +314,27 @@ function applyScenario(scenario: SmokeScenario): void {
 }
 
 export async function installUiSmokeFixture(initialScenario: SmokeScenario = 'home'): Promise<void> {
+  window.__lynnRunStreamReplaySmoke = async () => {
+    applyScenario('short');
+    const { handleServerMessage, applyStreamingStatus } = await import('./services/ws-message-handler');
+    const { injectHandlers, replayStreamResume } = await import('./services/stream-resume');
+    const { streamBufferManager } = await import('./hooks/use-stream-buffer');
+    const sessionPath = useStore.getState().currentSessionPath!;
+    const streamId = `ui-replay-${Date.now()}`;
+    streamBufferManager.clear(sessionPath);
+    useStore.getState().initSession(sessionPath, [], false);
+    injectHandlers(handleServerMessage, applyStreamingStatus);
+    const event = { type: 'text_delta', delta: 'UI_SMOKE_REPLAY_ONCE' };
+    handleServerMessage({ ...event, sessionPath, streamId, seq: 1 });
+    replayStreamResume({ sessionPath, streamId, events: [{ seq: 1, event }], isStreaming: true });
+    handleServerMessage({ type: 'thinking_end', sessionPath, streamId, seq: 2 });
+    const items = useStore.getState().chatSessions[sessionPath]?.items || [];
+    const text = items.flatMap(item => item.type === 'message' ? item.data.blocks || [] : [])
+      .filter(block => block.type === 'text').map(block => block.plainText).join('');
+    streamBufferManager.clear(sessionPath);
+    applyStreamingStatus(false);
+    return text === event.delta;
+  };
   window.__lynnShowLocalModelSmoke = showLocalModelSmoke;
   await window.i18n?.load('zh');
   if (window.t?.('cron.dailyAt', { hour: '9', min: '00' }) === 'cron.dailyAt') throw new Error('UI smoke locale was not initialized');
