@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { resolveBetterSqliteRuntime } from "./native-node-runtime.mjs";
 import { rejectGuiToolAuthorization, validateGuiTaskEvidence } from "./gui-task-quality.mjs";
+import { createGuiTurnDeadline, isGuiTurnActivity } from "./gui-turn-deadline.mjs";
 
 import { DIALOGUE_PROMPTS } from "./dialogue-scenario-bank.mjs";
 import { hasUsdCnyRate, deniesAvailableToolCapability, additionalDialogueQualityReason, claimsFreshToolEvidence, containsMislabeledRelativeDate, containsPastDateFutureStartContradiction, hasVerifiedEmptySportsResult, hasVerifiedNoFixturePredictionAnswer, omitVerifiedSportsFetchWindows, overridesVerifiedEmptySportsWindow, requiresFreshEvidenceForDialogue } from "./dialogue-quality-rules.mjs";
@@ -121,7 +122,9 @@ function parseArgs(argv) {
     baseUrl: process.env.LYNN_GUI_50_BASE_URL || "",
     wsUrl: process.env.LYNN_GUI_50_WS_URL || "",
     token: process.env.LYNN_GUI_50_TOKEN || "",
-    timeoutMs: Number(process.env.LYNN_GUI_50_TIMEOUT_MS || "120000"),
+    timeoutMs: Number(process.env.LYNN_GUI_50_TIMEOUT_MS || "0"),
+    firstChunkTimeoutMs: Number(process.env.LYNN_GUI_50_FIRST_CHUNK_TIMEOUT_MS || "600000"),
+    idleTimeoutMs: Number(process.env.LYNN_GUI_50_IDLE_TIMEOUT_MS || "600000"),
     output: "",
     limit: PROMPTS.length,
     only: "",
@@ -142,6 +145,8 @@ function parseArgs(argv) {
     else if (arg.startsWith("--token=")) args.token = arg.slice("--token=".length);
     else if (arg === "--timeout-ms") args.timeoutMs = Number(next());
     else if (arg.startsWith("--timeout-ms=")) args.timeoutMs = Number(arg.slice("--timeout-ms=".length));
+    else if (arg === "--first-chunk-timeout-ms") args.firstChunkTimeoutMs = Number(next());
+    else if (arg === "--idle-timeout-ms") args.idleTimeoutMs = Number(next());
     else if (arg === "--output") args.output = next();
     else if (arg.startsWith("--output=")) args.output = arg.slice("--output=".length);
     else if (arg === "--limit") args.limit = Number(next());
@@ -163,7 +168,9 @@ Options:
   --base-url URL        override HTTP base URL
   --ws-url URL          override WebSocket URL
   --token TOKEN         override auth token
-  --timeout-ms N        per-dialogue timeout, default 120000
+  --first-chunk-timeout-ms N  first useful event deadline, default 600000
+  --idle-timeout-ms N   resettable useful-event idle deadline, default 600000
+  --timeout-ms N        optional total deadline; default 0 (disabled)
   --limit N             run first N prompts for quick checks
   --only LIST           run prompt indexes, e.g. 14,15 or 11-15
   --output PATH         write JSON report to this path
@@ -390,7 +397,7 @@ function classify(result) {
   const joinedErrors = result.errors.join("\n");
   const bad = BAD_TEXT_NEEDLES.find((needle) => text.includes(needle))
     || BAD_ERROR_NEEDLES.find((needle) => joinedErrors.includes(needle));
-  if (result.timedOut) return { status: "timeout", reason: "turn timeout" };
+  if (result.timedOut) return { status: "timeout", reason: `turn ${result.timeoutKind || "total"} timeout` };
   if (result.errors.length) return { status: "error", reason: joinedErrors.slice(0, 240) };
   if (!text) return { status: "empty", reason: "no assistant text" };
   if (bad) return { status: "fallback_or_error_text", reason: bad };
@@ -402,6 +409,7 @@ function classify(result) {
 function isEmptyTransportTimeout(result) {
   return Boolean(result?.timedOut)
     && !String(result?.text || "").trim()
+    && !result?.thinkingChars
     && (!Array.isArray(result?.tools) || result.tools.length === 0)
     && (!Array.isArray(result?.errors) || result.errors.length === 0);
 }
@@ -827,8 +835,9 @@ function consumeMessage(active, msg) {
   }
 }
 
-async function runPrompt(config, ws, index, category, prompt, timeoutMs) {
+async function runPrompt(config, ws, index, category, prompt, timeouts) {
   const active = createActive(index, category, prompt);
+  active.timeoutPolicy = timeouts;
   const session = await httpJson(config.baseUrl, config.token, "/api/sessions/new", {
     method: "POST",
     body: { cwd: ROOT, memoryEnabled: false },
@@ -841,7 +850,7 @@ async function runPrompt(config, ws, index, category, prompt, timeoutMs) {
     const pendingAuthorizations = new Set();
     const cleanup = () => {
       closed = true;
-      clearTimeout(timer);
+      deadline.stop();
       if (quietTimer) clearTimeout(quietTimer);
       ws.off("message", onMessage);
       ws.off("error", onError);
@@ -856,15 +865,16 @@ async function runPrompt(config, ws, index, category, prompt, timeoutMs) {
         resolve();
       }, 750);
     };
-    const timer = setTimeout(() => {
+    const deadline = createGuiTurnDeadline({ ...timeouts, onTimeout: (kind) => {
       active.timedOut = true;
+      active.timeoutKind = kind;
       active.elapsedMs = Date.now() - active.startedAt;
       if (sessionPath && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "abort", sessionPath }));
       }
       cleanup();
       resolve();
-    }, timeoutMs);
+    } });
     const onError = (error) => {
       active.errors.push(`ws:${error.message}`);
       cleanup();
@@ -886,6 +896,7 @@ async function runPrompt(config, ws, index, category, prompt, timeoutMs) {
         return;
       }
       consumeMessage(active, msg);
+      if (isGuiTurnActivity(msg)) deadline.activity();
       if (msg.type === "tool_authorization") {
         if (quietTimer) clearTimeout(quietTimer);
         const pending = rejectGuiToolAuthorization(active, msg, {
@@ -900,7 +911,10 @@ async function runPrompt(config, ws, index, category, prompt, timeoutMs) {
           if (active.finishedNormally) finishSoon();
         });
       }
-      if (active.finishedNormally) finishSoon();
+      if (active.finishedNormally) {
+        deadline.stop();
+        finishSoon();
+      }
     };
     ws.on("message", onMessage);
     ws.on("error", onError);
@@ -929,10 +943,10 @@ async function runPrompt(config, ws, index, category, prompt, timeoutMs) {
   return active;
 }
 
-async function runPromptWithFreshWs(config, index, category, prompt, timeoutMs) {
+async function runPromptWithFreshWs(config, index, category, prompt, timeouts) {
   const ws = await openWs(config.wsUrl, config.token);
   try {
-    return await runPrompt(config, ws, index, category, prompt, timeoutMs);
+    return await runPrompt(config, ws, index, category, prompt, timeouts);
   } finally {
     try { ws.close(); } catch {}
   }
@@ -952,16 +966,17 @@ try {
   await httpJson(config.baseUrl, config.token, "/api/health", { timeoutMs: 10000 });
 
   const selectedPrompts = selectedPromptItems(args);
+  const timeouts = { firstChunkMs: args.firstChunkTimeoutMs, idleMs: args.idleTimeoutMs, totalMs: args.timeoutMs };
   const results = [];
   for (const item of selectedPrompts) {
     const { index, category, prompt } = item;
     console.log(`[${results.length + 1}/${selectedPrompts.length}] case=${index} ${category}: ${prompt}`);
-    let result = await runPromptWithFreshWs(config, index, category, prompt, args.timeoutMs);
+    let result = await runPromptWithFreshWs(config, index, category, prompt, timeouts);
     if (isEmptyTransportTimeout(result)) {
       const firstAttempt = result;
       console.log(`  -> retry empty transport timeout after ${EMPTY_TIMEOUT_RETRY_MS}ms`);
       await new Promise((resolve) => setTimeout(resolve, EMPTY_TIMEOUT_RETRY_MS));
-      const retry = await runPromptWithFreshWs(config, index, category, prompt, args.timeoutMs);
+      const retry = await runPromptWithFreshWs(config, index, category, prompt, timeouts);
       // The first user-visible turn remains the gate result. Retrying records
       // diagnostics, but cannot turn an empty timeout into a green case.
       result = {
