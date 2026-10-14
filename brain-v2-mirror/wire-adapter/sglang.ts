@@ -3,6 +3,7 @@
 // F9 fix (2026-05-23): 不再 force enable_thinking=false。caller 通过 extra_body.chat_template_kwargs
 //   显式控制(跟 BYOK 直连 SGLang 同行为)。caller 不给 → 让 SGLang 模板 default 决定。
 import { parseOpenAISSE } from './_sse-parser.js';
+import { modelStreamFetch } from './_model-fetch.js';
 import type { ChatMessage, ModelId, StreamChunk, ToolDefinition, WireAdapterOptions } from '../types.js';
 
 type SGLangRequestBody = Record<string, unknown> & {
@@ -43,7 +44,7 @@ export async function* call({ provider, messages, tools, signal, onActivity, ext
     body.tools = tools;
     body.tool_choice = 'auto';
   }
-  const resp = await fetch(provider.endpoint + '/chat/completions', {
+  const resp = await modelStreamFetch(provider.endpoint + '/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

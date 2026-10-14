@@ -1,4 +1,5 @@
 import type { LocalQwen35Message } from "./local-qwen35-direct-policy.js";
+import { modelStreamFetch } from "../../shared/model-stream-fetch.js";
 import { readModelCallTimeouts, resolveModelCallTimeouts } from "../../core/agent-runtime/model-call-timeouts.js";
 import { createTimedSignal } from "../../shared/model-stream-timeout.js";
 import type { ModelCallTimeouts } from "../../shared/model-call-timeouts.js";
@@ -73,7 +74,7 @@ export async function streamLocalQwen35Completion({
   timeouts = resolveModelCallTimeouts(readModelCallTimeouts()),
   signal,
   temperature = 0.2,
-  fetchImpl = globalThis.fetch as unknown as LocalQwen35FetchImpl,
+  fetchImpl = modelStreamFetch as unknown as LocalQwen35FetchImpl,
   onFirstDelta,
   onReasoningDelta,
   onContentDelta,

@@ -1,4 +1,5 @@
 import { applyReasoningToBody, type ReasoningOptions } from "./reasoning.js";
+import { modelStreamFetch } from "../../shared/model-stream-fetch.js";
 import type { ChatContentPart } from "./media.js";
 import type { CliProviderProfile } from "./provider-profile.js";
 import { t } from "./i18n.js";
@@ -458,7 +459,7 @@ async function fetchBrainResponseOnce(request: BrainChatRequest, body: Record<st
   const deadline = createRequestDeadline(headerTimeout.timeoutMs, request.signal, new Error(`Brain response headers timed out（连接/响应头等待）after ${headerTimeout.timeoutMs}ms; source=${headerTimeout.source}. 调整 LYNN_CLI_BRAIN_TIMEOUT_MS（250–30000ms）；Lynn doctor --offline 可查看所有本进程超时。`));
   const signal = deadline.signal;
   try {
-    response = await fetch(brainEndpointUrl(request.brainUrl, "/v1/chat/completions"), {
+    response = await modelStreamFetch(brainEndpointUrl(request.brainUrl, "/v1/chat/completions"), {
       method: "POST",
       headers: { "content-type": "application/json", ...signedBrainHeaders({ pathname: "/v1/chat/completions" }) },
       body: JSON.stringify(body),
@@ -467,7 +468,7 @@ async function fetchBrainResponseOnce(request: BrainChatRequest, body: Record<st
     if (response.status === 401) {
       const registered = await registerRemoteBrainDevice(request.brainUrl);
       if (registered) {
-        response = await fetch(brainEndpointUrl(request.brainUrl, "/v1/chat/completions"), {
+        response = await modelStreamFetch(brainEndpointUrl(request.brainUrl, "/v1/chat/completions"), {
           method: "POST",
           headers: { "content-type": "application/json", ...signedBrainHeaders({ pathname: "/v1/chat/completions" }) },
           body: JSON.stringify(body),
@@ -504,7 +505,7 @@ async function* streamDirectProviderChatBody(request: BrainChatRequest, provider
   }, request.reasoning);
   let response: Response;
   try {
-    response = await fetch(chatCompletionsUrl(provider.baseUrl), {
+    response = await modelStreamFetch(chatCompletionsUrl(provider.baseUrl), {
       method: "POST",
       headers: providerHeaders(provider),
       body: JSON.stringify(body),

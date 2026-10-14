@@ -1,4 +1,5 @@
 import path from "node:path";
+import { modelStreamFetch } from "../../shared/model-stream-fetch.js";
 import { SessionManager } from "./session-manager.js";
 import { SettingsManager } from "./settings-manager.js";
 import { ModelRegistry } from "./model-registry.js";
@@ -799,7 +800,7 @@ export class LynnAgentSession {
     const reasoningParts: string[] = [];
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
-      const response = await fetch(chatCompletionsUrl(model), {
+      const response = await modelStreamFetch(chatCompletionsUrl(model), {
         method: "POST",
         headers,
         body: JSON.stringify(body),

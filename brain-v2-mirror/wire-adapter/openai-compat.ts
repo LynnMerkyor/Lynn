@@ -6,6 +6,7 @@
 //   + max_tokens 动态调整(短答 512 / 长think 4096)。避免 default_thinking=false provider
 //   被 ThinkingLevelButton 'auto' 一刀切打开 thinking。
 import { parseOpenAISSE } from './_sse-parser.js';
+import { modelStreamFetch } from './_model-fetch.js';
 import { sanitizeToolsForWire, sanitizeMessagesForWire, restoreToolNameInChunk } from './_tool-name-codec.js';
 import type { ChatMessage, ModelId, StreamChunk, ToolDefinition, WireAdapterOptions } from '../types.js';
 
@@ -192,7 +193,7 @@ export async function* call({ provider, messages, tools, signal, onActivity, ext
     body.tool_choice = 'auto';
     toolNameRestore = sanitized.restore;
   }
-  const postChat = (b: OpenAICompatRequestBody) => fetch(provider.endpoint + '/chat/completions', {
+  const postChat = (b: OpenAICompatRequestBody) => modelStreamFetch(provider.endpoint + '/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
