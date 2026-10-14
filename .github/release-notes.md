@@ -1,8 +1,6 @@
-# Lynn v0.87.2 · 长推理与会话管理修复 / Long reasoning and session management
+## 国内镜像站下载（推荐） / Downloads
 
-2026-10-14
-
-## 下载 / Downloads
+国内用户请优先使用镜像站；GitHub Assets 作为备用下载。
 
 - [macOS Apple Silicon](https://download.merkyorlynn.com/downloads/Lynn-0.87.2-macOS-arm64.dmg)
 - [macOS Intel](https://download.merkyorlynn.com/downloads/Lynn-0.87.2-macOS-x64.dmg)
@@ -13,6 +11,10 @@
 npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.2.tgz"
 Lynn --version
 ```
+
+# Lynn v0.87.2 · 长推理与会话管理修复 / Long reasoning and session management
+
+2026-10-14
 
 ## 中文
 
