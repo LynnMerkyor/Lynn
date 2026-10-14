@@ -1,5 +1,6 @@
 import { wsSend } from "../ws-protocol.js";
 import { runAbortable } from "../../shared/abortable-task.js";
+import { ModelCallTimeoutError } from "../../shared/model-stream-timeout.js";
 import { debugLog } from "../../lib/debug-log.js";
 import { t } from "../i18n.js";
 import { classifyRouteIntent } from "../../shared/task-route-intent.js";
@@ -318,6 +319,7 @@ export function createPromptTurnRunner({
           });
         } catch (directErr: any) {
           signal.throwIfAborted();
+          if (directErr instanceof ModelCallTimeoutError) throw directErr;
           debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] failed · ${directErr?.message || directErr} · ${promptSessionPath}`);
           const fallbackOk = await fallbackLocalQwen35DirectToBrain({
             sessionPath: promptSessionPath,
@@ -438,11 +440,11 @@ export function createPromptTurnRunner({
               // asks do not spend a minute in hidden reasoning.
               enableThinking: false,
               maxTokens: Math.min(LOCAL_QWEN35_DIRECT_PREFETCH_MAX_TOKENS, 768),
-              timeoutMs: 45_000,
               earlyCloseVisibleChars: 240,
             });
           } catch (directErr: any) {
             signal.throwIfAborted();
+            if (directErr instanceof ModelCallTimeoutError) throw directErr;
             debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v2] failed after prefetch · ${directErr?.message || directErr} · ${promptSessionPath}`);
             const fallbackOk = await fallbackLocalQwen35DirectToBrain({
               sessionPath: promptSessionPath,

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import fsPromises from "fs/promises";
 import os from "os";
 import path from "path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const windowsCiIt = process.env.CI === "true" && process.platform === "win32" ? it.skip : it;
 
@@ -15,6 +15,7 @@ const reportResearchMock = vi.hoisted(() => ({
 vi.mock("../server/chat/report-research-context.js", () => reportResearchMock);
 
 import { createChatRoute } from "../server/routes/chat.js";
+import { createSessionsRoute } from "../server/routes/sessions.js";
 import { buildDirectResearchAnswer as buildActualDirectResearchAnswer } from "../server/chat/report-research-answer.js";
 
 function makeWebSocketHarness() {
@@ -58,8 +59,22 @@ describe("chat route event forwarding", () => {
   let clients;
   let connections;
   let editRollbackStore;
+  let chatRoute;
+
+  function mountRoute() {
+    const wsHarness = makeWebSocketHarness();
+    clients = wsHarness.clients;
+    connections = wsHarness.connections;
+    chatRoute = createChatRoute(engine, hub, { upgradeWebSocket: wsHarness.upgradeWebSocket });
+    editRollbackStore = chatRoute.editRollbackStore;
+    app = new Hono();
+    app.route("", chatRoute.wsRoute);
+  }
+
+  afterEach(() => vi.unstubAllEnvs());
 
   beforeEach(() => {
+    vi.stubEnv("LYNN_TURN_HARD_ABORT_MS", "0");
     subscribed = null;
     hub = {
       subscribe: vi.fn((handler) => {
@@ -86,13 +101,7 @@ describe("chat route event forwarding", () => {
     reportResearchMock.buildReportResearchContext.mockResolvedValue("");
     reportResearchMock.buildDirectResearchAnswer.mockReturnValue("");
     reportResearchMock.inferReportResearchKind.mockReturnValue("");
-    const wsHarness = makeWebSocketHarness();
-    clients = wsHarness.clients;
-    connections = wsHarness.connections;
-    const route = createChatRoute(engine, hub, { upgradeWebSocket: wsHarness.upgradeWebSocket });
-    editRollbackStore = route.editRollbackStore;
-    app = new Hono();
-    app.route("", route.wsRoute);
+    mountRoute();
   });
 
   it("rewinds a session before accepting an edit-resend prompt", async () => {
@@ -1556,6 +1565,8 @@ describe("chat route event forwarding", () => {
   });
 
   it("clears pending edit snapshots when a turn is force-closed", async () => {
+    vi.stubEnv("LYNN_TURN_HARD_ABORT_MS", "120000");
+    mountRoute();
     vi.useFakeTimers();
     const tmpDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "lynn-edit-pending-"));
     const filePath = path.join(tmpDir, "sample.txt");
@@ -1838,7 +1849,66 @@ describe("chat route event forwarding", () => {
     }));
   });
 
-  it("hard-aborts a Brain turn that streams thinking but never visible text", async () => {
+  it("does not apply a default outer hard deadline to five minutes of active reasoning", async () => {
+    vi.stubEnv("LYNN_TURN_HARD_ABORT_MS", "");
+    mountRoute();
+    vi.useFakeTimers();
+    try {
+      engine.currentModel = { id: "coder390-ninfer", provider: "openai-compatible" };
+      engine.abortSessionByPath = vi.fn();
+      hub.send = vi.fn(() => new Promise(() => {}));
+      await app.request("/ws");
+      connections[0].handlers.onMessage({ data: JSON.stringify({ type: "prompt", text: "Think slowly, then answer." }) }, clients[0]);
+      await Promise.resolve();
+      for (let elapsed = 0; elapsed < 310; elapsed += 10) {
+        subscribed({ type: "message_update", assistantMessageEvent: { type: "thinking_delta", delta: "thinking " } }, engine.currentSessionPath);
+        await vi.advanceTimersByTimeAsync(10_000);
+      }
+      expect(engine.abortSessionByPath).not.toHaveBeenCalled();
+      expect(clients[0].sent.some(event => event.type === "turn_end")).toBe(false);
+      connections[0].handlers.onMessage({ data: JSON.stringify({ type: "resume_stream", sessionPath: engine.currentSessionPath }) }, clients[0]);
+      await Promise.resolve();
+      expect(clients[0].sent.at(-1)).toMatchObject({ type: "stream_resume", isStreaming: true });
+      chatRoute.closeSessionStream(engine.currentSessionPath);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("deletion cancels server-side streams and rejects late prompts for the removed file", async () => {
+    const root = await fsPromises.mkdtemp(path.join(os.tmpdir(), "lynn-chat-delete-"));
+    const sessionDir = path.join(root, "agents", "agent", "sessions");
+    const target = path.join(sessionDir, "active.jsonl");
+    try {
+      await fsPromises.mkdir(sessionDir, { recursive: true });
+      await fsPromises.writeFile(target, '{"type":"session","id":"active"}\n');
+      engine.agentsDir = path.join(root, "agents");
+      engine.currentSessionPath = target;
+      engine.currentModel = { id: "coder390-ninfer", provider: "openai-compatible" };
+      engine.closeSession = vi.fn(async () => {});
+      hub.send = vi.fn(() => new Promise(() => {}));
+      let activeState;
+      chatRoute.lifecycleHooks.tap("prompt_start", event => { activeState = event.ss; });
+      await app.request("/ws");
+      connections[0].handlers.onMessage({ data: JSON.stringify({ type: "prompt", text: "Think slowly, then answer.", sessionPath: target }) }, clients[0]);
+      await waitForAsyncHandlers();
+      const signal = activeState.turnAbortController.signal;
+      const deletion = createSessionsRoute(engine, { beforeClose: chatRoute.closeSessionStream });
+      const response = await deletion.request("/sessions/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: target }) });
+      expect(response.status).toBe(200);
+      expect(signal.aborted).toBe(true);
+      expect(activeState.isStreaming).toBe(false);
+      await expect(fsPromises.access(target)).rejects.toMatchObject({ code: "ENOENT" });
+      const before = hub.send.mock.calls.length;
+      connections[0].handlers.onMessage({ data: JSON.stringify({ type: "prompt", text: "late message", sessionPath: target }) }, clients[0]);
+      subscribed({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "late answer" } }, target);
+      await waitForAsyncHandlers();
+      expect(hub.send).toHaveBeenCalledTimes(before);
+      expect(clients[0].sent.some(event => event.type === "text_delta" && event.delta === "late answer")).toBe(false);
+    } finally { await fsPromises.rm(root, { recursive: true, force: true }); }
+  });
+
+  it("honors an explicit hard-abort budget even while Brain streams thinking", async () => {
+    vi.stubEnv("LYNN_TURN_HARD_ABORT_MS", "120000");
+    mountRoute();
     vi.useFakeTimers();
     try {
       engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };

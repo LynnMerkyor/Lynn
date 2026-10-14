@@ -8,6 +8,8 @@
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { debugLog } from "../../lib/debug-log.js";
+import { isValidModelCallTimeouts, normalizeModelCallTimeouts } from "../../shared/model-call-timeouts.js";
+import { resolveModelCallTimeouts, modelTimeoutDiagnostics } from "../../core/agent-runtime/model-call-timeouts.js";
 
 type ProviderSettings = {
   provider?: string | null;
@@ -22,6 +24,8 @@ type PreferencesBody = {
 };
 
 interface PreferencesRouteEngine {
+  getPreferences(): Record<string, unknown>;
+  savePreferences(preferences: Record<string, unknown>): unknown;
   getSharedModels(): unknown;
   getSearchConfig(): ProviderSettings;
   getUtilityApi(): ProviderSettings;
@@ -33,6 +37,25 @@ interface PreferencesRouteEngine {
 
 export function createPreferencesRoute(engine: PreferencesRouteEngine): Hono {
   const route = new Hono();
+
+  const timeoutSettings = () => {
+    const configured = normalizeModelCallTimeouts(engine.getPreferences().model_call_timeouts);
+    return { configured, effective: resolveModelCallTimeouts(configured), brainEffective: resolveModelCallTimeouts(configured, "brain"), diagnostics: modelTimeoutDiagnostics(engine.getPreferences().model_call_timeouts) };
+  };
+
+  route.get("/preferences/model-timeouts", (c) => c.json(timeoutSettings()));
+  route.put("/preferences/model-timeouts", async (c) => {
+    const body = await safeJson(c);
+    if (!isValidModelCallTimeouts(body)) {
+      return c.json({ error: "firstChunkMs / idleMs 必须为正整数毫秒；totalMs 可为 0（不限制）。最大值为 2147483647。" }, 400);
+    }
+    try {
+      await engine.savePreferences({ ...engine.getPreferences(), model_call_timeouts: body });
+      return c.json(timeoutSettings());
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 500);
+    }
+  });
 
   // 读取全局模型 + 搜索配置
   route.get("/preferences/models", async (c) => {

@@ -1,4 +1,7 @@
 import type { LocalQwen35Message } from "./local-qwen35-direct-policy.js";
+import { readModelCallTimeouts, resolveModelCallTimeouts } from "../../core/agent-runtime/model-call-timeouts.js";
+import { createTimedSignal } from "../../shared/model-stream-timeout.js";
+import type { ModelCallTimeouts } from "../../shared/model-call-timeouts.js";
 
 export interface LocalQwen35Usage {
   [key: string]: unknown;
@@ -42,6 +45,7 @@ export interface StreamLocalQwen35CompletionOptions {
   enableThinking?: boolean;
   maxTokens?: number;
   timeoutMs?: number;
+  timeouts?: ModelCallTimeouts;
   signal?: AbortSignal;
   temperature?: number;
   fetchImpl?: LocalQwen35FetchImpl;
@@ -66,6 +70,7 @@ export async function streamLocalQwen35Completion({
   enableThinking,
   maxTokens,
   timeoutMs,
+  timeouts = resolveModelCallTimeouts(readModelCallTimeouts()),
   signal,
   temperature = 0.2,
   fetchImpl = globalThis.fetch as unknown as LocalQwen35FetchImpl,
@@ -79,21 +84,12 @@ export async function streamLocalQwen35Completion({
     throw new Error("local qwen direct bridge failed: fetch is unavailable");
   }
 
-  const controller = new AbortController();
   signal?.throwIfAborted();
-  const onAbort = () => controller.abort(signal?.reason);
-  signal?.addEventListener("abort", onAbort, { once: true });
-  let abortedByTimeout = false;
-  let timedOutAfterVisibleOutput = false;
+  const timed = createTimedSignal(signal, { ...timeouts, ...(timeoutMs == null ? {} : { totalMs: timeoutMs }) });
   let assistantText = "";
   let reasoningText = "";
   let usage: LocalQwen35Usage | null = null;
   let firstDeltaSeen = false;
-  const timeout = setTimeout(() => {
-    abortedByTimeout = true;
-    controller.abort();
-  }, timeoutMs);
-  timeout.unref?.();
 
   const notifyFirstDelta = () => {
     if (firstDeltaSeen) return;
@@ -105,7 +101,7 @@ export async function streamLocalQwen35Completion({
     const res = await fetchImpl(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      signal: controller.signal,
+      signal: timed.signal,
       body: JSON.stringify({
         model,
         messages,
@@ -125,11 +121,12 @@ export async function streamLocalQwen35Completion({
     let buffer = "";
     let streamDone = false;
     for await (const chunk of res.body) {
-      signal?.throwIfAborted();
+      timed.signal.throwIfAborted();
+      if (chunk.byteLength > 0) timed.activity();
       buffer += decoder.decode(chunk, { stream: true });
       let newlineIdx = buffer.indexOf("\n");
       while (newlineIdx >= 0) {
-        signal?.throwIfAborted();
+        timed.signal.throwIfAborted();
         const line = buffer.slice(0, newlineIdx).trim();
         buffer = buffer.slice(newlineIdx + 1);
         newlineIdx = buffer.indexOf("\n");
@@ -173,21 +170,18 @@ export async function streamLocalQwen35Completion({
         break;
       }
     }
+    timed.signal.throwIfAborted();
   } catch (err) {
     signal?.throwIfAborted();
-    if (!(abortedByTimeout && assistantText.trim())) {
-      throw err;
-    }
-    timedOutAfterVisibleOutput = true;
+    throw timed.timeoutError() || err;
   } finally {
-    signal?.removeEventListener("abort", onAbort);
-    clearTimeout(timeout);
+    timed.cleanup();
   }
 
   return {
     assistantText,
     reasoningText,
     usage,
-    timedOutAfterVisibleOutput,
+    timedOutAfterVisibleOutput: false,
   };
 }

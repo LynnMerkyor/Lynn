@@ -108,11 +108,12 @@ export class PreferencesManager {
 
   /** 写入全局 preferences（更新缓存 + 原子写磁盘） */
   savePreferences(prefs: PreferencesData): void {
-    this._cache = structuredClone(prefs);
+    const next = structuredClone(prefs);
     fs.mkdirSync(this._userDir, { recursive: true });
     const tmp = this._path + ".tmp";
     fs.writeFileSync(tmp, JSON.stringify(prefs, null, 2) + "\n", "utf-8");
     fs.renameSync(tmp, this._path);
+    this._cache = next;
   }
 
   /** @private 从磁盘读取（仅构造时调用一次） */

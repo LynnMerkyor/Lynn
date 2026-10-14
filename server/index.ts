@@ -276,6 +276,7 @@ const {
   wsRoute: chatWsRoute,
   broadcast: chatBroadcast,
   editRollbackStore,
+  closeSessionStream,
 } = createChatRoute(routeEngine, routeHub, { upgradeWebSocket });
 routeEngine.editRollbackStore = editRollbackStore;
 app.route("/api", chatRestRoute);
@@ -293,7 +294,7 @@ app.route("/api", createDebugRoute(routeEngine));
 app.route("/api", createTranslateRoute(routeEngine));
 app.route("/api", createDeepResearchRoute(routeEngine));
 app.route("/api", createLocalQwen35Route(routeEngine));
-app.route("/api", createSessionsRoute(routeEngine));
+app.route("/api", createSessionsRoute(routeEngine, { beforeClose: closeSessionStream }));
 app.route("/api", createModelsRoute(routeEngine));
 app.route("/api", createConfigRoute(routeEngine));
 app.route("/api", createUploadRoute(routeEngine));

@@ -67,11 +67,13 @@ export async function closeCachedSession(opts: {
   const entry = opts.sessions.get(opts.sessionPath);
   if (entry) {
     const agent = opts.getAgentById(String(entry.agentId || "")) || opts.getFallbackAgent();
+    entry.session?.sessionManager?.close?.();
     opts.notifySessionEnd(agent, opts.sessionPath, "close session");
     if (entry.session?.isStreaming) {
       try { await entry.session.abort?.(); } catch {}
     }
     entry.unsub?.();
+    entry.session?.dispose?.();
     opts.sessions.delete(opts.sessionPath);
     opts.getConfirmStore?.()?.abortBySession?.(opts.sessionPath);
   }

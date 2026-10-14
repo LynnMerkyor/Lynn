@@ -10,7 +10,8 @@ import { useStore } from '../stores';
 import { hanaFetch, hanaUrl } from '../hooks/use-hana-fetch';
 import { useI18n } from '../hooks/use-i18n';
 import { formatSessionDate } from '../utils/format';
-import { switchSession, archiveSession, renameSession, branchSession } from '../stores/session-actions';
+import { switchSession, archiveSession, deleteSession, renameSession, branchSession } from '../stores/session-actions';
+import { ArchivedSessions } from './ArchivedSessions';
 import { openBridgeSession } from '../stores/bridge-actions';
 import type { Session, Agent } from '../types';
 import { yuanFallbackAvatar } from '../utils/agent-helpers';
@@ -153,6 +154,7 @@ function SessionListInner() {
   if (sessions.length === 0 && bridgeSessions.length === 0) {
     return (
       <div className={styles.sessionEmpty}>
+        <ArchivedSessions />
         <p className={styles.sessionEmptyText}>{t('sidebar.empty')}</p>
         <div className={styles.sessionEmptyActions}>
           {[
@@ -231,6 +233,7 @@ function SessionListInner() {
             <button className={styles.sessionSearchClear} onClick={() => { setSearchQuery(''); searchRef.current?.focus(); }}>×</button>
           )}
         </div>
+      <ArchivedSessions />
       {searchQuery && (bodySearch.loading || bodySearch.error || bodySearch.incomplete) && <p role="status" className={styles.sessionEmpty}>{t(bodySearch.loading ? 'sidebar.searchingBody' : bodySearch.error ? 'sidebar.bodySearchFailed' : 'sidebar.bodySearchPartial')}</p>}
       {searchQuery && !bodySearch.loading && filtered.length === 0 && (
         <div className={styles.sessionEmpty}>{t('sidebar.noResults') || 'No results'}</div>
@@ -416,6 +419,15 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
     });
   }, [s.path, s.title, s.firstMessage, t]);
 
+  const handleDelete = useCallback(() => {
+    useStore.getState().setPendingConfirm({
+      title: t('session.delete'),
+      message: t('session.deleteConfirm', { name: s.title || s.firstMessage?.slice(0, 30) || t('session.untitled') }),
+      tone: 'danger', confirmLabel: t('session.delete'),
+      onConfirm: () => { void deleteSession(s.path); },
+    });
+  }, [s.path, s.title, s.firstMessage, t]);
+
   const startEditLabels = useCallback(() => {
     setLabelValue(Array.isArray(s.labels) ? s.labels.join(', ') : '');
     setLabelEditing(true);
@@ -488,8 +500,9 @@ function SessionItem({ session: s, isActive, isStreaming, agents, browserUrl, di
       { label: t('session.editLabels'), action: startEditLabels },
       { divider: true },
       { label: t('session.archive'), danger: true, action: handleArchive },
+      { label: t('session.delete'), danger: true, action: handleDelete },
     ];
-  }, [ctxMenu, s.pinned, t, startRename, handleBranch, handlePin, startEditLabels, handleArchive]);
+  }, [ctxMenu, s.pinned, t, startRename, handleBranch, handlePin, startEditLabels, handleArchive, handleDelete]);
 
   const commitRename = useCallback(() => {
     const trimmed = editValue.trim();

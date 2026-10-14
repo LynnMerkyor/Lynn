@@ -510,21 +510,29 @@ export async function branchSession(path: string): Promise<boolean> {
 // 归档 Session
 // ══════════════════════════════════════════════════════
 
+export async function deleteSession(path: string): Promise<boolean> {
+  return removeSession(path, 'delete');
+}
+
 export async function archiveSession(path: string): Promise<void> {
+  await removeSession(path, 'archive');
+}
+
+async function removeSession(path: string, operation: 'archive' | 'delete'): Promise<boolean> {
   try {
-    const res = await hanaFetch('/api/sessions/archive', {
+    const res = await hanaFetch(`/api/sessions/${operation}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path }),
     });
     const data = await res.json();
-    if (data.error) {
-      console.error('[session] archive failed:', data.error);
-      showSidebarToast(window.t('session.archiveFailed'));
-      return;
-    }
+    if (!res.ok || data.error) throw new Error(data.error || `${res.status}`);
 
     const s = useStore.getState();
+    s.removeStreamingSession(path);
+    s.removeSessionStream(path);
+    s.removeCompactingSession(path);
+    s.clearSession(path);
     if (path === s.currentSessionPath) {
       useStore.setState({ currentSessionPath: null });
       clearChatAction();
@@ -533,14 +541,17 @@ export async function archiveSession(path: string): Promise<void> {
     await loadSessions();
 
     const updated = useStore.getState();
+    if (operation === 'delete' && !s.sessions.some(session => session.path === path) && path !== s.currentSessionPath) return true;
     if (updated.sessions.length === 0) {
       await createNewSession();
     } else if (!updated.currentSessionPath) {
       await switchSession(updated.sessions[0].path);
     }
+    return true;
   } catch (err) {
-    console.error('[session] archive failed:', err);
-    showSidebarToast(window.t('session.archiveFailed'));
+    console.error(`[session] ${operation} failed:`, err);
+    showSidebarToast(`${window.t(operation === 'delete' ? 'session.deleteFailed' : 'session.archiveFailed')}: ${err instanceof Error ? err.message : String(err)}`);
+    return false;
   }
 }
 

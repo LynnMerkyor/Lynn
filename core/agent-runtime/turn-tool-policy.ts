@@ -29,9 +29,7 @@ const ZH_ADVISORY_PLAN_RE = /(?:(?:帮|请|给|为).{0,36}(?:拆|设计|写|列|
 const EN_ADVISORY_PLAN_RE = /\b(?:(?:help|please|give|write|design|draft|outline|create).{0,48}(?:OKRs?|plan|checklist|schedule|framework|outline|rubric|risk register|workflow)|(?:how|advice|template).{0,32}(?:OKRs?|plan|checklist|schedule|framework|outline|rubric|risk register|workflow))\b/i;
 const ZH_OPERATIONAL_EXECUTION_RE = /(?:(?:修复|修改|实现|开发|编写|重构|构建|运行|执行|测试|部署|发布|安装|配置|迁移|删除|排查|调试|更新).{0,40}(?:代码|项目|仓库|文件|服务|应用|程序|脚本|接口|数据库|环境|依赖|版本|安装包|网站|页面)|(?:代码|项目|仓库|文件|服务|应用|程序|脚本|接口|数据库|环境|依赖|版本|安装包|网站|页面).{0,40}(?:修复|修改|实现|开发|编写|重构|构建|运行|执行|测试|部署|发布|安装|配置|迁移|删除|排查|调试|更新))/i;
 const EN_OPERATIONAL_EXECUTION_RE = /\b(?:(?:fix|modify|implement|develop|write|refactor|build|run|execute|test|deploy|release|install|configure|migrate|delete|debug|update).{0,48}(?:code|project|repo(?:sitory)?|file|service|app|program|script|api|database|environment|dependency|version|package|website|page)|(?:code|project|repo(?:sitory)?|file|service|app|program|script|api|database|environment|dependency|version|package|website|page).{0,48}(?:fix|modify|implement|develop|write|refactor|build|run|execute|test|deploy|release|install|configure|migrate|delete|debug|update))\b/i;
-const SHORT_ANSWER_REQUEST_RE = /(?:一句话|只给|只回复|简短|简要|用一个词|用数字|只要答案|yes\s*\/\s*no|a\s*\/\s*b\s*\/\s*c\s*\/\s*d)/iu;
 const TERMINAL_VISIBLE_CHAR_RE = /[。！？!?；;：:）)\]}＞>"'”’]$/u;
-const SIMPLE_TRANSLATION_REQUEST_RE = /^(?:请)?(?:把|将)?\s*[A-Za-z][A-Za-z\d\s.'’_-]{0,48}\s*(?:翻译成|译成)\s*(?:中文|汉语|英文|英语)\s*[。.!！]?$/iu;
 
 function normalizedToolName(name: unknown): string {
   return String(name || "").trim().toLowerCase().replace(/[.-]/g, "_");
@@ -53,33 +51,15 @@ export function isTaskStateToolName(name: unknown): boolean {
   return TASK_STATE_TOOL_NAMES.has(normalizedToolName(name));
 }
 
-/**
- * Reasoning models can spend the output budget and stop after an unfinished
- * visible fragment. A single tool-free continuation is safer than persisting
- * that fragment as the answer, but short-answer requests must remain short.
- */
 export function shouldRecoverIncompleteVisibleAnswer(
-  prompt: unknown,
   content: unknown,
   reasoningChars: number,
+  finishReason?: string | null,
 ): boolean {
-  const question = String(prompt || "").trim();
   const visible = String(content || "").trim();
-  if (question.length < 16 || visible.length > 140) return false;
-  // Provider-side reasoning counters are approximate and may omit framing
-  // tokens. Keep the guard structural instead of depending on a brittle
-  // round-number boundary: a substantive prompt plus hidden reasoning and a
-  // short non-terminal fragment should receive one continuation attempt.
-  if (
-    reasoningChars < 240
-    || SHORT_ANSWER_REQUEST_RE.test(question)
-    || SIMPLE_TRANSLATION_REQUEST_RE.test(question)
-  ) return false;
-  // A provider may put a complete <reflect>...</reflect> scaffold in content.
-  // After final-answer normalization that is an empty visible answer and needs
-  // the same single tool-free continuation as a truncated fragment.
-  if (visible.length === 0) return true;
-  return !TERMINAL_VISIBLE_CHAR_RE.test(visible);
+  if (finishReason === "length") return true;
+  if (finishReason && finishReason !== "stop") return false;
+  return visible.length === 0 && reasoningChars > 0;
 }
 
 export function isStructurallyCompletePartialAnswer(content: unknown): boolean {

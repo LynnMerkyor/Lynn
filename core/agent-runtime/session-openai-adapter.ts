@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { normalizeToolAliasName } from "../engine-tool-runtime.js";
 import { filterOutBrainManagedCustomTools } from "../brain-managed-tools.js";
 import { isBrainProvider } from "../../shared/brain-provider.js";
+import { resolveModelCallTimeouts } from "./model-call-timeouts.js";
+export { ModelCallTimeoutError, createTimedSignal } from "../../shared/model-stream-timeout.js";
 import type {
   AgentSessionEvent,
   ChatMessage,
@@ -64,12 +66,6 @@ export const STEP_DELEGATION_TOOL_KEYS = new Set([
   "fetch",
 ]);
 
-export class ModelCallTimeoutError extends Error {
-  constructor(timeoutMs: number) {
-    super(`LLM request timed out after ${timeoutMs}ms`);
-    this.name = "ModelCallTimeoutError";
-  }
-}
 
 /** A stream failed after yielding assistant text.  The caller may safely keep
  * a structurally complete partial answer instead of appending a second model's
@@ -99,13 +95,11 @@ export function positiveEnvInt(name: string, fallback: number): number {
 }
 
 export function defaultModelCallTimeoutMs(): number {
-  return positiveEnvInt("LYNN_MODEL_CALL_TIMEOUT_MS", 45_000);
+  return resolveModelCallTimeouts(undefined).totalMs;
 }
 
 export function brainModelCallTimeoutMs(): number {
-  const sharedOverride = process.env.LYNN_MODEL_CALL_TIMEOUT_MS;
-  const fallback = sharedOverride ? defaultModelCallTimeoutMs() : 115_000;
-  return positiveEnvInt("LYNN_BRAIN_MODEL_CALL_TIMEOUT_MS", fallback);
+  return resolveModelCallTimeouts(undefined, "brain").totalMs;
 }
 
 export function fallbackModelCallTimeoutMs(): number {
@@ -180,47 +174,6 @@ export function isUnsafeFinalAnswerText(
     || (!options.hasToolEvidence && claimsToolEvidenceWithoutToolMessages(text));
 }
 
-export function createTimedSignal(parent: AbortSignal | undefined, timeoutMs: number): {
-  signal: AbortSignal;
-  didTimeout: () => boolean;
-  cleanup: () => void;
-} {
-  const controller = new AbortController();
-  let timedOut = false;
-
-  const abortFromParent = () => {
-    const reason = (parent as AbortSignal & { reason?: unknown } | undefined)?.reason;
-    try {
-      controller.abort(reason);
-    } catch {
-      controller.abort();
-    }
-  };
-
-  if (parent?.aborted) {
-    abortFromParent();
-  } else {
-    parent?.addEventListener("abort", abortFromParent, { once: true });
-  }
-
-  const timer = setTimeout(() => {
-    timedOut = true;
-    try {
-      controller.abort(new ModelCallTimeoutError(timeoutMs));
-    } catch {
-      controller.abort();
-    }
-  }, timeoutMs);
-
-  return {
-    signal: controller.signal,
-    didTimeout: () => timedOut,
-    cleanup: () => {
-      clearTimeout(timer);
-      parent?.removeEventListener("abort", abortFromParent);
-    },
-  };
-}
 
 export function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};

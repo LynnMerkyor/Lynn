@@ -350,6 +350,7 @@ export class SessionCoordinator {
       cwd: effectiveCwd,
       sessionManager: sessionMgr,
       settingsManager: this._createSettings(effectiveModel),
+      getModelCallTimeouts: () => this._d.getPrefs().getPreferences().model_call_timeouts,
       authStorage: models.authStorage,
       modelRegistry: models.modelRegistry,
       model: effectiveModel,
@@ -907,6 +908,7 @@ export class SessionCoordinator {
   // ── Session 关闭 ──
 
   async closeSession(sessionPath: string) {
+    this._titlesCache.clear();
     return closeCachedSession({
       sessions: this._sessions,
       sessionPath,

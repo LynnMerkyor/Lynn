@@ -610,7 +610,7 @@
     },
     {
       "id": "trace.reasoning-only-empty-answer",
-      "title": "Reasoning-only model output is converted into a visible empty-answer fallback",
+      "title": "Reasoning-only output receives one recovery attempt before a visible empty-answer fallback",
       "level": "release",
       "tags": ["trace", "empty-answer", "reasoning", "runtime"],
       "operation": "native_session_trace",
@@ -627,9 +627,9 @@
         ]
       },
       "assertions": [
-        { "path": "provider.requestCount", "equals": 1 },
+        { "path": "provider.requestCount", "equals": 2 },
         { "path": "assistantEventTypes", "contains": "thinking_delta" },
-        { "path": "diagnostics.thinkingDeltaCount", "equals": 1 },
+        { "path": "diagnostics.thinkingDeltaCount", "equals": 2 },
         { "path": "diagnostics.reasoningOnlyFallbackCount", "equals": 1 },
         { "path": "diagnostics.visibleAnswerCount", "equals": 1 },
         { "path": "diagnostics.turnClosed", "equals": true },

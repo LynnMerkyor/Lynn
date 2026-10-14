@@ -11,13 +11,13 @@ import {
 } from "../brain-managed-tools.js";
 import { isBrainProvider } from "../../shared/brain-provider.js";
 import { brainToolEvidenceMessages } from "../../shared/brain-tool-evidence.js";
+import { readModelCallTimeouts, resolveModelCallTimeouts } from "./model-call-timeouts.js";
 import {
   STEP_EXECUTE_TOOL_NAME,
   ModelCallTimeoutError,
   ModelCallStreamError,
   appendToolDelta,
   asRecord,
-  brainModelCallTimeoutMs,
   buildFallbackSynthesisMessages,
   buildPromptUserContent,
   buildRequestBody,
@@ -27,7 +27,6 @@ import {
   countAnyStepDelegationEvidenceToolMessages,
   countUsableStepDelegationEvidenceToolMessages,
   createTimedSignal,
-  defaultModelCallTimeoutMs,
   eventError,
   eventTextDelta,
   eventThinkingDelta,
@@ -103,6 +102,7 @@ export interface LynnCreateAgentSessionOptions {
   settingsManager?: SettingsManager;
   requestHeaders?: Record<string, string>;
   requestMetadata?: Record<string, unknown>;
+  getModelCallTimeouts?: () => unknown;
   [key: string]: unknown;
 }
 
@@ -117,6 +117,7 @@ export class LynnAgentSession {
   readonly scopedModels?: Record<string, unknown>;
   readonly requestHeaders: Record<string, string>;
   readonly requestMetadata?: Record<string, unknown>;
+  private readonly getModelCallTimeouts: () => unknown;
   readonly messages: ChatMessage[] = [];
   readonly agent: { state: { messages: ChatMessage[] }; replaceMessages: (messages: ChatMessage[]) => void };
   retryAttempt = 0;
@@ -157,6 +158,7 @@ export class LynnAgentSession {
     this.scopedModels = options.scopedModels as Record<string, unknown> | undefined;
     this.requestHeaders = options.requestHeaders || {};
     this.requestMetadata = options.requestMetadata;
+    this.getModelCallTimeouts = options.getModelCallTimeouts || readModelCallTimeouts;
     this.fallbackBaseTools = normalizeTools(options.tools);
     this.fallbackCustomTools = normalizeTools(options.customTools);
     this.tools = isBrainProvider(this.model?.provider)
@@ -182,6 +184,8 @@ export class LynnAgentSession {
 
   dispose(): void {
     this.disposed = true;
+    this.clearQueue();
+    this.sessionManager.close();
     this.abort();
     this.listeners.clear();
   }
@@ -197,6 +201,7 @@ export class LynnAgentSession {
   }
 
   async prompt(prompt: string, options?: PromptOptions): Promise<void> {
+    if (this.disposed) throw new Error("Session is closed");
     if (this.isStreaming) {
       const behavior = String(options?.streamingBehavior || "");
       if (behavior === "steer" || behavior === "followUp") {
@@ -636,7 +641,7 @@ export class LynnAgentSession {
         if (!result.toolCalls.length) {
           let content = normalizeFinalAnswerText(contentToText(result.assistant.content));
           let recoveredIncompleteAnswer = false;
-          if (shouldRecoverIncompleteVisibleAnswer(latestUserQuestion(messages), content, result.reasoning.length)) {
+          if (shouldRecoverIncompleteVisibleAnswer(content, result.reasoning.length, result.finishReason)) {
             const continuationMessages = [
               ...messages,
               ...(content ? [roleMessage("assistant", content)] : []),
@@ -729,6 +734,7 @@ export class LynnAgentSession {
           isStructurallyCompletePartialAnswer(partial)
           && !isUnsafeFinalAnswerText(partial, { hasToolEvidence: hasEvidence })
         ) {
+          if (err.cause instanceof ModelCallTimeoutError) this.emit(eventError(err.cause.message));
           this.finishAssistantAnswer(partial, err.partialReasoning, { streamedText: err.streamedText });
           return;
         }
@@ -763,7 +769,9 @@ export class LynnAgentSession {
     reasoning: string;
     contentDeltas: string[];
     streamedText: boolean;
+    finishReason?: string | null;
   }> {
+    if (this.disposed) throw new DOMException("Session is closed", "AbortError");
     const model = options.model || this.activeTurnModel || this.model;
     const tools = filterToolsForTurn(
       options.tools ?? this.getAllTools(),
@@ -784,11 +792,12 @@ export class LynnAgentSession {
     if (model.apiKey && !headers.authorization && !headers.Authorization) {
       headers.authorization = `Bearer ${model.apiKey}`;
     }
-    const resolvedTimeoutMs = options.timeoutMs
-      ?? (isBrainProvider(model.provider) ? brainModelCallTimeoutMs() : defaultModelCallTimeoutMs());
-    const timed = createTimedSignal(this.abortController?.signal, resolvedTimeoutMs);
+    const timeouts = resolveModelCallTimeouts(this.getModelCallTimeouts(), model.provider);
+    if (options.timeoutMs != null) timeouts.totalMs = options.timeoutMs;
+    const timed = createTimedSignal(this.abortController?.signal, timeouts);
     const textParts: string[] = [];
     const reasoningParts: string[] = [];
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
       const response = await fetch(chatCompletionsUrl(model), {
         method: "POST",
@@ -801,23 +810,27 @@ export class LynnAgentSession {
         throw new Error(`LLM request failed: ${response.status} ${response.statusText}${text ? ` · ${text.slice(0, 500)}` : ""}`);
       }
       if (!response.body) throw new Error("LLM response did not include a stream body");
-      const reader = response.body.getReader();
+      reader = response.body.getReader();
       const decoder = new TextDecoder();
       const toolDeltas = new Map<number, StreamToolCallAccumulator>();
       let buffer = "";
-      while (true) {
+      let finishReason: string | null | undefined;
+      streamLoop: while (true) {
         const { value, done } = await reader.read();
+        timed.signal.throwIfAborted();
         if (done) break;
+        if (value.byteLength > 0) timed.activity();
         buffer += decoder.decode(value, { stream: true });
         const parsed = parseSseBlocks(buffer);
         buffer = parsed.rest;
         for (const payload of parsed.payloads) {
-          if (payload === "[DONE]") continue;
+          if (payload === "[DONE]") break streamLoop;
           this.handleLynnSideEvent(payload, isBrainProvider(model.provider), messages);
           const chunk = parsePayload(payload);
           if (!chunk) continue;
           if (chunk.error && !chunk.choices) throw new Error(typeof chunk.error === "string" ? chunk.error : maybeJson(chunk.error));
           for (const choice of chunk.choices || []) {
+            if (choice.finish_reason != null) finishReason = choice.finish_reason;
             const delta = choice.delta || choice.message || {};
             const reasoning = typeof delta.reasoning_content === "string"
               ? delta.reasoning_content
@@ -852,9 +865,10 @@ export class LynnAgentSession {
         reasoning: reasoningParts.join(""),
         contentDeltas: textParts,
         streamedText: streamTextImmediately,
+        finishReason,
       };
     } catch (err) {
-      const failure = timed.didTimeout() ? new ModelCallTimeoutError(resolvedTimeoutMs) : err;
+      const failure = timed.timeoutError() || err;
       if (textParts.length > 0) {
         throw new ModelCallStreamError(
           failure,
@@ -866,6 +880,10 @@ export class LynnAgentSession {
       throw failure;
     } finally {
       timed.cleanup();
+      if (reader) {
+        await reader.cancel().catch(() => {});
+        reader.releaseLock();
+      }
     }
   }
 

@@ -1,4 +1,5 @@
 import { debugLog } from "../../lib/debug-log.js";
+import { resolveModelCallTimeouts } from "../../core/agent-runtime/model-call-timeouts.js";
 import {
   BRAIN_PROVIDER_ID,
 } from "../../shared/brain-provider.js";
@@ -200,9 +201,7 @@ export function createLocalModelBridge({
       stopWarmupFeedback();
     };
     let firstModelDeltaSeen = false;
-    const timeoutMs = Number.isFinite(Number(opts.timeoutMs)) && Number(opts.timeoutMs) > 0
-      ? Number(opts.timeoutMs)
-      : (enableThinking ? 150_000 : 60_000);
+    const timeouts = resolveModelCallTimeouts(engine.getPreferences?.()?.model_call_timeouts, localProviderId);
     const earlyCloseVisibleChars = Number.isFinite(Number(opts.earlyCloseVisibleChars)) && Number(opts.earlyCloseVisibleChars) > 0
       ? Number(opts.earlyCloseVisibleChars)
       : 0;
@@ -213,7 +212,7 @@ export function createLocalModelBridge({
       return attemptMessages;
     };
 
-    const runAttempt = async ({ attemptEnableThinking, attemptMaxTokens, attemptTimeoutMs, allowEarlyClose }: any) => {
+    const runAttempt = async ({ attemptEnableThinking, attemptMaxTokens, allowEarlyClose }: any) => {
       signal?.throwIfAborted();
       const attemptMessages = buildAttemptMessages(attemptEnableThinking);
       const attempt = await streamLocalQwen35Completion({
@@ -222,7 +221,7 @@ export function createLocalModelBridge({
         messages: attemptMessages,
         enableThinking: attemptEnableThinking,
         maxTokens: attemptMaxTokens,
-        timeoutMs: attemptTimeoutMs,
+        timeouts,
         signal,
         onFirstDelta: () => {
           if (!firstModelDeltaSeen) {
@@ -247,9 +246,6 @@ export function createLocalModelBridge({
           !!(allowEarlyClose && earlyCloseVisibleChars && assistantText.trim().length >= earlyCloseVisibleChars)
         ),
       });
-      if (attempt.timedOutAfterVisibleOutput) {
-        debugLog()?.warn("ws", `[LOCAL-QWEN35-DIRECT v1] timed out after visible output · chars=${attempt.assistantText.length} timeout=${attemptTimeoutMs}ms · ${sessionPath}`);
-      }
       return attempt;
     };
 
@@ -257,7 +253,6 @@ export function createLocalModelBridge({
       const firstAttempt = await runAttempt({
         attemptEnableThinking: enableThinking,
         attemptMaxTokens: maxTokens,
-        attemptTimeoutMs: timeoutMs,
         allowEarlyClose: true,
       });
       if (shouldRetryLocalQwen35WithoutThinking({
@@ -273,7 +268,6 @@ export function createLocalModelBridge({
         const retryAttempt = await runAttempt({
           attemptEnableThinking: false,
           attemptMaxTokens: resolveLocalQwen35DirectMaxTokens(originalPromptText, false),
-          attemptTimeoutMs: 60_000,
           allowEarlyClose: false,
         });
         if (!retryAttempt.assistantText.trim()) {

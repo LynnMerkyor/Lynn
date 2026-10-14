@@ -10,6 +10,7 @@ import { hanaFetch } from '../api';
 import { t, PROVIDER_PRESETS } from '../helpers';
 import { loadSettingsConfig } from '../actions';
 import { ProviderDetail } from './providers/ProviderDetail';
+import { ModelTimeoutSettings } from './ModelTimeoutSettings';
 import { AddCustomButton } from './providers/ProviderList';
 import { BRAIN_PROVIDER_ID, BRAIN_PROVIDER_LABEL, buildBrainProviderConfig } from '../../../../../shared/brain-provider.js';
 import styles from '../Settings.module.css';
@@ -425,6 +426,7 @@ export function ProvidersTab() {
 
         {/* ── 右栏：Provider 详情 ── */}
         <div className={styles['pv-detail']}>
+          <ModelTimeoutSettings />
           {selected ? (() => {
             const existing = providersSummary[selected];
             const preset = PROVIDER_PRESETS.find(p => p.value === selected);

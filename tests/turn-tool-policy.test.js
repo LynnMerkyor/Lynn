@@ -35,24 +35,26 @@ describe("turn deliverable tool policy", () => {
     expect(isFileMutationToolName("write")).toBe(true);
     expect(isFileMutationToolName("edit")).toBe(true);
     expect(shouldRecoverIncompleteVisibleAnswer(
-      "给一个长篇小说主角写人物小传：前工程师、记忆有缺口、不信任权威",
       "陈默，三十六岁，前结构工程师。左手食指有一道浅疤，斜切入",
       491,
+      "length",
     )).toBe(true);
     expect(shouldRecoverIncompleteVisibleAnswer(
-      "给一个长篇小说主角写人物小传：前工程师、记忆有缺口、不信任权威",
       "陈默，34岁，前AI伦理工程师。左眉骨有一道浅疤，是七年前那场实验室事故留下的。他",
       375,
+      "length",
     )).toBe(true);
     expect(shouldRecoverIncompleteVisibleAnswer(
-      "给一个长篇小说主角写人物小传：前工程师、记忆有缺口、不信任权威",
       "陈默曾是结构工程师，事故后离开研究院。",
       375,
     )).toBe(false);
-    expect(shouldRecoverIncompleteVisibleAnswer("2+2 等于几？只给答案", "4", 900)).toBe(false);
-    expect(shouldRecoverIncompleteVisibleAnswer("把 hello world 翻译成中文", "你好，世界", 980)).toBe(false);
+    expect(shouldRecoverIncompleteVisibleAnswer("4", 900, "stop")).toBe(false);
+    expect(shouldRecoverIncompleteVisibleAnswer("你好，世界", 980)).toBe(false);
+    expect(shouldRecoverIncompleteVisibleAnswer("Slow stream completed.", 2480, "stop")).toBe(false);
+    expect(shouldRecoverIncompleteVisibleAnswer("yes", 2480)).toBe(false);
+    expect(shouldRecoverIncompleteVisibleAnswer("", 2480, "content_filter")).toBe(false);
+    expect(shouldRecoverIncompleteVisibleAnswer("word ".repeat(100), 0, "length")).toBe(true);
     expect(shouldRecoverIncompleteVisibleAnswer(
-      "劳动合同试用期被突然辞退，我应该先收集什么材料？不要当正式法律意见",
       "",
       470,
     )).toBe(true);

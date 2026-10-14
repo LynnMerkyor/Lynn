@@ -5,6 +5,8 @@ import { t } from "./i18n.js";
 import { registerRemoteBrainDevice, signedBrainHeaders } from "./brain-auth.js";
 import { brainEndpointUrl } from "./brain-url.js";
 import { createRequestDeadline } from '../../shared/request-deadline.js';
+import { createTimedSignal } from '../../shared/model-stream-timeout.js';
+import { readModelCallTimeouts, resolveModelCallTimeouts, cliBrainHeaderTimeout } from '../../core/agent-runtime/model-call-timeouts.js';
 
 export interface BrainChatRequest {
   brainUrl: string;
@@ -342,6 +344,23 @@ function isRecoverableBrainStreamError(event: Extract<BrainStreamEvent, { type: 
 }
 
 async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<BrainStreamEvent> {
+  yield* streamWithTimeouts(request, 'brain', streamBrainOnlyChatBody);
+}
+
+async function* streamWithTimeouts(
+  request: BrainChatRequest,
+  provider: string,
+  stream: (request: BrainChatRequest, activity: () => void) => AsyncGenerator<BrainStreamEvent>,
+): AsyncGenerator<BrainStreamEvent> {
+  const timed = createTimedSignal(request.signal, resolveModelCallTimeouts(readModelCallTimeouts(), provider));
+  try {
+    yield* stream({ ...request, signal: timed.signal }, timed.activity);
+  } catch (error) {
+    throw timed.timeoutError() || error;
+  } finally { timed.cleanup(); }
+}
+
+async function* streamBrainOnlyChatBody(request: BrainChatRequest, activity: () => void): AsyncGenerator<BrainStreamEvent> {
   const messages = request.messages || (request.prompt ? [{ role: "user" as const, content: request.prompt }] : []);
   if (!messages.length) {
     throw new Error("Brain request requires a prompt or messages");
@@ -372,15 +391,18 @@ async function* streamBrainOnlyChat(request: BrainChatRequest): AsyncGenerator<B
   try {
     while (true) {
       const { value: chunk, done } = await reader.read();
+      request.signal?.throwIfAborted();
       if (done) {
         completed = true;
         break;
       }
       buffer += decoder.decode(chunk, { stream: true });
+      if (chunk.byteLength > 0) activity();
       const split = buffer.split(/\n\n+/);
       buffer = split.pop() || "";
       for (const block of split) {
         for (const payload of parseSsePayloads(`${block}\n\n`)) {
+          if (payload === '[DONE]') { yield { type: 'done' }; return; }
           for (const event of parseBrainStreamPayload(payload)) {
             if (isContentfulStreamEvent(event)) emittedContentfulEvent = true;
             yield event;
@@ -432,7 +454,8 @@ async function fetchBrainResponseWithRetry(request: BrainChatRequest, body: Reco
 
 async function fetchBrainResponseOnce(request: BrainChatRequest, body: Record<string, unknown>): Promise<Response> {
   let response: Response;
-  const deadline = createRequestDeadline(brainRequestTimeoutMs(!!request.fallbackProvider), request.signal, new Error("Brain response headers timed out"));
+  const headerTimeout = cliBrainHeaderTimeout(!!request.fallbackProvider);
+  const deadline = createRequestDeadline(headerTimeout.timeoutMs, request.signal, new Error(`Brain response headers timed out（连接/响应头等待）after ${headerTimeout.timeoutMs}ms; source=${headerTimeout.source}. 调整 LYNN_CLI_BRAIN_TIMEOUT_MS（250–30000ms）；Lynn doctor --offline 可查看所有本进程超时。`));
   const signal = deadline.signal;
   try {
     response = await fetch(brainEndpointUrl(request.brainUrl, "/v1/chat/completions"), {
@@ -464,6 +487,10 @@ async function fetchBrainResponseOnce(request: BrainChatRequest, body: Record<st
 }
 
 export async function* streamDirectProviderChat(request: BrainChatRequest, provider: CliProviderProfile): AsyncGenerator<BrainStreamEvent> {
+  yield* streamWithTimeouts(request, provider.provider, (timedRequest, activity) => streamDirectProviderChatBody(timedRequest, provider, activity));
+}
+
+async function* streamDirectProviderChatBody(request: BrainChatRequest, provider: CliProviderProfile, activity: () => void): AsyncGenerator<BrainStreamEvent> {
   const messages = request.messages || (request.prompt ? [{ role: "user" as const, content: request.prompt }] : []);
   if (!messages.length) {
     throw new Error("Provider request requires a prompt or messages");
@@ -500,15 +527,18 @@ export async function* streamDirectProviderChat(request: BrainChatRequest, provi
   try {
     while (true) {
       const { value: chunk, done } = await reader.read();
+      request.signal?.throwIfAborted();
       if (done) {
         completed = true;
         break;
       }
       buffer += decoder.decode(chunk, { stream: true });
+      if (chunk.byteLength > 0) activity();
       const split = buffer.split(/\n\n+/);
       buffer = split.pop() || "";
       for (const block of split) {
         for (const payload of parseSsePayloads(`${block}\n\n`)) {
+          if (payload === '[DONE]') { yield { type: 'done' }; return; }
           for (const event of parseBrainStreamPayload(payload)) yield event;
         }
       }
@@ -528,13 +558,6 @@ export function chatCompletionsUrl(baseUrl: string): URL {
   const cleanPath = url.pathname.replace(/\/+$/, "");
   url.pathname = cleanPath.endsWith("/chat/completions") ? cleanPath : `${cleanPath}/chat/completions`;
   return url;
-}
-
-function brainRequestTimeoutMs(hasFallbackProvider: boolean): number {
-  const raw = process.env.LYNN_CLI_BRAIN_TIMEOUT_MS;
-  const parsed = raw ? Number(raw) : NaN;
-  if (Number.isFinite(parsed) && parsed > 0) return Math.max(250, Math.min(30_000, parsed));
-  return hasFallbackProvider ? 1200 : 5000;
 }
 
 function brainRetryAttempts(): number {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { streamLocalQwen35Completion } from "../server/chat/local-qwen35-direct-runner.js";
 
 function sseResponse(events) {
@@ -20,6 +20,26 @@ function sseResponse(events) {
 }
 
 describe("local Qwen3.5 direct runner", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it.each(["firstChunk", "idle"])("reports %s expiry with a setting hint", async kind => {
+    vi.useFakeTimers();
+    const pending = streamLocalQwen35Completion({
+      timeouts: { firstChunkMs: 100, idleMs: 50, totalMs: 0 },
+      fetchImpl: async (_url, opts) => ({
+        ok: true, status: 200, text: async () => "",
+        body: { async *[Symbol.asyncIterator]() {
+          if (kind === "idle") yield new TextEncoder().encode(': heartbeat\n\n');
+          await new Promise((_resolve, reject) => opts.signal.addEventListener("abort", () => reject(opts.signal.reason), { once: true }));
+        } },
+      }),
+    });
+    const rejected = expect(pending).rejects.toMatchObject({ name: "ModelCallTimeoutError", kind, message: expect.stringContaining("模型请求超时") });
+    await vi.advanceTimersByTimeAsync(101);
+    await rejected;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("aborts a pending connection when the user stops, without treating it as a timeout", async () => {
     const controller = new AbortController();
     let requestSignal;
@@ -67,7 +87,7 @@ describe("local Qwen3.5 direct runner", () => {
     expect(seen).toEqual({ first: 1, reasoning: "想一下", content: "答案", usage: { total_tokens: 8 } });
   });
 
-  it("returns visible partial output when the request times out after content", async () => {
+  it("reports the timeout instead of claiming partial output is complete", async () => {
     const fetchImpl = vi.fn(async (_url, opts) => {
       const body = {
         async *[Symbol.asyncIterator]() {
@@ -86,17 +106,7 @@ describe("local Qwen3.5 direct runner", () => {
       };
     });
 
-    const result = await streamLocalQwen35Completion({
-      endpoint: "http://127.0.0.1:18099/v1/chat/completions",
-      model: "qwen35-9b-q4km-imatrix",
-      messages: [{ role: "user", content: "q" }],
-      enableThinking: true,
-      maxTokens: 128,
-      timeoutMs: 1,
-      fetchImpl,
-    });
-
-    expect(result.assistantText).toBe("半句");
-    expect(result.timedOutAfterVisibleOutput).toBe(true);
+    await expect(streamLocalQwen35Completion({ timeoutMs: 1, fetchImpl }))
+      .rejects.toMatchObject({ name: "ModelCallTimeoutError", kind: "total" });
   });
 });

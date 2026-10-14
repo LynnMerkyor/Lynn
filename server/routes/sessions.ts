@@ -33,6 +33,7 @@ import {
 import { SessionManager } from "../../core/agent-runtime/session-manager.js";
 import { searchSessionBodies } from "../../lib/search/session-search.js";
 import { sessionIdForPath, findSessionFile } from "../../lib/session-files.js";
+import { deleteSessionFile, listArchivedSessions, SessionDeletionError, validateSessionFile } from "../session-deletion.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -430,7 +431,7 @@ function buildSessionMap(sessions: SessionListEntry[]) {
   return { ok: true, nodes, edges };
 }
 
-export function createSessionsRoute(engine: SessionsEngine): Hono {
+export function createSessionsRoute(engine: SessionsEngine, options: { beforeClose?: (sessionPath: string) => unknown } = {}): Hono {
   const route = new Hono();
 
   route.get("/sessions/search", async (c) => {
@@ -970,37 +971,45 @@ export function createSessionsRoute(engine: SessionsEngine): Hono {
     }
   });
 
-  // 清理过期归档 session
+  route.get("/sessions/archived", (c) => {
+    try { return c.json({ sessions: listArchivedSessions(engine.agentsDir) }); }
+    catch (err) { return c.json({ error: errorMessage(err) }, 500); }
+  });
+
+  route.post("/sessions/delete", async (c) => {
+    const body = asRecord(await safeJson(c));
+    const sessionPath = stringField(body, "path");
+    if (!sessionPath) return c.json({ error: "Missing session path" }, 400);
+    try {
+      await deleteSessionFile(engine, sessionPath, options.beforeClose);
+      return c.json({ ok: true });
+    } catch (err) {
+      return c.json({ error: errorMessage(err) }, err instanceof SessionDeletionError ? err.status : 500);
+    }
+  });
+
   route.post("/sessions/cleanup", async (c) => {
     try {
       const body = asRecord(await safeJson(c));
       const maxAgeDays = typeof body.maxAgeDays === "number" ? body.maxAgeDays : 90;
+      if (!Number.isFinite(maxAgeDays) || maxAgeDays < 0) return c.json({ error: "Invalid maxAgeDays" }, 400);
+      if (body.paths !== undefined && (!Array.isArray(body.paths) || body.paths.some(item => typeof item !== "string"))) {
+        return c.json({ error: "Invalid archive paths" }, 400);
+      }
       const cutoff = Date.now() - maxAgeDays * 86400000;
       let deleted = 0;
-
-      // 遍历所有 agent 的 sessions/archived/ 目录
-      const agentsDir = engine.agentsDir;
-      const agents = await fs.readdir(agentsDir).catch(() => []);
-      for (const agentId of agents) {
-        const archiveDir = path.join(agentsDir, agentId, "sessions", "archived");
-        let files;
-        try { files = await fs.readdir(archiveDir); } catch { continue; }
-        for (const f of files) {
-          if (!f.endsWith(".jsonl")) continue;
-          const fp = path.join(archiveDir, f);
-          try {
-            const stat = await fs.stat(fp);
-            if (stat.mtime.getTime() < cutoff) {
-              await fs.unlink(fp);
-              deleted++;
-            }
-          } catch {
-            // Ignore files that disappeared during cleanup.
-          }
-        }
+      const archives = listArchivedSessions(engine.agentsDir);
+      const paths = Array.isArray(body.paths)
+        ? [...new Set(body.paths as string[])]
+        : archives.filter(entry => new Date(entry.modified).getTime() < cutoff).map(entry => entry.path);
+      const allowed = new Set(archives.map(entry => entry.path));
+      if (paths.some(target => !allowed.has(target))) return c.json({ error: "Only existing archived sessions can be cleared" }, 400);
+      const failures: Array<{ path: string; error: string }> = [];
+      for (const target of paths) {
+        try { await deleteSessionFile(engine, target, options.beforeClose); deleted++; }
+        catch (err) { failures.push({ path: target, error: errorMessage(err) }); }
       }
-
-      return c.json({ ok: true, deleted, maxAgeDays });
+      return c.json({ ok: failures.length === 0, deleted, maxAgeDays, failures });
     } catch (err) {
       return c.json({ error: errorMessage(err) }, 500);
     }
@@ -1008,25 +1017,21 @@ export function createSessionsRoute(engine: SessionsEngine): Hono {
 
   // 归档 session（支持跨 agent）
   route.post("/sessions/archive", async (c) => {
+    let restoreOnFailure: unknown;
     try {
       const body = asRecord(await safeJson(c));
       const sessionPath = stringField(body, "path");
       if (!sessionPath) {
         return c.json({ error: t("error.missingParam", { param: "path" }) }, 400);
       }
-      // 校验路径在 agentsDir 范围内
-      if (!isValidSessionPath(sessionPath, engine.agentsDir)) {
-        return c.json({ error: "Invalid session path" }, 403);
-      }
-
-      // 确认文件存在
       try {
-        await fs.access(sessionPath);
-      } catch {
-        return c.json({ error: t("error.sessionNotFound") }, 404);
+        if (validateSessionFile(engine.agentsDir, sessionPath).archived) return c.json({ error: "Session is already archived" }, 400);
+      } catch (err) {
+        return c.json({ error: errorMessage(err) }, err instanceof SessionDeletionError ? err.status : 500);
       }
 
       // 先从 engine 的 session map 中移除（如果正在后台跑会被 abort）
+      restoreOnFailure = await options.beforeClose?.(sessionPath);
       await engine.closeSession(sessionPath);
 
       // 从 session 路径推导归档目录（同 agent 的 sessions/archived/）
@@ -1036,10 +1041,15 @@ export function createSessionsRoute(engine: SessionsEngine): Hono {
 
       const fileName = path.basename(sessionPath);
       const destPath = path.join(archiveDir, fileName);
+      if (existsSync(destPath)) {
+        if (typeof restoreOnFailure === "function") restoreOnFailure();
+        return c.json({ error: "Archive already exists" }, 409);
+      }
       await fs.rename(sessionPath, destPath);
 
       return c.json({ ok: true });
     } catch (err) {
+      if (typeof restoreOnFailure === "function") restoreOnFailure();
       return c.json({ error: errorMessage(err) }, 500);
     }
   });

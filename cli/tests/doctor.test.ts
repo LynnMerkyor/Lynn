@@ -23,10 +23,14 @@ describe("doctor command", () => {
   });
 
   it("supports offline diagnostics", async () => {
+    vi.stubEnv("LYNN_MODEL_IDLE_TIMEOUT_MS", "250000");
     const result = await runDoctor(parseArgs(["doctor", "--offline"]));
 
     expect(result.ok).toBe(true);
     expect(result.brain).toBe("skipped");
+    expect(result.modelTimeouts?.model.effective.idleMs).toBe(250000);
+    expect(result.modelTimeouts?.model.sources.idleMs).toBe("LYNN_MODEL_IDLE_TIMEOUT_MS");
+    expect(renderDoctor(result)).toContain("cliBrainHeaders");
     expect(result.checks.some((check) => check.name === "node")).toBe(true);
     expect(result.cliProvider.configured).toBe(false);
     expect(result.presets).toContain("stepfun:step-5-preview");

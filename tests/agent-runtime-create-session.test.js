@@ -1713,10 +1713,15 @@ describe("createLynnAgentSession native runtime", () => {
     expect(finalMessage.content).not.toContain("internal planning");
   });
 
-  it("keeps a complete short translation without appending a no-remaining-content continuation", async () => {
+  it.each([
+    ["Slow stream completed.", "stop"],
+    ["yes", "stop"],
+    ["你好，世界", undefined],
+    ["42", undefined],
+  ])("keeps complete short answer %s without a continuation (%s)", async (answer, finishReason) => {
     const fetchMock = vi.fn(async () => sseResponse([
       `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "r".repeat(980) } }] })}\n\n`,
-      `data: ${JSON.stringify({ choices: [{ delta: { content: "你好，世界" } }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: { content: answer }, finish_reason: finishReason }] })}\n\n`,
       "data: [DONE]\n\n",
     ]));
     globalThis.fetch = fetchMock;
@@ -1730,7 +1735,7 @@ describe("createLynnAgentSession native runtime", () => {
     await session.prompt("把 hello world 翻译成中文");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(manager.buildSessionContext().messages.at(-1)?.content).toBe("你好，世界");
+    expect(manager.buildSessionContext().messages.at(-1)?.content).toBe(answer);
   });
 
   it("does not append a no-remaining-content marker when a continuation probe finds nothing", async () => {
@@ -1739,7 +1744,7 @@ describe("createLynnAgentSession native runtime", () => {
       if (fetchMock.mock.calls.length === 1) {
         return sseResponse([
           `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "r".repeat(491) } }] })}\n\n`,
-          `data: ${JSON.stringify({ choices: [{ delta: { content: original } }] })}\n\n`,
+          `data: ${JSON.stringify({ choices: [{ delta: { content: original }, finish_reason: "length" }] })}\n\n`,
           "data: [DONE]\n\n",
         ]);
       }

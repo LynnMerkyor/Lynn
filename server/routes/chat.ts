@@ -73,13 +73,15 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
   let activeWsClients = 0;
   let disconnectAbortTimer: TimerHandle | null = null;
   const DISCONNECT_ABORT_GRACE_MS = 15_000;
-  const TURN_HARD_ABORT_MS = Number(process.env.LYNN_TURN_HARD_ABORT_MS || 120_000);
+  const TURN_HARD_ABORT_MS = Number(process.env.LYNN_TURN_HARD_ABORT_MS || 0);
   const TURN_LONG_RESEARCH_HARD_ABORT_MS = Number(process.env.LYNN_TURN_LONG_RESEARCH_HARD_ABORT_MS || 240_000);
   const TOOL_FINALIZATION_GRACE_MS = Number(process.env.LYNN_TOOL_FINALIZATION_GRACE_MS || 8_000);
   const TOOL_AUTHORIZATION_GRACE_MS = Number(process.env.LYNN_TOOL_AUTHORIZATION_GRACE_MS || 45_000);
   const RETURNED_TURN_FINALIZATION_GRACE_MS = Number(process.env.LYNN_RETURNED_TURN_FINALIZATION_GRACE_MS || 3_000);
 
-  const { sessionState, getState } = createSessionStateStore();
+  const { sessionState, getState: getStoredState } = createSessionStateStore();
+  const closedSessionPaths = new Set<string>();
+  const getState = (sessionPath: string) => closedSessionPaths.has(sessionPath) ? null : getStoredState(sessionPath);
   const lifecycleHooks = createLifecycleHooks({
     onError: (err: any, meta: any) => {
       debugLog()?.warn("ws", `lifecycle hook failed · event=${meta?.eventName || "unknown"} · ${err?.message || err}`);
@@ -104,6 +106,21 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
   const checkRateLimit = createTokenBucketRateLimiter({ capacity: 5, refillMs: 10_000 });
   const runPromptForSession = createKeyedSerialExecutor();
   const pendingPromptAdmissions = new Set<string>();
+
+  function closeSessionStream(sessionPath: string) {
+    closedSessionPaths.add(sessionPath);
+    const state = sessionState.get(sessionPath);
+    if (state) {
+      editRollbackStore.discardPendingForSession(sessionPath, typeof state.activeStreamToken === "string" ? state.activeStreamToken : null);
+      finishSessionStream(state);
+      resetCompletedTurnState(state);
+      state.streamId = null;
+      state._turnClosed = true;
+      sessionState.delete(sessionPath);
+    }
+    broadcast({ type: "status", isStreaming: false, sessionPath });
+    return () => { closedSessionPaths.delete(sessionPath); };
+  }
 
   type ToolTurnFinalizers = ReturnType<typeof createToolTurnFinalizer>;
   let buildRealtimeToolFallbackText: ToolTurnFinalizers["buildRealtimeToolFallbackText"] = () => "";
@@ -450,6 +467,7 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
                     return;
                   }
                 }
+                if (closedSessionPaths.has(promptSessionPath)) return;
                 wsSend(ws, {
                   type: "prompt_accepted",
                   sessionPath: promptSessionPath,
@@ -502,5 +520,5 @@ export function createChatRoute(engine: any, hub: any, { upgradeWebSocket }: any
     })
   );
 
-  return { restRoute, wsRoute, broadcast, editRollbackStore, lifecycleHooks };
+  return { restRoute, wsRoute, broadcast, editRollbackStore, lifecycleHooks, closeSessionStream };
 }

@@ -113,6 +113,11 @@ export class SessionManager {
   private sessionId: string;
   private sessionFile?: string;
   private flushed = false;
+  private closed = false;
+
+  close(): void {
+    this.closed = true;
+  }
 
   private constructor(cwd: string, dir: string, file?: string, persist = true, parentSession?: string) {
     this.cwd = path.resolve(cwd || process.cwd());
@@ -216,7 +221,7 @@ export class SessionManager {
   }
 
   _persist(): void {
-    if (!this.persist || !this.sessionFile) return;
+    if (this.closed || !this.persist || !this.sessionFile) return;
     if (this.flushed) return;
     fs.mkdirSync(path.dirname(this.sessionFile), { recursive: true });
     fs.writeFileSync(this.sessionFile, this.fileEntries.map((entry) => JSON.stringify(entry)).join("\n") + "\n", "utf8");
@@ -229,6 +234,7 @@ export class SessionManager {
   }
 
   private appendEntry<T extends SessionEntry>(entry: T): string {
+    if (this.closed) return entry.id;
     this.fileEntries.push(entry);
     this.byId.set(entry.id, entry);
     this.leafId = entry.id;

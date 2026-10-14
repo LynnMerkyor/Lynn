@@ -1,4 +1,5 @@
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
+import { modelTimeoutDiagnostics, readModelCallTimeoutPreferences } from "../../../core/agent-runtime/model-call-timeouts.js";
 import { listProviderPresets } from "../provider-presets.js";
 import { providerProfilePath, readCliProviderProfile, redactApiKey } from "../provider-profile.js";
 import { resolveDataDir } from "../session/store.js";
@@ -16,6 +17,7 @@ export interface DoctorResult {
   brain: "ok" | "skipped" | "unreachable";
   brainProviders?: BrainProviderStatus | null;
   brainSmoke?: BrainRouteSmokeResult | null;
+  modelTimeouts?: ReturnType<typeof modelTimeoutDiagnostics>;
   cliProvider: {
     configured: boolean;
     path: string;
@@ -102,6 +104,7 @@ export async function runDoctor(args: ParsedArgs): Promise<DoctorResult> {
     brain,
     brainProviders,
     brainSmoke,
+    modelTimeouts: modelTimeoutDiagnostics(readModelCallTimeoutPreferences()),
     cliProvider: {
       configured: !!profile,
       path: profilePath,
@@ -211,6 +214,7 @@ export function renderDoctor(result: DoctorResult): string {
     `Brain ${result.brain}: ${result.brainUrl}`,
     "",
     ...result.checks.map((check) => `${check.ok ? "OK" : "FAIL"} ${check.name}: ${check.message}`),
+    ...(result.modelTimeouts ? ["Model timeout diagnostics (ms; total=0 means unlimited):", JSON.stringify(result.modelTimeouts, null, 2)] : []),
   ];
   return lines.join("\n");
 }
