@@ -10,6 +10,8 @@ const outDir = path.join(repo, "output");
 const startedAt = new Date();
 
 const args = parseArgs(process.argv.slice(2));
+const reasoning = String(args.reasoning || "high");
+if (!["low", "medium", "high"].includes(reasoning)) throw new Error("reasoning must be low, medium, or high");
 const live = args.live === true || process.env.LYNN_EFFICIENCY_LIVE === "1";
 const suite = String(args.suite || process.env.LYNN_EFFICIENCY_SUITE || "smoke");
 const label = String(args.label || process.env.LYNN_EFFICIENCY_LABEL || "baseline");
@@ -62,6 +64,7 @@ for (const task of taskRuns) {
       runIndex: task.runIndex,
       kind: task.kind,
       label,
+      reasoning,
       success,
       ...run,
       internalValidationSteps: run.validationSteps,
@@ -177,6 +180,9 @@ function expandTaskRuns(tasks, repeatCount) {
 
 async function runTask(task, cwd) {
   const commandArgs = task.command(cwd);
+  const reasoningIndex = commandArgs.indexOf("--reasoning");
+  if (reasoningIndex < 0) throw new Error(`Missing reasoning option for ${task.id}`);
+  commandArgs[reasoningIndex + 1] = reasoning;
   const started = Date.now();
   const child = spawn(process.execPath, [cli, ...commandArgs], {
     cwd: repo,
@@ -371,6 +377,7 @@ function summarize(input) {
   summary.taskStats = summarizeByTask(input.results);
   return {
     schema: "lynn-cli-efficiency-gate-v1",
+    reasoning,
     label: input.label,
     suite: input.suite,
     repeat: input.repeat,

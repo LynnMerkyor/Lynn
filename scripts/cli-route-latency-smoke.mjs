@@ -9,6 +9,8 @@ const cli = path.join(repo, "cli/bin/lynn.mjs");
 const outDir = path.join(repo, "output");
 const startedAt = new Date();
 const args = parseArgs(process.argv.slice(2));
+const reasoning = String(args.reasoning || "high");
+if (!["low", "medium", "high"].includes(reasoning)) throw new Error("reasoning must be low, medium, or high");
 
 const stepfunRuns = positiveInt(args.stepfunRuns || process.env.LYNN_ROUTE_STEPFUN_RUNS || 5, "stepfun-runs");
 const sparkRuns = positiveInt(args.sparkRuns || process.env.LYNN_ROUTE_SPARK_RUNS || 3, "spark-runs");
@@ -40,6 +42,7 @@ for (let i = 1; i <= sparkRuns; i += 1) {
 const report = summarize({
   schema: "lynn-cli-route-latency-smoke-v1",
   label,
+  reasoning,
   startedAt: startedAt.toISOString(),
   finishedAt: new Date().toISOString(),
   stepfun,
@@ -59,7 +62,7 @@ if (requireSpark && report.summary.spark.successes === 0) process.exit(1);
 async function runStepFun(index) {
   const started = Date.now();
   return await new Promise((resolve) => {
-    const child = spawn(process.execPath, [cli, "-p", "只回复 OK", "--json", "--reasoning", "high"], {
+    const child = spawn(process.execPath, [cli, "-p", "只回复 OK", "--json", "--reasoning", reasoning], {
       cwd: repo,
       env: { ...process.env, LYNN_CLI_UPDATE_CHECK: "0" },
       stdio: ["ignore", "pipe", "pipe"],
@@ -105,6 +108,7 @@ async function runStepFun(index) {
       resolve({
         index,
         route: "stepfun-cli",
+        reasoning,
         ok: code === 0 && /\bOK\b/i.test(assistantText),
         code,
         signal,
@@ -399,6 +403,7 @@ Measures the product default StepFun route through Lynn CLI and probes the local
 Spark failures are recorded as availability evidence, not a script failure, unless --require-spark is set.
 
 Options:
+  --reasoning LEVEL     Explicit low, medium, or high (default high)
   --stepfun-runs N       StepFun CLI runs (default 5)
   --spark-runs N         Spark direct runs (default 3)
   --spark-base-url URL   Spark OpenAI-compatible base URL (default http://127.0.0.1:18098/v1)
