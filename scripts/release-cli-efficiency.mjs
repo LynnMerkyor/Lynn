@@ -35,7 +35,37 @@ export function profilePassed(profile, exitCode, report) {
     row.reasoning === profile.reasoning && (profile.id.endsWith('-routes') ? row.ok === true : row.success === true));
 }
 
+export function validReleaseEfficiencyPlan(plan) {
+  if (!Array.isArray(plan) || plan.length !== 4) return false;
+  return ['low', 'high'].every(reasoning => ['routes', 'efficiency'].every(kind => {
+    const id = `${reasoning}-${kind}`;
+    const matches = plan.filter(profile => profile?.id === id);
+    if (matches.length !== 1) return false;
+    const profile = matches[0];
+    const routes = kind === 'routes';
+    const fast = reasoning === 'low';
+    if (profile.reasoning !== reasoning || profile.script !== (routes ? 'scripts/cli-route-latency-smoke.mjs' : 'scripts/cli-efficiency-gate.mjs') || !Array.isArray(profile.args)) return false;
+    const required = routes ? {
+      '--reasoning': reasoning, '--stepfun-runs': '3', '--spark-runs': '1',
+      '--timeout-ms': fast ? '30000' : '660000', '--min-stepfun-success-rate': '1',
+      ...(fast ? { '--max-stepfun-p50-ttft-ms': '2500', '--max-stepfun-p50-wall-ms': '4000' } : {}),
+    } : {
+      '--reasoning': reasoning, '--live': null, '--suite': 'smoke', '--repeat': '1',
+      '--timeout-ms': fast ? '240000' : '660000', '--min-success-rate': '1',
+      '--max-waste-steps': '0', '--max-max-steps-reached': '0',
+      ...(fast ? { '--max-p50-ttft-ms': '2500', '--max-p50-wall-ms': '4500' } : {}),
+    };
+    const flags = profile.args.filter(arg => typeof arg === 'string' && arg.startsWith('--'));
+    if (flags.length !== Object.keys(required).length || new Set(flags).size !== flags.length) return false;
+    return Object.entries(required).every(([flag, value]) => {
+      const position = profile.args.indexOf(flag);
+      return position >= 0 && (value === null || profile.args[position + 1] === value);
+    });
+  }));
+}
+
 export async function runReleaseEfficiency(directory) {
+  if (!validReleaseEfficiencyPlan(releaseEfficiencyPlan())) throw new Error('Release efficiency profile contract is invalid');
   fs.mkdirSync(directory, { recursive: true });
   const results = [];
   for (const profile of releaseEfficiencyPlan()) {

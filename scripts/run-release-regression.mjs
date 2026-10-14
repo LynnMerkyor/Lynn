@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { recordGuiToolLifecycle, releaseRegressionMustFail } from "./gui-task-quality.mjs";
 import { RELEASE_CASES, RELEASE_LEVELS } from "../tests/release-regression/release-regression-cases.mjs";
+import { releaseEfficiencyPlan, validReleaseEfficiencyPlan } from "./release-cli-efficiency.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_OUTPUT_ROOT = path.join(ROOT, "output");
@@ -411,13 +412,9 @@ async function runStaticChecks({ level }) {
   checks.push(makeCheck(
     "static-cli-efficiency-release-gate",
     "blocker",
-    Boolean(pkg.scripts?.["release:cli-efficiency"]
-      && pkg.scripts["release:cli-efficiency"].includes("bench:cli-routes")
-      && pkg.scripts["release:cli-efficiency"].includes("bench:cli-efficiency")
-      && pkg.scripts["release:cli-efficiency"].includes("min-stepfun-success-rate")
-      && pkg.scripts["release:cli-efficiency"].includes("max-stepfun-p50-ttft-ms")
-      && pkg.scripts["release:cli-efficiency"].includes("max-waste-steps")),
-    "CLI release has a live StepFun efficiency gate with route, latency, and waste-step thresholds",
+    Boolean(pkg.scripts?.["release:cli-efficiency"] === "npm run build:cli && node scripts/release-cli-efficiency.mjs"
+      && validReleaseEfficiencyPlan(releaseEfficiencyPlan())),
+    "CLI release validates all four live profiles, unchanged fast latency thresholds and complete high-reasoning results",
     String(pkg.scripts?.["release:cli-efficiency"] || ""),
   ));
   checks.push(makeCheck(
