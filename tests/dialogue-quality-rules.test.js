@@ -72,6 +72,13 @@ describe("dialogue quality rules", () => {
     expect(containsMislabeledRelativeDate(prompt, "明天2027-01-01有雨。", "2026-12-31")).toBe(false);
   });
 
+  it('does not bind a source publication timestamp to the following forecast label', () => {
+    const text = '深圳明天（2026-10-15）不下雨。依据中国气象局 2026-10-14 19:30 更新的预报：明天白天多云，夜间晴。';
+    expect(containsMislabeledRelativeDate('深圳明天下雨吗？', text, '2026-10-14')).toBe(false);
+    expect(containsMislabeledRelativeDate('深圳明天下雨吗？', text.replace('明天（2026-10-15）', '明天（2026-10-14）'), '2026-10-14')).toBe(true);
+    expect(containsMislabeledRelativeDate('深圳明天下雨吗？', text.replace('明天白天', '明天2026-10-16白天'), '2026-10-14')).toBe(true);
+  });
+
   it.each([
     '2026年10月9日–11日（含昨晚10月10日）没有比赛。',
     '2026-10-09至2026-10-11（包含昨晚2026-10-10）没有比赛。',

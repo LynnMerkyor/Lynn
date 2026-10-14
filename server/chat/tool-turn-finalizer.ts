@@ -247,81 +247,6 @@ export function buildDirectWebFetchEvidenceAnswer(ss: any): string {
   return [`页面：${subject}`, `要点：${sentence}`].join("\n");
 }
 
-function successfulToolEvidenceText(ss: any): string {
-  const tools = Array.isArray(ss?.lastSuccessfulTools) ? ss.lastSuccessfulTools : [];
-  return tools
-    .map((tool: any) => [
-      tool?.name,
-      tool?.command,
-      tool?.filePath,
-      tool?.url,
-      tool?.query,
-      tool?.outputPreview,
-    ].filter(Boolean).join(" "))
-    .join("\n");
-}
-
-function deniesAvailableToolCapability(text: unknown): boolean {
-  const normalized = String(text || "").replace(/\s+/g, "");
-  if (!normalized) return false;
-  return /(?:工具集|工具箱|工具列表|当前工具|可用工具|CLI工具|LynnCLI工具)[^，,。！？；;]{0,24}(?:没有|未包含|不包含|缺少|暂无|不支持)[^，,。！？；;]{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问)/iu.test(normalized)
-    || /(?:没有|未包含|不包含|缺少|暂无|不支持)[^，,。！？；;]{0,24}(?:天气|搜索|查询|检索|行情|股价|金价|汇率|比分|赛程|网页|访问)[^，,。！？；;]{0,24}(?:工具|功能|能力|接口)/iu.test(normalized);
-}
-
-function contradictsRelativeEventEvidence(ss: any, text: unknown): boolean {
-  const prompt = String(ss?.originalPromptText || ss?.effectivePromptText || "");
-  if (!/(今晚|今夜|今天|今日|昨晚|昨日|昨天|赛程|比分|比赛|场次|半决赛|决赛|schedule|score|match|game|tonight|today|yesterday|semifinal|final)/iu.test(prompt)) return false;
-  const normalized = String(text || "").replace(/\s+/g, "");
-  if (!normalized) return false;
-  const saysNoEvent = /(?:没有|无|暂无|未查到|没有剩余|无剩余).{0,20}(?:比赛|赛事|赛程|场次|比分|结果|资料|信息)/iu.test(normalized)
-    || /(?:比赛|赛事|赛程|场次|比分|结果|资料|信息).{0,20}(?:没有|无|暂无|未查到)/iu.test(normalized);
-  if (!saysNoEvent) return false;
-  const evidence = successfulToolEvidenceText(ss);
-  return /(?:Scheduled|待开赛|即将开赛|未开始|\bvs\b|\d{1,2}:\d{2}|比分|FT|\d+\s*[-–—:：比]\s*\d+)/iu.test(evidence);
-}
-
-function hasMarketNumericEvidence(prompt: unknown, text: unknown): boolean {
-  const p = String(prompt || "");
-  const value = String(text || "");
-  if (/(金价|黄金|XAU|gold)/iu.test(p)) {
-    return /\d{3,5}(?:\.\d+)?\s*元\/克|\d{3,5}(?:\.\d+)?\s*美元\/盎司|XAU\/USD[\s\S]{0,100}\d{3,5}(?:\.\d+)?/iu.test(value);
-  }
-  if (/(汇率|美元人民币|美元兑人民币|USD\s*\/?\s*CNY|人民币)/iu.test(p)) {
-    return /1\s*(?:USD|美元)\s*=\s*\d+(?:\.\d+)?\s*(?:CNY|人民币)|USD\/CNY[\s\S]{0,100}\d+(?:\.\d+)?|美元[兑对]人民币[\s\S]{0,100}\d+(?:\.\d+)?|汇率[\s\S]{0,100}\d+(?:\.\d+)?/iu.test(value);
-  }
-  if (/(股价|股票|行情|最新价|现价|NVDA|AAPL|TSLA|MSFT|英伟达|苹果|特斯拉)/iu.test(p)) {
-    return /\$?\d+(?:\.\d+)?\s*(?:USD|美元|港元|HKD|元)?|涨跌|涨幅|收盘|最新价|当前价/iu.test(value);
-  }
-  return true;
-}
-
-function lacksMarketNumericAnswerDespiteEvidence(ss: any, text: unknown): boolean {
-  const prompt = String(ss?.originalPromptText || ss?.effectivePromptText || "");
-  if (!/(金价|黄金|汇率|美元人民币|美元兑人民币|USD\s*\/?\s*CNY|股价|股票|行情|最新价|现价|NVDA|AAPL|TSLA|MSFT|英伟达|苹果|特斯拉)/iu.test(prompt)) {
-    return false;
-  }
-  const evidence = successfulToolEvidenceText(ss);
-  return hasMarketNumericEvidence(prompt, evidence) && !hasMarketNumericEvidence(prompt, text);
-}
-
-function lacksWeatherAnswerDespiteEvidence(ss: any, text: unknown): boolean {
-  const prompt = String(ss?.originalPromptText || ss?.effectivePromptText || "");
-  if (!/(天气|气温|温度|下雨|降雨|降水|空气质量|AQI|冷不冷|热不热|带伞|雨伞)/iu.test(prompt)) return false;
-  const evidence = successfulToolEvidenceText(ss);
-  if (!/(天气|温度|气温|降雨|降水|雷暴|阵雨|°C|℃|\d+\s*%)/iu.test(evidence)) return false;
-  const normalized = String(text || "").replace(/\s+/g, "");
-  if (/(人类活动史|建城史|生态环境局|工业和信息化局|机动车排放|高新技术企业|政府工作报告|百度百科|如果需要更精确的实时结论)/iu.test(normalized)) {
-    return true;
-  }
-  if (/(下雨|降雨|降水|带伞|雨伞)/iu.test(prompt) && !/(雨|降雨|降水|雷暴|阵雨|\d+\s*%|带伞|不用伞|不必带伞)/iu.test(normalized)) {
-    return true;
-  }
-  if (/(空气质量|AQI)/iu.test(prompt) && !/(AQI|空气质量|优|良|轻度|中度|重度|\d+)/iu.test(normalized)) {
-    return true;
-  }
-  return false;
-}
-
 export function selectToolEvidenceVisibleText(ss: any, candidate: unknown): string {
   const text = String(candidate || "").trim();
   if (!text) return buildToolCompletionSummary(ss);
@@ -329,14 +254,6 @@ export function selectToolEvidenceVisibleText(ss: any, candidate: unknown): stri
     return buildDirectWebFetchEvidenceAnswer(ss)
       || buildToolCompletionSummary(ss)
       || "";
-  }
-  if (
-    deniesAvailableToolCapability(text)
-    || contradictsRelativeEventEvidence(ss, text)
-    || lacksMarketNumericAnswerDespiteEvidence(ss, text)
-    || lacksWeatherAnswerDespiteEvidence(ss, text)
-  ) {
-    return buildToolCompletionSummary(ss) || "";
   }
   return text;
 }
@@ -756,6 +673,10 @@ export function createToolTurnFinalizer({
           );
           return;
         }
+        scheduleToolFinalizationFallback(sessionPath, ss);
+        return;
+      }
+      if (engine.isSessionStreaming?.(sessionPath)) {
         scheduleToolFinalizationFallback(sessionPath, ss);
         return;
       }

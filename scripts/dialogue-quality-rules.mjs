@@ -103,7 +103,9 @@ export function containsMislabeledRelativeDate(prompt, text, currentDate) {
     const date = `${dateYear || year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     return date.startsWith(`${year}-`) && !allowed.has(date);
   };
-  const normalized = String(text).replace(/\|/gu, "\n").replace(/(?:更新时间|更新于|更新至|发布时间|发布于|数据截至|数据时间|抓取时间|采集时间|取数时间|截至)\s*[：:]?\s*(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{4}年\s*\d{1,2}月\s*\d{1,2}日)(?:\s+\d{1,2}:\d{2})?/gu, "[数据时间]");
+  const normalized = String(text).replace(/\|/gu, "\n")
+    .replace(/(?:更新时间|更新于|更新至|发布时间|发布于|数据截至|数据时间|抓取时间|采集时间|取数时间|截至)\s*[：:]?\s*(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{4}年\s*\d{1,2}月\s*\d{1,2}日)(?:\s+\d{1,2}:\d{2})?/gu, "[数据时间]")
+    .replace(/(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{4}年\s*\d{1,2}月\s*\d{1,2}日)\s+\d{1,2}:\d{2}\s*(?:更新|发布|采集|抓取)/gu, "[数据时间]");
   const labelBeforeDate = /(今天\/今日|今晚\/今夜|明天\/明日|昨晚\/昨天\/昨日|今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)([^\n。；;，,]{0,32}?)(?:(?:(\d{4})年\s*)?(\d{1,2})月\s*(\d{1,2})日|(\d{4})-(\d{1,2})-(\d{1,2}))/gu;
   const dateBeforeLabel = /(?:(?:(\d{4})年\s*)?(\d{1,2})月\s*(\d{1,2})日|(\d{4})-(\d{1,2})-(\d{1,2}))([^\n。；;，,]{0,32}?)(今天\/今日|今晚\/今夜|明天\/明日|昨晚\/昨天\/昨日|今天|今日|今晚|今夜|明天|明日|昨晚|昨日|昨天)/gu;
   for (const match of normalized.matchAll(labelBeforeDate)) {

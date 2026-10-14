@@ -16,9 +16,56 @@ describe("buildToolCompletionSummary (silent tool-turn close fix)", () => {
     expect(selectToolEvidenceVisibleText({ successfulToolCount: 1 }, text)).toBe(text);
   });
 
-  it('still rejects explicit denial of declared tools', () => {
+  it('leaves semantic capability claims to model and quality validation rather than rewriting the answer', () => {
     const text = '当前工具不支持天气查询。';
-    expect(selectToolEvidenceVisibleText({ successfulToolCount: 1 }, text)).not.toBe(text);
+    expect(selectToolEvidenceVisibleText({ successfulToolCount: 1 }, text)).toBe(text);
+  });
+
+  it.each([
+    {
+      prompt: '你能预测今晚世界杯比分吗？请说明这是预测不是事实',
+      name: 'sports_score',
+      evidence: '体育比分查询结果\ndateRange: 20261014-20261015\nmatched: 0\n匹配比赛: 0 场',
+      answer: '今晚没有世界杯比赛，所以不存在可以预测的比分。查询日期为 2026-10-14 至 2026-10-15。',
+    },
+    {
+      prompt: '今晚有几场比赛？',
+      name: 'sports_score',
+      evidence: 'dateRange: 20260714-20260720\nmatched: 4\n历史比分 1-0',
+      answer: '今晚无比赛；7 月的历史赛果不属于今晚。',
+    },
+    {
+      prompt: '明天会下雨吗？',
+      name: 'weather',
+      evidence: '当前天气：阵雨，降水概率 60%。',
+      answer: '这次只有当前观测，没有明天的逐小时预报，无法判断明天是否需要雨伞。',
+    },
+    {
+      prompt: '明天天气如何？',
+      name: 'weather',
+      evidence: '温度 25°C，天气晴。',
+      answer: '明天以晴天为主；生态环境局发布的空气质量数据需另行核验。',
+    },
+    {
+      prompt: '今日金价是多少？',
+      name: 'stock_market',
+      evidence: '旧报价：2025 年 900 元/克。',
+      answer: '仅有旧报价，不能用作今日价格；需要当日行情。',
+    },
+    {
+      prompt: '美元人民币汇率是多少？',
+      name: 'stock_market',
+      evidence: 'USD/CNY 6.8 日度参考价。',
+      answer: '工具只提供日度参考数据，不能替代此刻的银行成交报价。',
+    },
+  ])('preserves model synthesis instead of guessing from $name keywords', ({ prompt, name, evidence, answer }) => {
+    expect(selectToolEvidenceVisibleText({
+      originalPromptText: prompt,
+      successfulToolCount: 1,
+      hasFailedTool: true,
+      lastFailedTools: ['web_search'],
+      lastSuccessfulTools: [{ name, outputPreview: evidence }],
+    }, answer)).toBe(answer);
   });
 
   it("returns empty when no tools ran (keeps V0.79 no-synthetic-text rule)", () => {

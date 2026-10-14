@@ -1881,6 +1881,34 @@ describe("chat route event forwarding", () => {
     }));
   });
 
+  it("does not let tool finalization abort an active model request during a silent synthesis gap", async () => {
+    vi.useFakeTimers();
+    try {
+      engine.abortSessionByPath = vi.fn();
+      let finishSend;
+      hub.send = vi.fn(() => new Promise(resolve => { finishSend = resolve; }));
+      await app.request("/ws");
+      connections[0].handlers.onMessage({ data: JSON.stringify({ type: "prompt", text: "Use the tool evidence and explain its limits." }) }, clients[0]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(hub.send).toHaveBeenCalled();
+      engine.isSessionStreaming.mockReturnValue(true);
+      subscribed({ type: "tool_execution_start", toolCallId: "synthesis-tool", toolName: "weather", args: { location: "Shenzhen" } }, engine.currentSessionPath);
+      subscribed({ type: "tool_execution_end", toolCallId: "synthesis-tool", toolName: "weather", result: { content: [{ type: "text", text: "No forecast available." }] }, isError: false }, engine.currentSessionPath);
+      subscribed({ type: "message_update", assistantMessageEvent: { type: "thinking_delta", delta: "Checking evidence." } }, engine.currentSessionPath);
+      await vi.advanceTimersByTimeAsync(45_000);
+      expect(engine.abortSessionByPath).not.toHaveBeenCalled();
+      expect(clients[0].sent.some(event => event.type === "turn_end")).toBe(false);
+      subscribed({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "The available evidence does not contain tomorrow's forecast." } }, engine.currentSessionPath);
+      engine.isSessionStreaming.mockReturnValue(false);
+      engine.getSessionByPath.mockReturnValue({ messages: [{ role: "assistant", content: "The available evidence does not contain tomorrow's forecast." }] });
+      finishSend();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(clients[0].sent.filter(event => event.type === "text_delta").map(event => event.delta).join("")).toContain("tomorrow's forecast");
+      expect(clients[0].sent.filter(event => event.type === "turn_end")).toHaveLength(1);
+      chatRoute.closeSessionStream(engine.currentSessionPath);
+    } finally { vi.useRealTimers(); }
+  });
+
   it("does not apply a default outer hard deadline to five minutes of active reasoning", async () => {
     vi.stubEnv("LYNN_TURN_HARD_ABORT_MS", "");
     mountRoute();
