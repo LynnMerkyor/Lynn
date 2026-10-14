@@ -28,7 +28,7 @@ GUI100 最终为 89 通过、7 个 `all providers failed`、4 个 `quality_fail`
 - Windows 候选安装包由 CI 构建并通过包内 llama.cpp 运行时验收；Mac、GUI100、CLI200 与公证以最终独立证据为准。
 - 此文件是问题记录，不是发布门禁豁免。正式发布状态与接受的例外必须以最终发布证据及用户决定为准。
 
-## 最终执行结果（2026-10-14）
+## 首轮完整执行结果（2026-10-14，保留原始失败）
 
 - 本地单测：3690 通过、3 个显式跳过；类型检查通过。常规运行时与内置 Qwen 桥接的真实 HTTP 310 秒持续流测试均通过，未下载或加载模型权重。
 - CLI200：200 项全部执行，179 通过、20 个进程失败（云端无可用 provider）、1 个测试进程 120 秒超时。另存的第 28、37 题定向重试均失败，未替换原始成绩。
@@ -38,3 +38,35 @@ GUI100 最终为 89 通过、7 个 `all providers failed`、4 个 `quality_fail`
 - 完整发布门禁退出码为 1。Mac 构建等待脚本明确以 `BLOCKED by full-gate-2` 退出，未开始签名、公证或安装包验收；这些不是通过项。
 - 没有发布 V0.87.2 正式标签、GitHub/Gitee Release 或腾讯云下载文件；没有修改已安装的 `/Applications/Lynn.app`，没有修改或重启云端 Brain。所有本轮测试及发布等待进程均已结束。
 - 可机读证据：`output/release-v0.87.2/gate-summary.json`、`cloud-diagnostic-summary.json`、`windows-verified.json`；原始日志与报告路径保持不变。恢复发布前必须解决门禁失败，或取得明确且限定范围的发布例外；不能把本记录当作例外授权。
+
+## 后续修复与用户截图复查（2026-10-14）
+
+- 用户 Windows 截图显示本地 OpenAI 兼容模型 `qwen3.5-122b-a10b` 在发送“继续”后出现 `LLM request timed out after 45000ms`，并被补成“没有返回可见内容”。截图没有客户端版本和服务端日志，因此不能据此判定 NInfer 本身故障或确认用户已安装修复版。
+- V0.87.2 客户端默认首段等待 300 秒、流式空闲 120 秒、总时限 0；收到原始流数据会刷新空闲计时。设置页可调整，显式环境变量仍优先，旧 `LYNN_MODEL_CALL_TIMEOUT_MS=45000` 也会继续生效并展示来源。这类本地客户端逻辑必须更新安装包，单改云端不能修复旧客户端。
+- 错误关闭入口先排出已有正文缓冲；超时明确提示未完成及如何调整，不再声称正常返回空答案。WebSocket 结束状态标记 `timed_out`、`ok=false`、可恢复；已有部分正文保留。覆盖旧 45 秒错误、新首段/空闲错误、事件及异常两条入口。
+- GUI 与云端移除按短文本长度、标点或思考长度猜测“半句”的逻辑；正常短答案不被替换或强制续写。真正空响应及协议截断处理保留。
+- 云端候选代码改为首段/空闲/可选总时限，原始 SSE 心跳和碎片刷新活动；HTTP 402 与认证失败进入独立冷却，恢复探测不绕过冷却。状态接口显示有效超时与 Step 计费路径，不输出密钥。
+- 语音默认及配置正规化保留官方 `wss://api.stepfun.com/step_plan/v1/realtime`；有状态 TTS 使用 `session.update`、`conversation.item.create`、`response.create`，显式 stateless 地址继续使用原协议。连接错误在关闭前发送给客户端。参考：https://platform.stepfun.com/docs/zh/step-plan/integrations/audio-api 。
+- 新凭据已保存至仓库外权限 600 的保护文件；仅访问 Step Plan 文本地址验证，结果仍为 HTTP 403 `real_name_required`，证据为 `output/release-v0.87.2/step-plan-new-credential-check.json`。未换回按量地址，未将未通过的凭据替换到云端，等待账户实名认证。
+- 截图相关定向回归首轮 96 通过、2 失败，保留原始记录；修复正文缓冲和取消提示后 98/98 通过。客户端完整单测随后 3723 通过、3 个原有跳过，类型检查通过；最终补充状态码和语音错误测试另存后续报告，不覆盖这些记录。云端实际 HTTP 310 秒持续流测试通过，不涉及模型权重下载。
+- 当前新增运行时代码尚未部署云端；此前 Windows 候选包不包含这些修复，不能复用其验收作为最终包证明。下一步仍须完成部署漂移审查、Step Plan 真实文本/语音验证、GUI100/CLI200/独立夜间及效率门禁，再重新构建 Windows、Mac 签名公证、隔离安装验收、三仓与腾讯镜像发布。用户要求全部门禁通过，不采用首轮失败豁免。
+- 本次最终复测：客户端 3728 通过、3 项原有跳过（`cloud-full-unit-final.log`，退出码 0）；Brain 模块 421/421 通过（`cloud-brain-unit-final.log`）；根目录、运行时、Brain、CLI TypeScript 检查均通过。它们是源码测试，不是发布门禁全通过或用户 Windows 实机验证。
+
+## 实名认证后云端同步（2026-10-14 17:28，北京时间）
+
+- Step Plan 新凭据复测 HTTP 200，完整 SSE 返回 `OK`，此前实名认证阻塞解除；旧 403 证据保留。
+- 已部署 8 个限定文件并同步 Step 文本、实时语音和超时配置。有效文本地址 `https://api.stepfun.com/step_plan/v1`、模型 `step-5-preview`；语音 `wss://api.stepfun.com/step_plan/v1/realtime`、模型 `stepaudio-2.5-realtime`；首段 300000ms、空闲 120000ms、总时限 0。
+- 只重启 `lobster-brain-v2`，PID 由 3642450 变为 724953；旧 `lobster-brain` PID 294390 未变。其他服务商密钥、数据库、下载站未修改。受保护备份 `/opt/lobster-brain-v2/.release-backups/v0872-1791970048512`。
+- 独立回读确认 8 个文件 SHA256 均匹配。部署后真实路由文本测试通过（1350ms），套餐语音返回有效 WAV（117164 字节，1698ms）；它们不是完整发布门禁替代品。证据目录 `output/release-v0.87.2/cloud-deploy-2/`。
+- 此后的完整门禁使用新报告，不覆盖首轮失败；正式 GUI/CLI 安装包和公共下载仍未发布。
+
+## 十分钟超时与独立转写修复（2026-10-14 17:45，北京时间）
+
+- 按用户确认，客户端和云端默认改为首段 600 秒、空闲 600 秒、总时限 0；持续流活动刷新计时，十分钟不是整轮硬截止。保存的偏好、显式环境变量和主动取消仍有效。
+- 第二轮预检暴露文件转写返回 502：Realtime 的助手回复不能作为用户录音转写。现改为 Step Plan 独立 `/audio/asr/sse`，只接受 `transcript.text.delta/done`，使用 `stepaudio-2.5-asr`；主实时语音仍是 `stepaudio-2.5-realtime`。校验 PCM16、声道、采样率，并拒绝断流、错误事件及空转写。
+- Brain 单测 427/427，通过根目录、运行时、Brain 和 CLI 类型检查。十分钟边界、持续输出超过总时长、环境覆盖及转写错误均有回归覆盖；模拟时钟测试不冒充真实模型等待十分钟。
+- 云端只更改两个代码文件和两个超时配置项，备份 `/opt/lobster-brain-v2/.release-backups/v0872-ten-minute-1791971077927`；Brain v2 PID 729340，旧 Brain PID 294390 未变。独立回读 SHA256 匹配，状态接口确认 Step Plan、600000/600000/0。
+- 真实 `test:voice-step` 通过，包含 TTS、CLI 录音文件转写和 GUI 语音状态流程。证据 `output/release-v0.87.2/voice-step-after-asr.log`；不替代完整 GUI/CLI 题库和安装包验收。
+- 新完整门禁写入 `post-plan-gates-3/`，保留旧失败记录；旧 Windows 构建不含本次代码，必须重新构建。全部门禁通过之前不公开发布。
+
+第三轮预检在源码检查阶段主动中止：复查发现显式 `stepfun-direct` / `stepfun-byok` 也存在把助手回复当转写的旧分支，不能仅修默认云端路径。客户端现改用独立 ASR，保持显式端点的计费路径，新增助手事件、断流、空结果、鉴权错误和提前取消测试；第四轮完整门禁写入 `post-plan-gates-4/`。中止的第三轮不计通过。

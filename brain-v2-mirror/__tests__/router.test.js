@@ -20,6 +20,7 @@ vi.mock('../provider-registry.js', () => ({
   ),
   getProvider: (id) => mockState.providers[id] || null,
   isInCooldown: (id) => mockState.cooldown.has(id),
+  isRecoveryProbeAllowed: (id) => !mockState.cooldown.has(id) || !/^(?:error-auth|error-billing):/.test(mockState.unhealthy.findLast(entry => entry.id === id)?.reason || ''),
   markUnhealthy: (id, reason, cooldownMs) => {
     mockState.cooldown.add(id);
     mockState.unhealthy.push({ id, reason, cooldownMs });
@@ -71,6 +72,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   delete process.env.BRAIN_V2_PRE_SEARCH;
   delete process.env.MIMO_SEARCH_KEY;
@@ -828,30 +830,24 @@ describe('Router', () => {
     expect(chunks.some((c) => c.type === 'content' && /最终答案/.test(c.delta))).toBe(true);
   });
 
-  it('hands off a buffered half-sentence after long reasoning instead of closing the turn', async () => {
+  it.each(['Yes', 'It is safe', '42', '可以'])('preserves a buffered short answer with stop: %s', async (answer) => {
     mockState.adapterFn = async function* ({ provider }) {
       mockState.adapterCalls.push(provider.id);
-      if (provider.id === 'p-step') {
-        yield { type: 'reasoning', delta: '先规划人物背景、记忆缺口、行为矛盾和故事线。'.repeat(12) };
-        yield { type: 'content', delta: '陈默，34岁，前结构工程师，现靠' };
-        yield { type: 'finish', reason: 'stop' };
-        return;
-      }
-      yield { type: 'content', delta: '陈默，34岁，前结构工程师。一次事故让他的记忆出现缺口，因此他只相信可验证的证据。' };
+      yield { type: 'reasoning', delta: 'Checking the evidence. '.repeat(80) };
+      yield { type: 'content', delta: answer };
       yield { type: 'finish', reason: 'stop' };
     };
     const chunks = [];
     const result = await run({
-      messages: [{ role: 'user', content: '写一个人物小传' }],
+      messages: [{ role: 'user', content: 'Give a concise conclusion.' }],
       tools: [{ type: 'function', function: { name: 'read_file' } }],
       onChunk: async (chunk) => chunks.push(chunk),
     });
 
-    expect(result).toMatchObject({ ok: true, providerId: 'p-spark', iterations: 2 });
-    expect(mockState.adapterCalls).toEqual(['p-step', 'p-spark']);
+    expect(result).toMatchObject({ ok: true, providerId: 'p-step', iterations: 1 });
+    expect(mockState.adapterCalls).toEqual(['p-step']);
     const visible = chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.delta).join('');
-    expect(visible).not.toContain('现靠');
-    expect(visible).toContain('只相信可验证的证据');
+    expect(visible).toBe(answer);
     expect(mockState.unhealthy).not.toContainEqual(expect.objectContaining({ id: 'p-step', reason: 'incomplete_visible' }));
   });
 
@@ -919,7 +915,7 @@ describe('Router', () => {
   });
 
   it('falls through when a provider exceeds its per-attempt timeout', async () => {
-    mockState.providers['p-step'].timeout_ms = 5;
+    vi.stubEnv('BRAIN_V2_PROVIDER_FIRST_CHUNK_TIMEOUT_MS', '5');
     mockState.adapterFn = async function* ({ provider, signal }) {
       mockState.adapterCalls.push(provider.id);
       if (provider.id === 'p-step') {
@@ -947,6 +943,44 @@ describe('Router', () => {
       cooldownMs: 60_000,
     }));
     expect(chunks.some((c) => c.type === 'content' && c.delta === 'fallback answer')).toBe(true);
+  });
+
+  it('does not cut off active reasoning at the former provider total timeout', async () => {
+    vi.useFakeTimers();
+    mockState.providers['p-step'].timeout_ms = 35_000;
+    mockState.adapterFn = async function* ({ provider, signal, onActivity }) {
+      mockState.adapterCalls.push(provider.id);
+      for (let tick = 0; tick < 7; tick += 1) {
+        await new Promise(resolve => setTimeout(resolve, 50_000));
+        signal.throwIfAborted();
+        onActivity?.();
+        yield { type: 'reasoning', delta: 'thinking' };
+      }
+      yield { type: 'content', delta: 'Yes.' };
+      yield { type: 'finish', reason: 'stop' };
+    };
+    process.env.BRAIN_V2_PROVIDER_FIRST_CHUNK_TIMEOUT_MS = '300000';
+    try {
+      const pending = run({ messages: [{ role: 'user', content: 'question' }], onChunk: () => {}, manageServerTools: false });
+      await vi.advanceTimersByTimeAsync(350_001);
+      expect((await pending).ok).toBe(true);
+      expect(mockState.adapterCalls).toEqual(['p-step']);
+      expect(mockState.unhealthy).toEqual([]);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { delete process.env.BRAIN_V2_PROVIDER_FIRST_CHUNK_TIMEOUT_MS; vi.useRealTimers(); }
+  });
+
+  it('classifies 402 as billing and never clears its cooldown for a recovery probe', async () => {
+    mockState.order = ['p-step'];
+    mockState.adapterFn = async function* ({ provider }) {
+      mockState.adapterCalls.push(provider.id);
+      throw Object.assign(new Error('HTTP 402 Insufficient Balance'), { status: 402 });
+    };
+    await expect(run({ messages: [{ role: 'user', content: 'hello' }], onChunk: () => {} })).rejects.toThrow('all providers failed');
+    expect(mockState.adapterCalls).toEqual(['p-step']);
+    expect(mockState.unhealthy).toContainEqual(expect.objectContaining({ id: 'p-step', reason: expect.stringContaining('error-billing'), cooldownMs: 1_800_000 }));
+    await expect(run({ messages: [{ role: 'user', content: 'again' }], onChunk: () => {} })).rejects.toThrow('all providers failed');
+    expect(mockState.adapterCalls).toEqual(['p-step']);
   });
 
   it('makes one bounded no-tool recovery probe when every provider times out', async () => {

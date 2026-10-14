@@ -2,6 +2,7 @@
 // 原则:只做事实型(capability + 健康/cooldown),不做内容判断
 import './env-loader.js';
 import { positiveEnvNumber } from './env-utils.js';
+import { providerTimeoutPolicy } from './provider-timeouts.js';
 import { envModel, providerId, type Provider, type ProviderId, type ProviderIdLiteral } from './types.js';
 const DUAL_BRAIN_LOCAL_MANAGER_MAX_CONCURRENCY = 1;
 
@@ -257,6 +258,10 @@ export function isInCooldown(providerId: ProviderId): boolean {
   if (!s) return false;
   return Date.now() < s.unhealthyUntil;
 }
+export function isRecoveryProbeAllowed(providerId: ProviderId): boolean {
+  const state = cooldownState.get(providerId);
+  return !state || Date.now() >= state.unhealthyUntil || !/^(?:error-auth|error-billing):/.test(state.reason);
+}
 export function markUnhealthy(providerId: ProviderId, reason = '', cooldownMs: number | null = null): void {
   const provider = PROVIDERS[providerId];
   if (!provider) return;
@@ -288,6 +293,9 @@ export interface ProviderStatusSnapshotEntry {
   routeRole?: 'head' | 'local_single_slot_manager' | 'escape' | 'tail';
   localConcurrencyLimit?: number;
   busyFallbackProvider?: string;
+  timeoutPolicy: ReturnType<typeof providerTimeoutPolicy>;
+  billingChannel?: 'step-plan' | 'pay-as-you-go' | 'custom';
+  cooldown?: { remainingMs: number; reasonCode: string };
 }
 
 export interface ProviderStatusSnapshot {
@@ -310,6 +318,15 @@ export function getProviderStatusSnapshot(capabilityRequired?: { vision?: boolea
     route,
     providers: Object.values(PROVIDERS).map((provider) => {
       const credential = credentialStatus(provider);
+      const state = cooldownState.get(provider.id);
+      let billingChannel: ProviderStatusSnapshotEntry['billingChannel'];
+      if (String(provider.id) === 'step-3.7-flash') {
+        billingChannel = 'custom';
+        try {
+          const endpoint = new URL(provider.endpoint);
+          if (endpoint.origin === 'https://api.stepfun.com') billingChannel = endpoint.pathname.replace(/\/$/, '') === '/step_plan/v1' ? 'step-plan' : 'pay-as-you-go';
+        } catch {}
+      }
       return {
         id: String(provider.id),
         model: String(provider.model),
@@ -318,6 +335,9 @@ export function getProviderStatusSnapshot(capabilityRequired?: { vision?: boolea
         capability: provider.capability,
         credential,
         configured: credential !== 'missing',
+        timeoutPolicy: providerTimeoutPolicy(provider, !!(capabilityRequired?.vision || capabilityRequired?.audio || capabilityRequired?.video)),
+        billingChannel,
+        cooldown: state && state.unhealthyUntil > Date.now() ? { remainingMs: state.unhealthyUntil - Date.now(), reasonCode: state.reason.split(':')[0] } : undefined,
         local: provider.apiKey === 'none' || Boolean(provider.health_path),
         inRoute: routeSet.has(String(provider.id)),
         routeRole: String(provider.id) === headProvider

@@ -86,7 +86,7 @@ export function hasVerifiedEmptySportsResult(result) {
 export function hasVerifiedNoFixturePredictionAnswer(result) {
   const text = String(result.assistantText || "").replace(/\*\*/g, "");
   return hasVerifiedEmptySportsResult(result)
-    && /(?:给不出|无法|不能|不应|不做|不会).{0,24}(?:比分|预测)|(?:比分|预测).{0,16}(?:没有依据|无依据|无对象)|不存在.{0,12}(?:可(?:以)?预测|预测对象)|没有(?:可(?:供|以)?预测的|预测对象)/u.test(text);
+    && /(?:给不出|无法|不能|不应|不做|不会).{0,24}(?:比分|预测)|(?:比分|预测).{0,16}(?:没有依据|无依据|无对象)|不存在.{0,12}(?:可(?:以)?预测|预测对象)|没有(?:可(?:供|以)?预测的|预测对象)|没有(?:比分|赛果)(?:可(?:以)?|能)预测/u.test(text);
 }
 
 export function containsMislabeledRelativeDate(prompt, text, currentDate) {
@@ -155,7 +155,7 @@ export function omitVerifiedSportsFetchWindows(text, toolEvents = []) {
   };
   let answer = String(text || "");
   for (const [first, last] of [...queryWindows, ...windows]) {
-    const range = new RegExp(`((?:查询|检索|取数)(?:范围)?\\s*[：:]?\\s*(?:北京时间\\s*)?)(?:${datePattern(first, true)}|${datePattern(first, false)})\\s*(?:至|到|[-–—~～])\\s*(?:${datePattern(last, true)}|${datePattern(last, false)})(?!\\d)`, "gu");
+    const range = new RegExp(`((?:查询|检索|取数)(?:范围|区间)?\\s*[：:]?\\s*(?:北京时间\\s*)?)(?:${datePattern(first, true)}|${datePattern(first, false)})\\s*(?:至|到|[-–—~～])\\s*(?:${datePattern(last, true)}|${datePattern(last, false)})(?!\\d)`, "gu");
     answer = answer.replace(range, "$1[已核验的查询窗口]");
   }
   const lines = answer.split("\n");

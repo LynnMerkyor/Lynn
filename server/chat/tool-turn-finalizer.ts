@@ -836,15 +836,22 @@ export function createToolTurnFinalizer({
     clearSilentBrainAbortTimer(ss);
   }
 
-  function closeStreamAfterError(sessionPath: any, ss: any, reason: any = "model_tool_error") {
+  function closeStreamAfterError(sessionPath: any, ss: any, reason: any = "model_tool_error", errorMessage = "") {
     if (!sessionPath || !ss || hasStreamEvent(ss, "turn_end")) return;
+    flushBufferedAssistantText(sessionPath, ss);
     if (ss.userAbortRequested) {
       closeStreamWithVisibleFallback(sessionPath, ss, ss.hasOutput ? "" : "已停止本轮回答。", "user_aborted", { trustedFallback: true });
       return;
     }
     if (!ss.hasOutput && !ss.hasToolCall) ss._lastTurnAborted = true;
+    const timedOut = /timed?\s*out|timeout|超时/i.test(errorMessage);
+    if (timedOut) reason = "model_request_timeout";
     const fallbackText = !ss.hasOutput
-      ? (hasToolEvidence(ss)
+      ? (timedOut
+        ? "模型请求超时，本轮未能完成最终回答，并非正常空回复。请查看错误详情中的首段等待、流式空闲或总时限设置；调大对应超时后，可点「编辑重发」重试。"
+        : errorMessage && !hasToolEvidence(ss) && !ss.hasThinking
+        ? "模型请求失败，本轮未能完成最终回答。请查看错误详情并处理后重试；这不代表模型正常返回了空答案。"
+        : hasToolEvidence(ss)
         ? buildEmptyTurnFallbackText(ss, reason)
         : ss.hasThinking
         ? "模型请求中断前只返回了思考过程，没有给出最终可见答案。本轮已安全结束，避免空回复污染后续上下文；请点「编辑重发」重试，或稍后再发。"

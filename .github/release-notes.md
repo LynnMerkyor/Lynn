@@ -18,7 +18,7 @@ Lynn --version
 
 ## 中文
 
-- 长推理使用首段 300 秒、空闲 120 秒的独立计时；每个流数据块刷新空闲计时，默认不设总时限。普通 OpenAI 兼容端点、内置 Qwen 桥接和 CLI 流传输使用同一策略。
+- 长推理使用首段 600 秒、空闲 600 秒的独立计时；每个流数据块刷新空闲计时，默认不设总时限，持续输出超过十分钟也不会因此中断。普通 OpenAI 兼容端点、内置 Qwen 桥接和 CLI 流传输使用同一策略；已保存的设置和显式环境变量继续优先。
 - 设置 → 模型服务可调整超时；统一诊断显示模型、Brain、Qwen、CLI 响应头与回合时限的生效值和来源。保留环境变量覆盖，CLI 可运行 `Lynn doctor --offline`。远端服务或代理限制需另行检查。
 - 去除英文短答案的标点/长度续写猜测；仅明确截断或推理后空答案才尝试一次恢复。内置 Qwen 桥接超时不再冒充成功结束，也不无提示切到云端。
 - 对话菜单增加二次确认删除，归档列表支持单条删除与批量清空；关闭在途请求和迟到写盘，删除后重启不会复现。外部工作区原文件不删除。
@@ -27,7 +27,7 @@ Lynn --version
 
 ## English
 
-- Separate first-chunk (300s) and resettable idle (120s) deadlines, with no default total deadline, across compatible endpoints, the built-in Qwen bridge and CLI streams.
+- Separate first-chunk (600s) and resettable idle (600s) deadlines, with no default total deadline, across compatible endpoints, the built-in Qwen bridge and CLI streams. Continued output can run beyond ten minutes; saved settings and explicit environment overrides remain authoritative.
 - Editable settings and unified timeout diagnostics expose effective values and their sources. Existing environment overrides remain supported; run `Lynn doctor --offline` for the CLI process. Remote proxy/provider limits remain separate.
 - Complete short answers no longer trigger punctuation-based continuation. Only explicit truncation or reasoning-only empty output receives one recovery attempt; timeouts remain visible failures.
 - Confirmed session deletion and archived-session clearing cancel in-flight work, remove session files and prevent late writes from recreating deleted conversations. External workspace originals are preserved.

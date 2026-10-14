@@ -32,21 +32,24 @@ async function* iterateSSEBytes(body: SSEBody): AsyncGenerator<Uint8Array> {
   }
 
   const reader = body.getReader();
+  let completed = false;
   try {
     while (true) {
       const { value, done } = await reader.read();
-      if (done) return;
+      if (done) { completed = true; return; }
       if (value) yield value;
     }
   } finally {
+    if (!completed) await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
 }
 
-export async function* parseOpenAISSE(body: SSEBody): AsyncGenerator<StreamChunk> {
+export async function* parseOpenAISSE(body: SSEBody, onActivity?: () => void): AsyncGenerator<StreamChunk> {
   const decoder = new TextDecoder();
   let buffer = '';
   for await (const chunk of iterateSSEBytes(body)) {
+    if (chunk.byteLength > 0) onActivity?.();
     buffer += decoder.decode(chunk, { stream: true });
     if (buffer.length > MAX_BUFFER) {
       throw new Error(`SSE parser buffer overflow (>${MAX_BUFFER} bytes without newline) — upstream likely sending non-SSE garbage`);
@@ -57,7 +60,8 @@ export async function* parseOpenAISSE(body: SSEBody): AsyncGenerator<StreamChunk
       const line = rawLine.trim();
       if (!line.startsWith('data:')) continue;
       const data = line.slice(5).trim();
-      if (!data || data === '[DONE]') continue;
+      if (data === '[DONE]') return;
+      if (!data) continue;
       let parsed: unknown;
       try { parsed = JSON.parse(data); } catch { continue; }
       const record = asRecord(parsed);

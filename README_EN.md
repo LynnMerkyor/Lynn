@@ -49,7 +49,7 @@ Source: [Merkyor / Qwen3.8-27B-Coder390-EfficientThink](https://modelscope.cn/mo
 
 ### V0.87.2 Highlights
 
-- **Long reasoning stays connected:** OpenAI-compatible endpoints and the built-in Qwen bridge share a 300-second first-chunk timeout, a 120-second resettable idle timeout and no default model-wide deadline. Settings and `Lynn doctor --offline` show effective values and environment overrides.
+- **Long reasoning stays connected:** OpenAI-compatible endpoints and the built-in Qwen bridge share a 600-second first-chunk timeout, a 600-second resettable idle timeout and no default model-wide deadline. Continued output can run beyond ten minutes. Saved settings and explicit environment overrides remain authoritative; settings and `Lynn doctor --offline` show effective values and their sources.
 - **No punctuation-based continuations:** one recovery attempt is allowed for an explicit `finish_reason=length` or a reasoning-only empty answer, not because an English answer is short.
 - **Delete conversations permanently:** confirmation-based deletion, individual archived deletion and archive clearing stop in-flight work and remove session files so late output cannot resurrect them. See the [timeout and deletion guide](docs/ops/local-stream-timeouts-and-session-deletion.md).
 

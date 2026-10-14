@@ -10,19 +10,16 @@ describe("turn_end fallback matrix", () => {
     )).toMatchObject({ reason: "reasoning_only_without_visible_answer" });
   });
 
-  it("replaces a short fragment after a large hidden-reasoning budget", () => {
+  it.each(["Yes", "It is safe", "42", "可以", "结论是"])('does not infer truncation from short visible text: %s', (answer) => {
     const result = resolveTurnEndFallback({
       hasOutput: true,
       hasThinking: true,
       hasError: false,
-      visibleTextAcc: "结论是",
+      visibleTextAcc: answer,
       events: [{ event: { type: "thinking_delta", delta: "思".repeat(800) } }],
     }, { hasToolEvidence: false });
 
-    expect(result).toMatchObject({
-      reason: "short_visible_after_hidden_reasoning",
-      appendEvenIfHasOutput: true,
-    });
+    expect(result).toBeNull();
   });
 
   it("closes a completely empty turn", () => {

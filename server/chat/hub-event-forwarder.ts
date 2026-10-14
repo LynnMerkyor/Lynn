@@ -124,7 +124,7 @@ export interface HubEventForwarderDeps {
   maybeAppendCodeVerificationPostscript: (sessionPath: any, ss: any) => boolean;
   maybeGenerateFirstTurnTitle: (sessionPath: any, ss: any) => void;
   buildRealtimeToolFallbackText: (toolName: any, event: any) => string;
-  closeStreamAfterError: (sessionPath: any, ss: any) => void;
+  closeStreamAfterError: (sessionPath: any, ss: any, reason?: string, errorMessage?: string) => void;
   closeStreamWithVisibleFallback: (sessionPath: any, ss: any, text: any, reason: any, options?: any) => boolean;
   scheduleToolAuthorizationFallback: (sessionPath: any, ss: any) => void;
   scheduleToolFinalizationFallback: (sessionPath: any, ss: any) => void;
@@ -258,7 +258,7 @@ export function createHubEventForwarder({
         }
         ss.hasError = true;
         if (isActive) broadcast({ type: "error", message });
-        closeStreamAfterError(sessionPath, ss);
+        closeStreamAfterError(sessionPath, ss, "model_tool_error", String(message));
       }
     } else if (event.type === "tool_execution_start") {
       if (!ss) return;

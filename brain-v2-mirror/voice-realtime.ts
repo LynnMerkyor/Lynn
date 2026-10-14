@@ -4,7 +4,7 @@ import WebSocket from 'ws';
 type JsonObject = Record<string, unknown>;
 type WsData = Buffer | ArrayBuffer | Buffer[] | Uint8Array;
 
-const DEFAULT_ENDPOINT = 'wss://api.stepfun.com/v1/realtime/stateless';
+const DEFAULT_ENDPOINT = 'wss://api.stepfun.com/step_plan/v1/realtime';
 const DEFAULT_MODEL = 'stepaudio-2.5-realtime';
 const DEFAULT_VOICE = 'jingdiannvsheng';
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -32,11 +32,9 @@ function normalizeRealtimeEndpoint(value: string): string {
   if (/^https:\/\//i.test(endpoint)) endpoint = endpoint.replace(/^https:/i, 'wss:');
   if (/^http:\/\//i.test(endpoint)) endpoint = endpoint.replace(/^http:/i, 'ws:');
   endpoint = endpoint.replace(/\/+$/, '');
-  endpoint = endpoint
-    .replace(/\/step_plan\/v1(?:\/chat\/completions)?$/i, '')
-    .replace(/\/v1\/chat\/completions$/i, '');
-  if (!/\/v1\/realtime\/stateless$/i.test(endpoint)) {
-    endpoint = /\/v1$/i.test(endpoint) ? `${endpoint}/realtime/stateless` : `${endpoint}/v1/realtime/stateless`;
+  endpoint = endpoint.replace(/\/chat\/completions$/i, '');
+  if (!/\/v1\/realtime(?:\/stateless)?$/i.test(endpoint)) {
+    endpoint = /\/v1$/i.test(endpoint) ? `${endpoint}/realtime` : `${endpoint}/v1/realtime`;
   }
   return endpoint;
 }
@@ -192,14 +190,22 @@ async function runRealtime(body: JsonObject, input: { mode: 'asr' | 'tts'; audio
             },
           });
         } else {
+          const history = userTextHistory(`请逐字自然朗读以下文本,只朗读冒号后的内容:\n${input.text || ''}`);
+          const stateless = /\/realtime\/stateless$/i.test(config.endpoint);
+          if (!stateless) {
+            await sendJson(ws, {
+              event_id: eventId(), type: 'session.update',
+              session: { modalities: ['audio', 'text'], voice: config.voice, input_audio_format: 'pcm16', output_audio_format: 'pcm16', turn_detection: null },
+            });
+            await sendJson(ws, { event_id: eventId(), type: 'conversation.item.create', item: history[0] });
+          }
           await sendJson(ws, {
             event_id: eventId(),
             type: 'response.create',
             response: {
               modalities: ['audio', 'text'],
-              voice: config.voice,
               instructions: '你是一个纯文本朗读器。你的唯一任务是把用户要求朗读的文本原样读出来。不要回答、解释、改写、翻译、补充或加入闲聊。',
-              history: userTextHistory(`请逐字自然朗读以下文本,只朗读冒号后的内容:\n${input.text || ''}`),
+              ...(stateless ? { voice: config.voice, history } : {}),
             },
           });
         }
@@ -234,9 +240,74 @@ async function runRealtime(body: JsonObject, input: { mode: 'asr' | 'tts'; audio
 }
 
 export async function voiceAsr(body: JsonObject, signal?: AbortSignal): Promise<JsonObject> {
-  void body;
-  void signal;
-  throw new Error('StepFun Realtime stateless returns assistant response transcripts, not standalone user ASR transcripts');
+  const config = resolveConfig(body);
+  if (!config.apiKey) throw new Error('StepFun ASR API key is not configured');
+  const encoded = stringValue(body.audio_pcm_base64) || stringValue(body.audioPcmBase64);
+  const audio = encoded ? Buffer.from(encoded, 'base64') : decodeAudioPayload(body);
+  if (!audio.length) throw new Error('missing audio');
+  const isWav = audio.length >= 44 && audio.subarray(0, 4).toString() === 'RIFF' && audio.subarray(8, 12).toString() === 'WAVE';
+  if (isWav && (audio.readUInt16LE(20) !== 1 || audio.readUInt16LE(22) !== 1 || audio.readUInt16LE(34) !== 16)) throw new Error('StepFun ASR requires mono PCM16 audio');
+  const mimeRate = stringValue(body.mime_type).match(/rate=(\d+)/i)?.[1];
+  const rate = isWav ? audio.readUInt32LE(24) : Number(body.sample_rate ?? body.sampleRate ?? mimeRate ?? 24000);
+  if (!Number.isInteger(rate) || rate < 8000 || rate > 48000) throw new Error('invalid audio sample rate');
+  const pcm = isWav ? extractPcm16FromWav(audio) : audio;
+  if (!pcm.length || pcm.length % 2) throw new Error('invalid PCM16 audio');
+  const endpoint = env('LYNN_STEP_ASR_ENDPOINT') || config.endpoint
+    .replace(/^wss:/i, 'https:').replace(/^ws:/i, 'http:')
+    .replace(/\/realtime(?:\/stateless)?$/i, '/audio/asr/sse');
+  const language = stringValue(body.language);
+  const abortSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(config.timeoutMs)]) : AbortSignal.timeout(config.timeoutMs);
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify({ audio: { data: pcm.toString('base64'), input: {
+      transcription: { model: env('LYNN_STEP_ASR_MODEL') || 'stepaudio-2.5-asr', ...(language && language !== 'auto' ? { language } : {}), enable_itn: true },
+      format: { type: 'pcm', codec: 'pcm_s16le', rate, bits: 16, channel: 1 },
+    } } }),
+    signal: abortSignal,
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`StepFun ASR HTTP ${response.status}`);
+  }
+  if (!response.body) throw new Error('StepFun ASR returned no stream');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let text = '';
+  let completed = false;
+  const consume = (frame: string) => {
+    const data = frame.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+    if (!data || data === '[DONE]') return;
+    const event = JSON.parse(data) as JsonObject;
+    if (event.type === 'error' || event.error) throw new Error('StepFun ASR returned an error event');
+    if (event.type === 'transcript.text.delta' && typeof event.delta === 'string') text += event.delta;
+    if (event.type === 'transcript.text.done') {
+      if (typeof event.text === 'string') text = event.text;
+      completed = true;
+    }
+  };
+  try {
+    while (!completed) {
+      const chunk = await reader.read();
+      buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+      buffer = buffer.replace(/\r\n/g, '\n');
+      let boundary;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1 && !completed) {
+        consume(buffer.slice(0, boundary));
+        buffer = buffer.slice(boundary + 2);
+      }
+      if (chunk.done) {
+        if (!completed && buffer.trim()) consume(buffer);
+        break;
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+  if (!completed || !text.trim()) throw new Error('StepFun ASR returned no completed user transcript');
+  return { ok: true, provider: 'stepfun-asr', text: text.trim(), language: language || 'auto' };
 }
 
 export async function voiceTts(body: JsonObject, signal?: AbortSignal): Promise<JsonObject> {

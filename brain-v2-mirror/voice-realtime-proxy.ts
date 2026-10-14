@@ -26,7 +26,7 @@ import crypto from 'node:crypto';
 // at runtime, that mismatch crashed the brain once).
 import WebSocket, { WebSocketServer } from 'ws';
 
-const STATEFUL_ENDPOINT = 'wss://api.stepfun.com/v1/realtime';
+const STATEFUL_ENDPOINT = 'wss://api.stepfun.com/step_plan/v1/realtime';
 const DEFAULT_MODEL = 'stepaudio-2.5-realtime';
 const DEFAULT_VOICE = 'jingdiannvsheng';
 const SAMPLE_RATE = 24_000;
@@ -47,9 +47,9 @@ function resolveRealtimeKey() {
 }
 
 function resolveRealtimeEndpoint() {
-  const base = env('LYNN_STEP_REALTIME_ENDPOINT', 'STEPFUN_REALTIME_ENDPOINT');
+  const base = env('LYNN_STEP_REALTIME_ENDPOINT', 'STEPFUN_REALTIME_ENDPOINT', 'STEP37_BASE', 'STEPFUN_BASE_URL', 'STEP_BASE');
   if (base) {
-    let e = base.replace(/^https:/i, 'wss:').replace(/^http:/i, 'ws:').replace(/\/+$/, '');
+    let e = base.replace(/^https:/i, 'wss:').replace(/^http:/i, 'ws:').replace(/\/+$/, '').replace(/\/chat\/completions$/i, '');
     if (!/\/v1\/realtime$/i.test(e)) e = /\/v1$/i.test(e) ? `${e}/realtime` : `${e}/v1/realtime`;
     return e;
   }
@@ -120,8 +120,8 @@ export function bridgeRealtimeSession(clientWs, opts = {}) {
 
   const teardown = (err) => {
     if (closed) return;
-    closed = true;
     if (err) sendClientJson({ type: 'error', message: err.message || String(err) });
+    closed = true;
     try { upstream?.close(); } catch { /* best-effort */ }
     try { clientWs.close(); } catch { /* best-effort */ }
     if (typeof opts.onClose === 'function') { try { opts.onClose(err); } catch { /* ignore */ } }

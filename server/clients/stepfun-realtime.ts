@@ -32,7 +32,7 @@ interface StepRealtimeResult {
   messages: unknown[];
 }
 
-const DEFAULT_ENDPOINT = "wss://api.stepfun.com/v1/realtime/stateless";
+const DEFAULT_ENDPOINT = "wss://api.stepfun.com/step_plan/v1/realtime";
 const DEFAULT_MODEL = "stepaudio-2.5-realtime";
 const DEFAULT_VOICE = "jingdiannvsheng";
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -64,7 +64,8 @@ export function resolveStepFunRealtimeConfig(config: StepRealtimeConfig = {}) {
       || stringValue(process.env.LYNN_STEP_REALTIME_ENDPOINT)
       || stringValue(process.env.STEPFUN_REALTIME_ENDPOINT)
       || stringValue(process.env.STEP37_BASE)
-      || stringValue(process.env.STEPFUN_BASE_URL),
+      || stringValue(process.env.STEPFUN_BASE_URL)
+      || stringValue(process.env.STEP_BASE),
   );
   return {
     apiKey,
@@ -93,12 +94,10 @@ function normalizeRealtimeEndpoint(value: string): string {
   if (/^https:\/\//i.test(endpoint)) endpoint = endpoint.replace(/^https:/i, "wss:");
   if (/^http:\/\//i.test(endpoint)) endpoint = endpoint.replace(/^http:/i, "ws:");
   endpoint = endpoint.replace(/\/+$/, "");
-  endpoint = endpoint
-    .replace(/\/step_plan\/v1(?:\/chat\/completions)?$/i, "")
-    .replace(/\/v1\/chat\/completions$/i, "");
-  if (!/\/v1\/realtime\/stateless$/i.test(endpoint)) {
-    if (/\/v1$/i.test(endpoint)) endpoint = `${endpoint}/realtime/stateless`;
-    else endpoint = `${endpoint}/v1/realtime/stateless`;
+  endpoint = endpoint.replace(/\/chat\/completions$/i, "");
+  if (!/\/v1\/realtime(?:\/stateless)?$/i.test(endpoint)) {
+    if (/\/v1$/i.test(endpoint)) endpoint = `${endpoint}/realtime`;
+    else endpoint = `${endpoint}/v1/realtime`;
   }
   return endpoint;
 }
@@ -177,10 +176,8 @@ export function prepareStepFunRealtimePcm(audio: Buffer): Buffer {
 }
 
 async function runStepFunRealtime(config: StepRealtimeConfig, input: {
-  audio?: Buffer;
   text?: string;
   signal?: AbortSignal;
-  mode: "asr" | "tts";
 }): Promise<StepRealtimeResult> {
   const resolved = resolveStepFunRealtimeConfig(config);
   if (!resolved.apiKey) throw new Error("StepFun Realtime API key is not configured");
@@ -213,28 +210,25 @@ async function runStepFunRealtime(config: StepRealtimeConfig, input: {
 
     ws.on("open", async () => {
       try {
-        if (input.mode === "asr") {
-          const pcm = prepareStepFunRealtimePcm(input.audio || Buffer.alloc(0));
-          await sendJson(ws, { type: "input_audio_buffer.append", audio: pcm.toString("base64") });
-          await sendJson(ws, { type: "input_audio_buffer.commit" });
+        const stateless = /\/realtime\/stateless$/i.test(resolved.endpoint);
+        if (!stateless) {
           await sendJson(ws, {
-            type: "response.create",
-            response: {
-              modalities: ["text"],
-              instructions: "请只转写用户音频,不要回答、解释或改写。",
-            },
+            type: "session.update",
+            session: { modalities: ["audio", "text"], voice: resolved.voice, input_audio_format: "pcm16", output_audio_format: "pcm16", turn_detection: null },
           });
-        } else {
           await sendJson(ws, {
-            type: "response.create",
-            response: {
-              modalities: ["audio", "text"],
-              voice: resolved.voice,
-              instructions: "请按原文自然朗读,不要改写内容。",
-              history: [{ role: "user", content: input.text || "" }],
-            },
+            type: "conversation.item.create",
+            item: { type: "message", role: "user", content: [{ type: "input_text", text: input.text || "" }] },
           });
         }
+        await sendJson(ws, {
+          type: "response.create",
+          response: {
+            modalities: ["audio", "text"],
+            instructions: "请按原文自然朗读,不要改写内容。",
+            ...(stateless ? { voice: resolved.voice, history: [{ role: "user", content: input.text || "" }] } : {}),
+          },
+        });
       } catch (err) {
         finish(err instanceof Error ? err : new Error(String(err)));
       }
@@ -271,19 +265,70 @@ export function createStepFunRealtimeAsrProvider(config: StepRealtimeConfig = {}
     async transcribe(audioBuffer: unknown, opts: Record<string, unknown> = {}) {
       const audio = bufferFromInput(audioBuffer);
       if (!audio.length) throw new Error("StepFun Realtime ASR received empty audio");
-      const result = await runStepFunRealtime(config, {
-        mode: "asr",
-        audio,
-        signal: opts.signal as AbortSignal | undefined,
+      const resolved = resolveStepFunRealtimeConfig(config);
+      if (!resolved.apiKey) throw new Error("StepFun ASR API key is not configured");
+      const pcm = prepareStepFunRealtimePcm(audio);
+      if (!pcm.length || pcm.length % 2) throw new Error("StepFun ASR requires PCM16 audio");
+      const endpoint = resolved.endpoint.replace(/^wss:/i, "https:").replace(/^ws:/i, "http:")
+        .replace(/\/realtime(?:\/stateless)?$/i, "/audio/asr/sse");
+      const upstream = opts.signal as AbortSignal | undefined;
+      const signal = upstream ? AbortSignal.any([upstream, AbortSignal.timeout(resolved.timeoutMs)]) : AbortSignal.timeout(resolved.timeoutMs);
+      signal.throwIfAborted();
+      const language = stringValue(opts.language);
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${resolved.apiKey}`, "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify({ audio: { data: pcm.toString("base64"), input: {
+          transcription: { model: "stepaudio-2.5-asr", enable_itn: true, ...(language && language !== "auto" ? { language } : {}) },
+          format: { type: "pcm", codec: "pcm_s16le", rate: STEP_SAMPLE_RATE, bits: 16, channel: 1 },
+        } } }),
+        signal,
       });
-      const transcript = result.text.trim();
-      if (!transcript) throw new Error("StepFun Realtime ASR returned no transcript");
+      if (!response.ok) { await response.body?.cancel(); throw new Error(`StepFun ASR HTTP ${response.status}`); }
+      if (!response.body) throw new Error("StepFun ASR returned no stream");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      const messages: unknown[] = [];
+      let buffer = "";
+      let transcript = "";
+      let completed = false;
+      const consume = (frame: string) => {
+        const data = frame.split("\n").filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
+        if (!data || data === "[DONE]") return;
+        const event = JSON.parse(data);
+        if (event.type === "error" || event.error) throw new Error("StepFun ASR returned an error event");
+        if (event.type === "transcript.text.delta" && typeof event.delta === "string") { transcript += event.delta; messages.push(event); }
+        if (event.type === "transcript.text.done") {
+          if (typeof event.text === "string") transcript = event.text;
+          completed = true;
+          messages.push(event);
+        }
+      };
+      try {
+        while (!completed) {
+          const chunk = await reader.read();
+          signal.throwIfAborted();
+          buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+          buffer = buffer.replace(/\r\n/g, "\n");
+          let boundary;
+          while ((boundary = buffer.indexOf("\n\n")) !== -1 && !completed) {
+            consume(buffer.slice(0, boundary));
+            buffer = buffer.slice(boundary + 2);
+          }
+          if (chunk.done) { if (!completed && buffer.trim()) consume(buffer); break; }
+        }
+      } finally {
+        await reader.cancel().catch(() => {});
+        reader.releaseLock();
+      }
+      transcript = transcript.trim();
+      if (!completed || !transcript) throw new Error("StepFun ASR returned no completed user transcript");
       return {
         provider: "stepfun-realtime",
         text: transcript,
         transcript,
         language: typeof opts.language === "string" ? opts.language : "auto",
-        raw: result.messages,
+        raw: messages,
       };
     },
     async health() {
@@ -299,7 +344,6 @@ export function createStepFunRealtimeTtsProvider(config: StepRealtimeConfig = {}
     label: "StepFun Realtime TTS",
     async synthesize(text: string, opts: Record<string, unknown> = {}) {
       const result = await runStepFunRealtime(config, {
-        mode: "tts",
         text,
         signal: opts.signal as AbortSignal | undefined,
       });

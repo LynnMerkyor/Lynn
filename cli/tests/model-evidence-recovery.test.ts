@@ -90,7 +90,7 @@ describe("model evidence recovery", () => {
         "1",
       ]), "今晚世界杯有几场比赛", (event) => {
         events.push(event);
-      })).rejects.toThrow("Brain v2 当前没有可用 provider");
+      })).rejects.toThrow("Brain 本轮所有模型路由均未完成请求");
     });
 
     const finished = events.find((event): event is Extract<CodeAgentEvent, { type: "task.finished" }> => event.type === "task.finished");

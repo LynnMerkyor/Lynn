@@ -103,7 +103,7 @@ export function terminalForGuiCloseReason(
 ): AgentRunFinishInput {
   const normalized = String(reason || "").toLowerCase();
   const partial = options.partial === true;
-  if (/hard_turn_timeout|authorization_timeout|\btimeout\b|timed_out/.test(normalized)) {
+  if (/hard_turn_timeout|authorization_timeout|\btimeout\b|(?:^|_)timeout(?:_|$)|timed_out/.test(normalized)) {
     return { code: "timed_out", message: String(reason || "timeout"), partial, resumable: true };
   }
   if (/cancel|interrupt|abort/.test(normalized)) {

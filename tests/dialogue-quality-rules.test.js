@@ -50,6 +50,8 @@ describe("dialogue quality rules", () => {
     };
     expect(hasVerifiedNoFixturePredictionAnswer(result)).toBe(true);
     expect(hasVerifiedNoFixturePredictionAnswer({ ...result, assistantText: "今晚没有比赛，所以不存在可以预测的比分。" })).toBe(true);
+    expect(hasVerifiedNoFixturePredictionAnswer({ ...result, assistantText: "今晚没有世界杯比赛，所以没有比分可以预测。" })).toBe(true);
+    expect(hasVerifiedNoFixturePredictionAnswer({ ...result, toolEvents: [], assistantText: "今晚没有世界杯比赛，所以没有比分可以预测。" })).toBe(false);
     expect(hasVerifiedNoFixturePredictionAnswer({ ...result, toolEvents: [] })).toBe(false);
     expect(hasVerifiedNoFixturePredictionAnswer({ ...result, toolEvents: [{ ...result.toolEvents[0], ok: false }] })).toBe(false);
     expect(hasVerifiedNoFixturePredictionAnswer({ ...result, currentDate: "2026-10-11" })).toBe(false);
@@ -125,6 +127,20 @@ describe("dialogue quality rules", () => {
     expect(omitVerifiedSportsFetchWindows(wrongWindow, [event])).toBe(wrongWindow);
     const wrongClaim = "ESPN显示昨晚是2026-10-09至2026-10-11，没有比赛。";
     expect(omitVerifiedSportsFetchWindows(wrongClaim, [event])).toBe(wrongClaim);
+  });
+
+  it('does not label a verified retrieval interval as the date of a quoted no-game conclusion', () => {
+    const event = { name: 'sports_score', event: 'end', ok: true, details: [
+      'directSourceStatus: ok', 'dateRange: 20261007-20261014',
+      'source: https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20261006-20261015',
+    ] };
+    const text = '昨晚（10月13日晚至10月14日）没有比赛。“昨晚无赛”的结论覆盖检索区间 10月7日至10月14日，该区间赛事为0场。';
+    const normalized = omitVerifiedSportsFetchWindows(text, [event]);
+    expect(containsMislabeledRelativeDate('昨晚比分', normalized, '2026-10-14')).toBe(false);
+    expect(normalized).toContain('10月13日');
+    expect(omitVerifiedSportsFetchWindows(text, [])).toBe(text);
+    expect(omitVerifiedSportsFetchWindows(text.replace('10月7日至', '10月5日至'), [event])).toContain('10月5日至');
+    expect(containsMislabeledRelativeDate('昨晚比分', normalized.replace('10月13日', '10月11日'), '2026-10-14')).toBe(true);
   });
 
   it("recognizes verified yearless query buffers without relabeling tonight", () => {

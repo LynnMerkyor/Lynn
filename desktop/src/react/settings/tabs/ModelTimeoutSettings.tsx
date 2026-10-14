@@ -47,7 +47,7 @@ export function ModelTimeoutSettings() {
   return (
     <form onSubmit={save} aria-label="模型请求超时" className={styles['settings-section']}>
       <h3>模型请求超时</h3>
-      <p>首段包含连接和首个流数据块的等待；收到任何数据块（含思考、工具参数、心跳）后，改为空闲计时，每个新数据块重置。默认 300 / 120 秒，总时限关闭，适合本地长推理。</p>
+      <p>首段包含连接和首个流数据块的等待；收到任何数据块（含思考、工具参数、心跳）后，改为空闲计时，每个新数据块重置。首段和空闲默认均为 600 秒（10 分钟），总时限关闭；持续输出不会在 10 分钟时被截断。</p>
       {fields.map(([key, label]) => (
         <label key={key} style={{ display: 'block', marginBottom: 8 }}>
           {label}{' '}

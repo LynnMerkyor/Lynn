@@ -5,7 +5,8 @@
 //
 // 2026-05-23 重构: 砍掉 ~500 行 synthesis + pseudo-tool detection + buffered content 干涉。
 
-import { providerOrderForCapability, getProvider, isInCooldown, markUnhealthy, clearUnhealthy } from './provider-registry.js';
+import { providerOrderForCapability, getProvider, isInCooldown, isRecoveryProbeAllowed, markUnhealthy, clearUnhealthy } from './provider-registry.js';
+import { createProviderAttemptSignal } from './provider-timeouts.js';
 import { getAdapter } from './wire-adapter/index.js';
 import { isServerTool, executeServerTool, mergeWithServerTools, shouldPreferOfficialModelSearchTool, shouldSuppressToolsForCurrentTurn, shouldSuppressWebToolsForInternalLynnUx } from './tool-exec/index.js';
 import { applySearchContext, createSearchRequestCache, type SearchRequestCache } from './search-context.js';
@@ -66,19 +67,6 @@ function shouldEchoReasoningContentForContinuation(result: RunRoundResult): bool
   return shouldEchoReasoningContent(result.providerId)
     || result.sawReasoning
     || !!String(result.reasoningAccum || '').trim();
-}
-
-function looksLikeIncompleteVisibleStop(result: RunRoundResult): boolean {
-  if (result.finishReason !== 'stop' || result.toolCalls.length > 0) return false;
-  // Only retry while content is still buffered. Once a client has seen deltas,
-  // a second answer would duplicate text and be more confusing than the truncation.
-  if (!result.bufferedContentChunks?.length) return false;
-  const visible = String(result.contentAccum || '').trim();
-  const reasoning = String(result.reasoningAccum || '').trim();
-  if (visible.length <= 8 || visible.length >= 48) return false;
-  if (reasoning.length < 160 || reasoning.length < visible.length * 4) return false;
-  if (/[。！？.!?；;：:、，,）)】\]}'"’”>`]$/u.test(visible)) return false;
-  return true;
 }
 
 type ExplicitLengthMiss = {
@@ -163,7 +151,7 @@ function httpStatusFromError(error: unknown, message = errorMessage(error)): num
     : null;
   const direct = Number(record?.status ?? record?.statusCode ?? record?.httpStatus);
   if (Number.isInteger(direct) && direct >= 100 && direct <= 599) return direct;
-  const match = String(message || '').match(/\b(401|403|408|409|425|429|5\d\d)\b/u);
+  const match = String(message || '').match(/\b(401|402|403|408|409|425|429|5\d\d)\b/u);
   return match ? Number(match[1]) : null;
 }
 
@@ -171,6 +159,7 @@ function classifyProviderFallbackReason(error: ProviderError, message = errorMes
   const status = httpStatusFromError(error, message);
   const code = String(error.code || '').toUpperCase();
   const text = `${code} ${message || ''}`;
+  if (status === 402 || /insufficient[_ -]?(?:balance|quota)|billing unavailable|credit balance.*(?:low|exhausted)/i.test(text)) return 'error-billing';
   if (status === 401 || status === 403 || /auth|unauthori[sz]ed|forbidden|invalid api key|api[-_ ]?key/i.test(text)) {
     return 'error-auth';
   }
@@ -1150,40 +1139,6 @@ function providerCanAttemptRound(provider: Provider, capabilityRequired: Capabil
   return true;
 }
 
-function createProviderAttemptSignal(
-  provider: Provider,
-  upstreamSignal?: AbortSignal,
-  capabilityRequired?: CapabilityRequired,
-  timeoutCapMs?: number,
-): { signal?: AbortSignal; cleanup: () => void } {
-  const configuredTimeoutMs = Number(provider.timeout_ms || 0);
-  const isMultimodal = !!(capabilityRequired?.vision || capabilityRequired?.audio || capabilityRequired?.video);
-  const providerTimeoutMs = isMultimodal
-    ? Math.max(configuredTimeoutMs, positiveEnvNumber('BRAIN_V2_MULTIMODAL_PROVIDER_TIMEOUT_MS', 60_000))
-    : configuredTimeoutMs;
-  const timeoutMs = Number.isFinite(timeoutCapMs) && Number(timeoutCapMs) > 0
-    ? Math.min(providerTimeoutMs || Number(timeoutCapMs), Number(timeoutCapMs))
-    : providerTimeoutMs;
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    return { signal: upstreamSignal, cleanup: () => {} };
-  }
-  const ctrl = new AbortController();
-  const abortFromUpstream = (): void => ctrl.abort(upstreamSignal?.reason);
-  if (upstreamSignal?.aborted) {
-    abortFromUpstream();
-  } else {
-    upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true });
-  }
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  return {
-    signal: ctrl.signal,
-    cleanup: () => {
-      clearTimeout(timer);
-      upstreamSignal?.removeEventListener('abort', abortFromUpstream);
-    },
-  };
-}
-
 function recoverCooldownLockedRoute({
   capabilityRequired,
   tools,
@@ -1200,6 +1155,7 @@ function recoverCooldownLockedRoute({
   const candidates: ProviderId[] = [];
   for (const providerId of providerOrder || providerOrderForCapability(capabilityRequired)) {
     if (skipProviders?.has(providerId)) continue;
+    if (!isRecoveryProbeAllowed(providerId)) continue;
     const provider = getProvider(providerId);
     if (!provider || !providerCanAttemptRound(provider, capabilityRequired, tools)) continue;
     candidates.push(providerId);
@@ -1351,7 +1307,7 @@ async function runRound({
       }
     };
     try {
-      const providerAttempt = createProviderAttemptSignal(provider, signal, capabilityRequired, attemptTimeoutCapMs);
+      const providerAttempt = createProviderAttemptSignal(provider, signal, !!(capabilityRequired?.vision || capabilityRequired?.audio || capabilityRequired?.video), attemptTimeoutCapMs);
       log && log('info', `→ provider ${providerId}`);
       try {
         const searchContext = augmentContext
@@ -1388,7 +1344,10 @@ async function runRound({
             { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined },
           );
         }
-        for await (const chunk of adapter({ provider, messages: effectiveMessages, tools, signal: providerAttempt.signal, log, extraBody, reasoningEffort })) {
+        providerAttempt.start();
+        for await (const chunk of adapter({ provider, messages: effectiveMessages, tools, signal: providerAttempt.signal, onActivity: providerAttempt.activity, log, extraBody, reasoningEffort })) {
+          providerAttempt.signal.throwIfAborted();
+          providerAttempt.activity();
           anyEmit = true;
           if (chunk.type === 'content') {
             await emitSynthesisContentDelta(chunk.delta);
@@ -1432,6 +1391,9 @@ async function runRound({
           }
           await onChunk(chunk, { providerId, fallback_from: fallbackChain.length > 0 ? [...fallbackChain] : undefined });
         }
+        providerAttempt.signal.throwIfAborted();
+      } catch (error) {
+        throw providerAttempt.timeoutError() || error;
       } finally {
         providerAttempt.cleanup();
       }
@@ -1474,6 +1436,7 @@ async function runRound({
         sawReasoning,
       };
     } catch (e) {
+      signal?.throwIfAborted();
       const err = e as ProviderError;
       const message = errorMessage(e);
       errors.push({ providerId, error: message });
@@ -1483,7 +1446,9 @@ async function runRound({
       log && log('warn', logMsg);
       const fallbackReason = classifyProviderFallbackReason(err, message);
       const cooldownMs = err.cooldownMs
-        ?? (fallbackReason === 'error-timeout'
+        ?? (fallbackReason === 'error-billing'
+          ? positiveEnvNumber('BRAIN_V2_PROVIDER_BILLING_COOLDOWN_MS', 1_800_000)
+          : fallbackReason === 'error-timeout'
           ? positiveEnvNumber('BRAIN_V2_PROVIDER_TIMEOUT_COOLDOWN_MS', 60_000)
           : null);
       markUnhealthy(providerId, `${fallbackReason}: ${message}`, cooldownMs);
@@ -1764,7 +1729,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       ];
       const recoveryProviderId = Array.from(new Set(recoveryOrder)).find((candidateId) => {
         const candidate = getProvider(candidateId);
-        return !!candidate && providerCanAttemptRound(candidate, capabilityRequired, []);
+        return !!candidate && isRecoveryProbeAllowed(candidateId) && providerCanAttemptRound(candidate, capabilityRequired, []);
       });
       if (
         lastChanceRecoveryUsed
@@ -1835,16 +1800,6 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
       workingMessages.push({
         role: 'user',
         content: '上一个候选模型没有给出可见正文。请接手并直接给出最终答案;如证据不足,明确说明缺少哪些信息。',
-      });
-      continue;
-    }
-
-    if (looksLikeIncompleteVisibleStop(result)) {
-      log && log('warn', `provider ${lastProviderId} stopped with an incomplete buffered answer; hand off to next provider`);
-      skippedProviders.add(result.providerId);
-      workingMessages.push({
-        role: 'user',
-        content: '上一个候选模型只返回了没有句末的半句话。请忽略那段残缺正文，从头完整回答原问题；不要解释接手过程。',
       });
       continue;
     }

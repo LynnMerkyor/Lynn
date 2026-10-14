@@ -2,7 +2,7 @@
 
 Terminal and worker-runner interface for Lynn v0.87.2.
 
-V0.87.2 supports long-running reasoning streams with separate first-chunk and idle deadlines (300s / 120s by default, no model-wide deadline). Configure them in GUI model settings; use `Lynn doctor --offline` to see the CLI process's effective values and environment sources. Complete short answers no longer trigger punctuation-based continuations.
+V0.87.2 supports long-running reasoning streams with separate first-chunk and idle deadlines (600s / 600s by default, no model-wide deadline). Continued output can run beyond ten minutes. Configure them in GUI model settings; saved settings and explicit environment overrides remain authoritative. Use `Lynn doctor --offline` to see the CLI process's effective values and environment sources. Complete short answers no longer trigger punctuation-based continuations.
 
 This package is intentionally thin. It handles terminal UX, worker JSONL, local
 file/shell orchestration, and headless agent contracts. Model routing defaults

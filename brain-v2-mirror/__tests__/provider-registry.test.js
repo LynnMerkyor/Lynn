@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.hoisted(() => {
   process.env.STEP37_MODEL = 'step-5-preview';
 });
-import { getProvider, getProviderStatusSnapshot, PROVIDERS, providerOrderForCapability, providerOrderForReviewArbitration, universalOrder } from '../provider-registry.js';
+import { getProvider, getProviderStatusSnapshot, PROVIDERS, providerOrderForCapability, providerOrderForReviewArbitration, universalOrder, markUnhealthy, clearUnhealthy, isRecoveryProbeAllowed } from '../provider-registry.js';
 
 function withSavedEnv(keys, fn) {
   const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
@@ -17,6 +17,35 @@ function withSavedEnv(keys, fn) {
 }
 
 describe('provider registry', () => {
+  it('reports effective Step billing channel and stream deadlines without credentials', () => {
+    const step = getProvider('step-3.7-flash');
+    const previousEndpoint = step.endpoint;
+    try {
+      step.endpoint = 'https://api.stepfun.com/step_plan/v1';
+      let status = getProviderStatusSnapshot().providers.find(entry => entry.id === step.id);
+      expect(status.billingChannel).toBe('step-plan');
+      expect(status.timeoutPolicy).toEqual({ firstChunkMs: 600_000, idleMs: 600_000, totalMs: 0 });
+      expect(status).not.toHaveProperty('apiKey');
+      step.endpoint = 'https://api.stepfun.com/v1';
+      status = getProviderStatusSnapshot().providers.find(entry => entry.id === step.id);
+      expect(status.billingChannel).toBe('pay-as-you-go');
+    } finally { step.endpoint = previousEndpoint; }
+  });
+
+  it('does not allow recovery probes to bypass active billing or auth cooldowns', () => {
+    const id = 'deepseek-chat';
+    try {
+      markUnhealthy(id, 'error-billing: insufficient balance', 1000);
+      expect(isRecoveryProbeAllowed(id)).toBe(false);
+      expect(getProviderStatusSnapshot().providers.find(entry => entry.id === id).cooldown).toMatchObject({ reasonCode: 'error-billing' });
+      markUnhealthy(id, 'error-auth: unavailable', 1000);
+      expect(isRecoveryProbeAllowed(id)).toBe(false);
+      markUnhealthy(id, 'error-timeout: idle', 1000);
+      expect(isRecoveryProbeAllowed(id)).toBe(true);
+      clearUnhealthy(id);
+      expect(isRecoveryProbeAllowed(id)).toBe(true);
+    } finally { clearUnhealthy(id); }
+  });
   it('keeps production text routing on StepFun, then GLM-5.3-Flash, then DS V4 Flash', () => {
     expect(universalOrder.map(String).slice(0, 7)).toEqual([
       'step-3.7-flash',

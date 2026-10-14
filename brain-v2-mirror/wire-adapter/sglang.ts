@@ -17,7 +17,7 @@ type SGLangRequestBody = Record<string, unknown> & {
   tool_choice?: 'auto';
 };
 
-export async function* call({ provider, messages, tools, signal, extraBody, reasoningEffort }: WireAdapterOptions): AsyncGenerator<StreamChunk> {
+export async function* call({ provider, messages, tools, signal, onActivity, extraBody, reasoningEffort }: WireAdapterOptions): AsyncGenerator<StreamChunk> {
   const {
     chat_template_kwargs: callerTemplateKwargs,
     ...restExtraBody
@@ -56,7 +56,7 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
     const errText = await resp.text().catch(() => '');
     throw new Error('sglang HTTP ' + resp.status + ' ' + errText.slice(0, 200));
   }
-  yield* parseOpenAISSE(resp.body);
+  yield* parseOpenAISSE(resp.body, onActivity);
 }
 
 export const wireMeta = {

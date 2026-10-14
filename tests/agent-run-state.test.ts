@@ -29,6 +29,7 @@ describe("GUI agent run state bridge", () => {
   });
 
   it("maps forced close reasons to stable terminal semantics", () => {
+    expect(terminalForGuiCloseReason("model_request_timeout", { forced: true })).toMatchObject({ code: "timed_out", resumable: true });
     expect(terminalForGuiCloseReason("hard_turn_timeout", { partial: true, forced: true })).toMatchObject({
       code: "timed_out",
       resumable: true,

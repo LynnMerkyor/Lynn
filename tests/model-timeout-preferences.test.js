@@ -44,7 +44,7 @@ it('keeps the previous in-memory and persisted settings when disk writing fails'
   });
   expect(response.status).toBe(500);
   expect(prefs.getPreferences()).toEqual({ locale: 'en' });
-  expect(readModelCallTimeouts().firstChunkMs).toBe(300_000);
+  expect(readModelCallTimeouts().firstChunkMs).toBe(600_000);
 });
 
 it('exposes actual Brain, bridge, headers and turn sources without secrets', async () => {

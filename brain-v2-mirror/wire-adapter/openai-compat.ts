@@ -116,7 +116,13 @@ function stripImageContent(messages?: ChatMessage[]): ChatMessage[] | undefined 
   return changed ? out : messages;
 }
 
-export async function* call({ provider, messages, tools, signal, extraBody, reasoningEffort }: WireAdapterOptions): AsyncGenerator<StreamChunk> {
+function providerHttpError(providerId: string, status: number, body: string): Error {
+  const protectedStatus = status === 401 || status === 403 || status === 402;
+  const detail = status === 402 ? 'billing unavailable: insufficient balance or subscription quota' : protectedStatus ? 'authentication failed' : body.slice(0, 200);
+  return Object.assign(new Error(`${providerId} HTTP ${status} ${detail}`), { status, suppressBody: status === 401 || status === 403 });
+}
+
+export async function* call({ provider, messages, tools, signal, onActivity, extraBody, reasoningEffort }: WireAdapterOptions): AsyncGenerator<StreamChunk> {
   const effectiveReasoningEffort =
     provider.default_reasoning_effort && (!reasoningEffort || reasoningEffort === 'auto')
       ? provider.default_reasoning_effort
@@ -205,19 +211,19 @@ export async function* call({ provider, messages, tools, signal, extraBody, reas
       body.messages = sanitizeMessagesForWire(stripImageContent(messages));
       resp = await postChat(body);
     } else {
-      throw new Error(provider.id + ' HTTP ' + resp.status + ' ' + errText.slice(0, 200));
+      throw providerHttpError(provider.id, resp.status, errText);
     }
   }
   if (!resp.ok) {
     const errText = await resp.text().catch(() => '');
-    throw new Error(provider.id + ' HTTP ' + resp.status + ' ' + errText.slice(0, 200));
+    throw providerHttpError(provider.id, resp.status, errText);
   }
   if (toolNameRestore) {
-    for await (const chunk of parseOpenAISSE(resp.body)) {
+    for await (const chunk of parseOpenAISSE(resp.body, onActivity)) {
       yield restoreToolNameInChunk(chunk, toolNameRestore);
     }
   } else {
-    yield* parseOpenAISSE(resp.body);
+    yield* parseOpenAISSE(resp.body, onActivity);
   }
 }
 

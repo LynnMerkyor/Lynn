@@ -37,10 +37,14 @@ describe("brain render usage summary", () => {
 });
 
 describe("formatBrainErrorForHuman", () => {
-  it("turns all-providers-failed into an actionable setup hint", () => {
+  it("distinguishes possible provider failures without claiming a missing key", () => {
     const text = formatBrainErrorForHuman("all providers failed");
-    expect(text).toContain("provider");
-    expect(text).toContain("Lynn providers set --preset stepfun");
+    expect(text).toContain("超时");
+    expect(text).toContain("余额不足");
+    expect(text).toContain("认证权限");
+    expect(text).toContain("Lynn doctor --offline");
+    expect(text).not.toContain("路由在线");
+    expect(text).not.toContain("providers set --preset stepfun");
   });
 });
 

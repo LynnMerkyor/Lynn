@@ -5,8 +5,8 @@ export interface ModelCallTimeouts {
 }
 
 export const DEFAULT_MODEL_CALL_TIMEOUTS: ModelCallTimeouts = {
-  firstChunkMs: 300_000,
-  idleMs: 120_000,
+  firstChunkMs: 600_000,
+  idleMs: 600_000,
   totalMs: 0,
 };
 

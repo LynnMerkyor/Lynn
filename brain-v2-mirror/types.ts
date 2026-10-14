@@ -80,6 +80,7 @@ export type FallbackReason =
   | 'ds-v4-flash-escape-rule'
   | 'error'
   | 'error-auth'
+  | 'error-billing'
   | 'error-rate-limit'
   | 'error-server'
   | 'error-timeout'
@@ -193,6 +194,7 @@ export interface WireAdapterOptions {
   messages?: ChatMessage[];
   tools?: ToolDefinition[] | null;
   signal?: AbortSignal;
+  onActivity?: () => void;
   log?: LogFn | null;
   extraBody?: Record<string, unknown> | null;
   reasoningEffort?: string | null;

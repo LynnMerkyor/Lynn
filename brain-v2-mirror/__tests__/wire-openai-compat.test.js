@@ -22,6 +22,11 @@ describe('OpenAI-compat wire adapter', () => {
     expect(JSON.parse(init.body).model).toBe('deepseek-v4-flash');
   });
 
+  it('preserves HTTP status and does not expose billing response bodies', async () => {
+    mockFetch(fail(402, 'Insufficient Balance private-account-value'));
+    await expect(drain(callOpenAI({ provider, messages: [] }))).rejects.toMatchObject({ status: 402, message: 'deepseek-chat HTTP 402 billing unavailable: insufficient balance or subscription quota' });
+  });
+
   it('does NOT include tools field when tools is null/empty', async () => {
     const f = mockFetch(ok(makeSSEBody(sseDone())));
     await drain(callOpenAI({ provider, messages: [{ role: 'user', content: 'q' }] }));

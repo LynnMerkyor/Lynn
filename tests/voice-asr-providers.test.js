@@ -176,6 +176,7 @@ describe("StepFun Realtime voice providers", () => {
   beforeEach(() => {
     FakeStepWebSocket.instances = [];
   });
+  afterEach(() => { vi.unstubAllGlobals(); });
 
   it("reuses the existing StepFun coding key/base env for realtime voice", () => {
     const oldKey = process.env.STEP37_KEY;
@@ -185,7 +186,7 @@ describe("StepFun Realtime voice providers", () => {
       process.env.STEP37_BASE = "https://api.stepfun.com/step_plan/v1";
       const cfg = resolveStepFunRealtimeConfig();
       expect(cfg.apiKey).toBe("sk-step37");
-      expect(cfg.endpoint).toBe("wss://api.stepfun.com/v1/realtime/stateless");
+      expect(cfg.endpoint).toBe("wss://api.stepfun.com/step_plan/v1/realtime");
     } finally {
       if (oldKey === undefined) delete process.env.STEP37_KEY;
       else process.env.STEP37_KEY = oldKey;
@@ -194,30 +195,49 @@ describe("StepFun Realtime voice providers", () => {
     }
   });
 
-  it("transcribes audio with StepFun Realtime when explicitly selected", async () => {
+  it("transcribes audio using independent ASR while preserving the Step Plan billing path", async () => {
+    const fetchMock = vi.fn(async () => new Response('data: {"type":"transcript.text.delta","delta":"你好"}\n\ndata: {"type":"transcript.text.done","text":"你好 Lynn"}\n\n'));
+    vi.stubGlobal("fetch", fetchMock);
     const p = createStepFunRealtimeAsrProvider({
       api_key: "sk-test",
-      endpoint: "https://api.stepfun.com",
+      endpoint: "https://api.stepfun.com/step_plan/v1",
       websocketCtor: FakeStepWebSocket,
       timeout_ms: 1000,
     });
-    const pending = p.transcribe(Buffer.alloc(3200), { language: "zh" });
-    const ws = FakeStepWebSocket.instances[0];
-    ws.open();
-
-    const result = await pending;
+    const result = await p.transcribe(Buffer.alloc(3200), { language: "zh" });
     expect(result).toMatchObject({
       provider: "stepfun-realtime",
       text: "你好 Lynn",
       transcript: "你好 Lynn",
       language: "zh",
     });
-    expect(ws.sent.map((evt) => evt.type)).toEqual([
-      "input_audio_buffer.append",
-      "input_audio_buffer.commit",
-      "response.create",
-    ]);
-    expect(ws.sent[2].response.modalities).toEqual(["text"]);
+    expect(FakeStepWebSocket.instances).toHaveLength(0);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.stepfun.com/step_plan/v1/audio/asr/sse");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).audio.input).toEqual({
+      transcription: { model: "stepaudio-2.5-asr", enable_itn: true, language: "zh" },
+      format: { type: "pcm", codec: "pcm_s16le", rate: 24000, bits: 16, channel: 1 },
+    });
+  });
+
+  it.each([
+    'data: {"type":"response.audio_transcript.done","transcript":"助手回答"}\n\n',
+    'data: {"type":"transcript.text.delta","delta":"未完成"}\n\n',
+    'data: {"type":"transcript.text.done","text":""}\n\n',
+  ])("rejects assistant events or incomplete ASR: %s", async stream => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream)));
+    await expect(createStepFunRealtimeAsrProvider({ api_key: "test" }).transcribe(Buffer.alloc(3200))).rejects.toThrow("no completed user transcript");
+  });
+
+  it("does not leak upstream ASR authentication error bodies", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("private provider details", { status: 403 })));
+    await expect(createStepFunRealtimeAsrProvider({ api_key: "test" }).transcribe(Buffer.alloc(3200))).rejects.toThrow(/^StepFun ASR HTTP 403$/);
+  });
+
+  it("honors cancellation before starting ASR", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(createStepFunRealtimeAsrProvider({ api_key: "test" }).transcribe(Buffer.alloc(3200), { signal: AbortSignal.abort(new Error("cancelled")) })).rejects.toThrow("cancelled");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("synthesizes StepFun Realtime audio as WAV for the existing voice pipeline", async () => {
@@ -234,8 +254,31 @@ describe("StepFun Realtime voice providers", () => {
     expect(result.provider).toBe("stepfun-realtime");
     expect(result.mimeType).toBe("audio/wav");
     expect(result.audio.subarray(0, 4).toString("ascii")).toBe("RIFF");
-    expect(ws.sent[0].response.modalities).toEqual(["audio", "text"]);
-    expect(ws.sent[0].response.voice).toBe("jingdiannvsheng");
+    expect(ws.sent.map(event => event.type)).toEqual(["session.update", "conversation.item.create", "response.create"]);
+    expect(ws.sent[0].session.voice).toBe("jingdiannvsheng");
+    expect(ws.sent[1].item.content).toEqual([{ type: "input_text", text: "你好" }]);
+    expect(ws.sent[2].response.modalities).toEqual(["audio", "text"]);
+    expect(ws.sent[2].response).not.toHaveProperty("history");
+  });
+
+  it.each([
+    ["https://api.stepfun.com/step_plan/v1/chat/completions", "wss://api.stepfun.com/step_plan/v1/realtime"],
+    ["https://api.stepfun.com/step_plan/v1/", "wss://api.stepfun.com/step_plan/v1/realtime"],
+    ["wss://api.stepfun.com/step_plan/v1/realtime", "wss://api.stepfun.com/step_plan/v1/realtime"],
+    ["https://custom.example/v1", "wss://custom.example/v1/realtime"],
+    ["wss://custom.example/v1/realtime/stateless", "wss://custom.example/v1/realtime/stateless"],
+  ])("preserves the selected billing path for %s", (endpoint, expected) => {
+    expect(resolveStepFunRealtimeConfig({ endpoint }).endpoint).toBe(expected);
+  });
+
+  it("retains the stateless TTS protocol only when explicitly configured", async () => {
+    const provider = createStepFunRealtimeTtsProvider({ api_key: "test", endpoint: "wss://custom.example/v1/realtime/stateless", websocketCtor: FakeStepWebSocket, timeout_ms: 1000 });
+    const pending = provider.synthesize("你好");
+    const socket = FakeStepWebSocket.instances[0];
+    socket.open();
+    await pending;
+    expect(socket.sent).toHaveLength(1);
+    expect(socket.sent[0].response.history).toEqual([{ role: "user", content: "你好" }]);
   });
 
   it("reports degraded health when StepFun Realtime key is missing", async () => {

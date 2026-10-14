@@ -29,7 +29,7 @@ describe("agent runtime model timeout policy", () => {
     delete process.env.LYNN_BRAIN_MODEL_CALL_TIMEOUT_MS;
     expect(defaultModelCallTimeoutMs()).toBe(0);
     expect(brainModelCallTimeoutMs()).toBe(0);
-    expect(resolveModelCallTimeouts()).toEqual({ firstChunkMs: 300_000, idleMs: 120_000, totalMs: 0 });
+    expect(resolveModelCallTimeouts()).toEqual({ firstChunkMs: 600_000, idleMs: 600_000, totalMs: 0 });
   });
 
   it("honors new overrides over saved values and rejects invalid or overflowing timers", () => {
@@ -38,6 +38,22 @@ describe("agent runtime model timeout policy", () => {
     vi.stubEnv("LYNN_MODEL_CALL_TIMEOUT_MS", "700");
     vi.stubEnv("LYNN_MODEL_TOTAL_TIMEOUT_MS", "0");
     expect(resolveModelCallTimeouts({ firstChunkMs: 500, idleMs: 600, totalMs: 800 })).toEqual({ firstChunkMs: 9000, idleMs: 600, totalMs: 0 });
+  });
+
+  it("allows nearly ten minutes before first bytes and resets the ten-minute idle window", () => {
+    vi.useFakeTimers();
+    const timed = createTimedSignal(undefined, resolveModelCallTimeouts());
+    vi.advanceTimersByTime(599_999);
+    expect(timed.signal.aborted).toBe(false);
+    timed.activity();
+    for (let chunk = 0; chunk < 3; chunk++) {
+      vi.advanceTimersByTime(599_999);
+      expect(timed.signal.aborted).toBe(false);
+      timed.activity();
+    }
+    vi.advanceTimersByTime(600_000);
+    expect(timed.timeoutError()).toMatchObject({ kind: "idle", timeoutMs: 600_000 });
+    timed.cleanup();
   });
 
   it("starts with a first-chunk deadline, then resets idle on every chunk", async () => {

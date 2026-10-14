@@ -567,7 +567,7 @@ describe("chat route event forwarding", () => {
     expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true);
   });
 
-  it("adds a visible fallback when hidden reasoning leaves only a tiny answer fragment", async () => {
+  it("preserves a short answer after long reasoning without guessing truncation", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     hub.send = vi.fn(() => new Promise(() => {}));
@@ -585,7 +585,7 @@ describe("chat route event forwarding", () => {
     }, "/sessions/current.jsonl");
     subscribed({
       type: "message_update",
-      assistantMessageEvent: { type: "text_delta", delta: "韦伯的官僚制像一台按图纸" },
+      assistantMessageEvent: { type: "text_delta", delta: "It is safe" },
     }, "/sessions/current.jsonl");
     subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
 
@@ -595,8 +595,7 @@ describe("chat route event forwarding", () => {
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
       .join("");
-    expect(visibleText).toContain("最终可见答案只剩下半句");
-    expect(visibleText.length).toBeGreaterThan(120);
+    expect(visibleText).toBe("It is safe");
     expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
   });
 
@@ -1088,6 +1087,39 @@ describe("chat route event forwarding", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it.each([
+    ["event", "LLM request timed out after 45000ms", ""],
+    ["event", "LLM 流式空闲超时 (idle): timed out after 120000ms", ""],
+    ["throw", "LLM 首段等待超时 (first chunk): timed out after 300000ms", ""],
+    ["event", "LLM 流式空闲超时 (idle): timed out after 120000ms", "已完成环境检查，下一步"],
+  ])("reports %s timeout without claiming a normal empty answer: %s", async (source, message, partial) => {
+    engine.currentModel = { id: "qwen3.5-122b-a10b", provider: "local", name: "Qwen3.5-122B-A10B" };
+    engine.resolveModelOverrides = vi.fn((model) => model);
+    hub.send = source === "throw"
+      ? vi.fn(async () => { throw new Error(message); })
+      : vi.fn(() => new Promise(() => {}));
+    const res = await app.request("/ws");
+    expect(res.status).toBe(200);
+    connections[0].handlers.onMessage({ data: JSON.stringify({ type: "prompt", text: "继续" }) }, connections[0].client);
+    await waitForAsyncHandlers();
+    if (source === "event") {
+      if (partial) subscribed({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: partial } }, "/sessions/current.jsonl");
+      subscribed({ type: "message_update", assistantMessageEvent: { type: "error", error: message } }, "/sessions/current.jsonl");
+      subscribed({ type: "agent_end", messages: [] }, "/sessions/current.jsonl");
+    }
+    await waitForAsyncHandlers();
+    const visible = clients[0].sent.filter(event => event.type === "text_delta").map(event => event.delta).join("");
+    const errors = clients[0].sent.filter(event => event.type === "error");
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toBe(message);
+    expect(visible).not.toContain("模型这次没有返回可见内容");
+    if (partial) expect(visible).toBe(partial);
+    else expect(visible).toContain("模型请求超时");
+    expect(clients[0].sent.filter(event => event.type === "turn_end")).toHaveLength(1);
+    expect(clients[0].sent.find(event => event.type === "turn_end")).toMatchObject({ code: "timed_out", ok: false, resumable: true, partial: Boolean(partial) });
+    expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
   });
 
   it("closes a model timeout after successful web evidence without broadcasting a user-visible error", async () => {

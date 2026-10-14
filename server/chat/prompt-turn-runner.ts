@@ -121,7 +121,7 @@ export interface PromptTurnRunnerDeps {
   lifecycleHooks: any;
   broadcast: (msg: any) => void;
   emitStreamEvent: (sessionPath: any, ss: any, event: any) => void;
-  closeStreamAfterError: (sessionPath: any, ss: any, reason?: any) => void;
+  closeStreamAfterError: (sessionPath: any, ss: any, reason?: any, errorMessage?: string) => void;
   closeStreamWithVisibleFallback: (sessionPath: any, ss: any, text: any, reason: any, options?: any) => boolean;
   finalizeReturnedTurnWithoutStream: (sessionPath: any, ss: any, reason: any, options?: any) => boolean;
   fallbackLocalQwen35DirectToBrain: (args: any) => Promise<boolean>;
@@ -519,7 +519,7 @@ export function createPromptTurnRunner({
         wsSend(ws, { type: "error", message: t("error.modelNoResponse"), sessionPath: promptSessionPath });
       }
       if (ss && !hasStreamEvent(ss, "turn_end")) {
-        closeStreamAfterError(promptSessionPath, ss, aborted ? "model_request_aborted" : "model_tool_error");
+        closeStreamAfterError(promptSessionPath, ss, aborted ? "model_request_aborted" : "model_tool_error", String(err?.message || err || ""));
       } else {
         broadcast({ type: "status", isStreaming: false, sessionPath: promptSessionPath });
       }

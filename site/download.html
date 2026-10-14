@@ -232,7 +232,7 @@ Lynn code -p "fix tests, run the suite, summarize the diff" \
         <section class="section release-summary">
           <div class="release-card">
             <h2>V0.87.2：长推理与会话管理修复</h2>
-            <p>10 月 14 日 GUI / CLI 更新：本地 OpenAI 兼容端点与内置 Qwen 桥接共用首段 300 秒、空闲 120 秒计时，持续输出不再触发默认总时限。</p>
+            <p>10 月 14 日 GUI / CLI 更新：本地 OpenAI 兼容端点与内置 Qwen 桥接共用首段 600 秒、空闲 600 秒计时；持续输出刷新计时，不设默认总时限，超过十分钟也不会因此中断。已保存的设置和显式环境变量继续优先。</p>
             <p>设置页可调整超时并检查生效来源；完整英文短答案不再误续写。会话菜单支持二次确认删除，归档列表支持单条删除和批量清空。</p>
             <p>继续保留此前的界面功能：</p>
             <ul>

@@ -4,13 +4,16 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createLynnAgentSession } from "../core/agent-runtime/create-session.js";
 import { SessionManager } from "../core/agent-runtime/session-manager.js";
 import { streamLocalQwen35Completion } from "../server/chat/local-qwen35-direct-runner.js";
+import { call as callCloudProvider } from "../brain-v2-mirror/wire-adapter/openai-compat.js";
+import { createProviderAttemptSignal } from "../brain-v2-mirror/provider-timeouts.js";
+import { providerId, envModel, type Provider } from "../brain-v2-mirror/types.js";
 
 afterEach(() => vi.unstubAllEnvs());
 
-const durationMs = process.env.LYNN_TEST_LONG_STREAM === "1" ? 310_000 : 250;
+const durationMs = process.env.LYNN_TEST_LONG_STREAM === "1" ? 620_000 : 250;
 const finalAnswer = "Slow stream completed.";
 
-it.concurrent.each(['runtime', 'local-qwen'])("%s keeps a real HTTP reasoning stream alive past the first-chunk deadline", async mode => {
+it.concurrent.each(['runtime', 'local-qwen', 'cloud-brain'])("%s keeps a real HTTP reasoning stream alive past the first-chunk deadline", async mode => {
   for (const name of ["LYNN_MODEL_CALL_TIMEOUT_MS", "LYNN_MODEL_TOTAL_TIMEOUT_MS", "LYNN_MODEL_FIRST_CHUNK_TIMEOUT_MS", "LYNN_MODEL_IDLE_TIMEOUT_MS"]) vi.stubEnv(name, "");
   let chunks = 0;
   let requests = 0;
@@ -46,10 +49,27 @@ it.concurrent.each(['runtime', 'local-qwen'])("%s keeps a real HTTP reasoning st
     if (mode === 'runtime') {
       await session.prompt("Think slowly, then answer.");
       expect(session.messages.at(-1)).toMatchObject({ role: "assistant", content: finalAnswer });
+    } else if (mode === 'cloud-brain') {
+      const provider: Provider = {
+        id: providerId('p-fake'), model: envModel('__LYNN_TEST_SLOW_MODEL', 'slow-cloud'),
+        endpoint: `http://127.0.0.1:${port}/v1`, apiKey: 'test', wire: 'openai',
+        capability: { vision: false, audio: false, video: false, tools: true, thinking: true },
+        cooldown_ms: 1000, default_thinking: false, timeout_ms: durationMs > 1000 ? 35_000 : 100,
+      };
+      const attempt = createProviderAttemptSignal(provider);
+      let text = '';
+      try {
+        for await (const chunk of callCloudProvider({ provider, messages: [{ role: 'user', content: 'Think slowly, then answer.' }], signal: attempt.signal, onActivity: attempt.activity })) {
+          attempt.signal.throwIfAborted();
+          if (chunk.type === 'content') text += chunk.delta;
+        }
+        expect(text).toBe(finalAnswer);
+        expect(attempt.signal.aborted).toBe(false);
+      } finally { attempt.cleanup(); }
     } else {
       const result = await streamLocalQwen35Completion({
         endpoint: `http://127.0.0.1:${port}/v1/chat/completions`, model: 'slow-local',
-        timeouts: { firstChunkMs: durationMs > 1000 ? 300_000 : 100, idleMs: durationMs > 1000 ? 120_000 : 100, totalMs: 0 },
+        timeouts: { firstChunkMs: durationMs > 1000 ? 600_000 : 100, idleMs: durationMs > 1000 ? 600_000 : 100, totalMs: 0 },
       });
       expect(result.assistantText).toBe(finalAnswer);
     }
