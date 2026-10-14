@@ -23,11 +23,13 @@ function parseArgs(argv) {
     wsUrl: "",
     token: "",
     list: false,
+    only: "",
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const next = () => argv[++i];
-    if (arg === "--mode") args.mode = next();
+    if (arg === "--only") args.only = next();
+    else if (arg === "--mode") args.mode = next();
     else if (arg.startsWith("--mode=")) args.mode = arg.slice("--mode=".length);
     else if (arg === "--level") args.level = next();
     else if (arg.startsWith("--level=")) args.level = arg.slice("--level=".length);
@@ -66,7 +68,8 @@ Options:
   --ws-url URL                 override WebSocket URL
   --token TOKEN                override auth token
   --output DIR                 output directory
-  --list                       list included cases`);
+  --list                       list included cases
+  --only ID,ID                 rerun selected live cases without changing full-suite defaults`);
 }
 
 function expandHome(input) {
@@ -1110,8 +1113,14 @@ async function runLiveChecks(args, outputDir) {
   const cases = RELEASE_CASES
     .filter((testCase) => testCase.type !== "static-ui-contract")
     .filter((testCase) => caseIncluded(testCase, args.level));
+  const requested = args.only ? new Set(args.only.split(',').map(id => id.trim()).filter(Boolean)) : null;
+  if (requested) {
+    for (const id of requested) if (!cases.some(testCase => testCase.id === id)) throw new Error(`Unknown or excluded live case: ${id}`);
+    if (!requested.size) throw new Error('No live cases selected');
+  }
 
   for (const testCase of cases) {
+    if (requested && !requested.has(testCase.id)) continue;
     process.stdout.write(`[${testCase.id}] ${testCase.title} ... `);
     try {
       const result = await runLiveCase(testCase, config);
@@ -1140,6 +1149,7 @@ async function runLiveChecks(args, outputDir) {
   await fs.writeFile(path.join(outputDir, "live-results.json"), JSON.stringify({
     config: { baseUrl: config.baseUrl, wsUrl: config.wsUrl, serverInfoPath: config.serverInfoPath },
     level: args.level,
+    selectedCaseIds: requested ? [...requested] : null,
     results: liveResults,
   }, null, 2));
   return liveResults;
