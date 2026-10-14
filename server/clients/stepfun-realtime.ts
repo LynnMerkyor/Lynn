@@ -218,14 +218,14 @@ async function runStepFunRealtime(config: StepRealtimeConfig, input: {
           });
           await sendJson(ws, {
             type: "conversation.item.create",
-            item: { type: "message", role: "user", content: [{ type: "input_text", text: input.text || "" }] },
+            item: { id: `msg_${randomUUID()}`, type: "message", role: "user", content: [{ type: "input_text", text: `请逐字自然朗读以下文本,只朗读冒号后的内容:\n${input.text || ""}` }] },
           });
         }
         await sendJson(ws, {
           type: "response.create",
           response: {
             modalities: ["audio", "text"],
-            instructions: "请按原文自然朗读,不要改写内容。",
+            instructions: "你是一个纯文本朗读器。你的唯一任务是把用户要求朗读的文本原样读出来。不要回答、解释、改写、翻译、补充或加入闲聊。",
             ...(stateless ? { voice: resolved.voice, history: [{ role: "user", content: input.text || "" }] } : {}),
           },
         });

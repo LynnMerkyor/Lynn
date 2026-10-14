@@ -256,7 +256,9 @@ describe("StepFun Realtime voice providers", () => {
     expect(result.audio.subarray(0, 4).toString("ascii")).toBe("RIFF");
     expect(ws.sent.map(event => event.type)).toEqual(["session.update", "conversation.item.create", "response.create"]);
     expect(ws.sent[0].session.voice).toBe("jingdiannvsheng");
-    expect(ws.sent[1].item.content).toEqual([{ type: "input_text", text: "你好" }]);
+    expect(ws.sent[1].item.content).toEqual([{ type: "input_text", text: "请逐字自然朗读以下文本,只朗读冒号后的内容:\n你好" }]);
+    expect(ws.sent[1].item.id).toMatch(/^msg_/);
+    expect(ws.sent[2].response.instructions).toContain("不要回答、解释、改写");
     expect(ws.sent[2].response.modalities).toEqual(["audio", "text"]);
     expect(ws.sent[2].response).not.toHaveProperty("history");
   });
