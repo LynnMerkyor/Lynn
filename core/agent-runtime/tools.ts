@@ -2,6 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { Type } from "@sinclair/typebox";
+import { spawnAndStream } from "../../lib/sandbox/exec-helper.js";
+import type { SpawnAndStreamOptions, SpawnAndStreamResult } from "../../lib/sandbox/exec-helper.js";
 import type { Tool, ToolResult } from "./types.js";
 
 function textResult(text: string, isError = false): ToolResult {
@@ -149,19 +151,30 @@ export function createGrepTool(cwd = process.cwd(), _options: unknown = {}): Too
   };
 }
 
-export function createBashTool(cwd = process.cwd(), options: { operations?: { exec?: (...args: any[]) => Promise<unknown> | unknown } } = {}): Tool {
+type BashExecutor = (command: string, cwd: string, options: Omit<SpawnAndStreamOptions, "cwd">) => Promise<SpawnAndStreamResult>;
+
+export function createBashTool(cwd = process.cwd(), options: { operations?: { exec?: BashExecutor } } = {}): Tool {
   return {
     name: "bash",
     description: "Run a shell command in the workspace.",
-    parameters: Type.Object({ command: Type.String() }),
-    async execute(_id, params) {
-      const command = String((params as { command?: string }).command || "");
-      if (options.operations?.exec) {
-        const value = await options.operations.exec(command, { cwd });
-        if (typeof value === "string") return textResult(value);
-        return textResult(JSON.stringify(value));
+    parameters: Type.Object({ command: Type.String(), timeout: Type.Optional(Type.Number({ minimum: 0, maximum: 2147483 })) }),
+    async execute(_id, params, runtime) {
+      const command = String(params.command || "");
+      if (!command.trim()) return textResult("Bash command must not be empty", true);
+      const timeout = params.timeout;
+      if (timeout !== undefined && (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout < 0 || timeout > 2147483)) {
+        return textResult("Bash timeout must be a finite number of seconds between 0 and 2147483", true);
       }
-      return textResult(await runShell(command, cwd));
+      const signal = runtime instanceof AbortSignal ? runtime : runtime?.signal;
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      const chunks: Buffer[] = [];
+      const execute: BashExecutor = options.operations?.exec || ((shellCommand, directory, settings) => {
+        const windows = process.platform === "win32";
+        return spawnAndStream(windows ? process.env.ComSpec || "cmd.exe" : "/bin/sh", windows ? ["/d", "/s", "/c", shellCommand] : ["-c", shellCommand], { ...settings, cwd: directory });
+      });
+      const result = await execute(command, cwd, { onData: data => chunks.push(Buffer.from(data)), signal, timeout });
+      const output = Buffer.concat(chunks).toString("utf8").trimEnd();
+      return { ...textResult(output || `exit ${result.exitCode}`, result.exitCode !== 0), details: { exitCode: result.exitCode } };
     },
   };
 }
@@ -177,20 +190,6 @@ async function runCommand(cmd: string, args: string[], cwd: string): Promise<str
     child.on("close", (code) => {
       if (code === 0 || stdout) resolve(stdout.trimEnd());
       else reject(new Error(stderr || `${cmd} exited ${code}`));
-    });
-  });
-}
-
-async function runShell(command: string, cwd: string): Promise<string> {
-  return await new Promise((resolve, reject) => {
-    const child = spawn(command, { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => { stdout += String(chunk); });
-    child.stderr.on("data", (chunk) => { stderr += String(chunk); });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      resolve((stdout || stderr || `exit ${code}`).trimEnd());
     });
   });
 }

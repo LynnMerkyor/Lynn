@@ -25,6 +25,7 @@ Lynn --version
 - 偏好设置写盘成功后才更新缓存，保存失败不再造成内存与磁盘不一致。
 - GUI 重连回放按会话、流与序号去重，避免实时片段被重复显示；旧流的普通回放不再结束当前流。
 - GUI 不再按体育、天气、财经关键词改写模型正文；工具结束后的短收尾计时器不再抢先终止仍在运行的模型请求。
+- 修复本地 Bash 工具与沙箱执行器参数不匹配造成的命令失败；完整保留标准输出和错误输出，正确上报非零退出，并传递取消和命令超时。沙箱权限限制保持不变。
 - 保持 Step 5 Preview、StepAudio 2.5 Realtime 与 Coder390 llama.cpp Q2 / Q3 默认配置；模型决定工具参数，工具只执行。本次不更换模型权重或本地安装框架。
 
 ## English
@@ -36,6 +37,7 @@ Lynn --version
 - Preference caches update only after successful atomic persistence.
 - GUI stream replay deduplicates chunks by session, stream and sequence; stale non-reset replays no longer close the current stream.
 - GUI finalization preserves model synthesis instead of rewriting sports, weather or finance answers through keyword guesses. Its short tool-completion fence no longer aborts an active model request.
+- Local Bash tools now honor the sandbox executor contract, preserve stdout and stderr, report nonzero exits, and propagate cancellation and command timeouts without weakening sandbox permissions.
 - Step 5, realtime voice and Coder390 Q2/Q3 defaults are unchanged.
 
 ## 仓库 / Repositories
