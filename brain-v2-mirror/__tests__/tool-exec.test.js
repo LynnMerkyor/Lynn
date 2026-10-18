@@ -17,6 +17,16 @@ describe('tool-exec dispatcher', () => {
     expect(r).toBe('mock results for: hello');
   });
 
+  it('forwards cancellation to search without converting it into successful tool text', async () => {
+    const controller = new AbortController();
+    vi.mocked(webSearch).mockImplementationOnce(async (_query, options) => {
+      expect(options.signal).toBe(controller.signal);
+      controller.abort(new Error('User stopped'));
+      throw controller.signal.reason;
+    });
+    await expect(executeServerTool('web_search', { query: 'test' }, { signal: controller.signal })).rejects.toThrow('User stopped');
+  });
+
   it('returns error for unknown tool', async () => {
     const r = await executeServerTool('not_a_tool', '{}');
     expect(JSON.parse(r).error).toMatch(/not handled by brain server/);

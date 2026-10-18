@@ -11,6 +11,24 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe('cloud DeepSeek primary search', () => {
+  it('does not start cloud search when the caller already cancelled', async () => {
+    const controller = new AbortController(); controller.abort(new Error('User stopped'));
+    const mock = vi.fn(); vi.stubGlobal('fetch', mock);
+    await expect(webSearch('test', { signal: controller.signal })).rejects.toThrow('User stopped');
+    expect(mock).not.toHaveBeenCalled();
+  });
+  it('aborts the upstream request without starting cloud fallbacks', async () => {
+    const controller = new AbortController();
+    const mock = vi.fn().mockImplementation((_url, options) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+    }));
+    vi.stubGlobal('fetch', mock);
+    const pending = webSearchStructured('test', { signal: controller.signal });
+    const assertion = expect(pending).rejects.toThrow('User stopped');
+    controller.abort(new Error('User stopped'));
+    await assertion;
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
   it('uses DeepSeek first even for explicit source links and preserves compound place', async () => {
     const mock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ results: [row] })));
     vi.stubGlobal('fetch', mock);

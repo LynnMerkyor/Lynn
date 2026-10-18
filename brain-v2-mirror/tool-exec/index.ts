@@ -243,7 +243,8 @@ export const SERVER_TOOLS = [
 export const SERVER_TOOL_NAMES = new Set(SERVER_TOOLS.map(t => t.function.name));
 
 // ── dispatcher ────────────────────────────────────────────
-export async function executeServerTool(name, argsStr, { log } = {}) {
+export async function executeServerTool(name, argsStr, { log, signal } = {}) {
+  signal?.throwIfAborted();
   if (!SERVER_TOOL_NAMES.has(name)) {
     if (isMcpTool(name)) {
       let mcpArgs;
@@ -258,9 +259,9 @@ export async function executeServerTool(name, argsStr, { log } = {}) {
   catch { return JSON.stringify({ error: 'invalid tool args (not JSON): ' + String(argsStr).slice(0, 200) }); }
   try {
     switch (name) {
-      case 'web_search':       return (await webSearch(args.query || '', { log })) || JSON.stringify({ error: 'no results' });
+      case 'web_search':       return (await webSearch(args.query || '', { log, signal })) || JSON.stringify({ error: 'no results' });
       case 'web_fetch':        return await webFetch(args.url || '', args.max_length || 8000, { log });
-      case 'weather':          return await weather({ location: args.location || args.city || args.place || '', fallback_locations: args.fallback_locations || [], query: args.query || '' }, { log, webSearchFn: (q) => webSearch(q, { log }) });
+      case 'weather':          return await weather({ location: args.location || args.city || args.place || '', fallback_locations: args.fallback_locations || [], query: args.query || '' }, { log, webSearchFn: (q) => webSearch(q, { log, signal }) });
       case 'exchange_rate':    return await exchangeRate({ base: args.base, quote: args.quote, pair: args.pair });
       case 'express_tracking': return await expressTracking(args.query || args.number || '');
       case 'sports_score':     return await sportsScore({ league: args.league, date_from: args.date_from, date_to: args.date_to, teams: args.teams, query: args.query || '' });
@@ -268,15 +269,16 @@ export async function executeServerTool(name, argsStr, { log } = {}) {
       case 'unit_convert':     return unitConvert(args.query || '');
       case 'create_artifact':  return await createArtifact(args, { log });
       case 'create_pdf':       return await createPdf(args, { log });
-      case 'stock_market':     return await stockMarket({ symbol: args.symbol, name: args.name, kind: args.kind, query: args.query || '' }, { log, webSearchFn: (q) => webSearch(q, { log }) });
-      case 'live_news':        return await liveNews(args.query || '', { log, webSearchFn: (q) => webSearch(q, { log }) });
+      case 'stock_market':     return await stockMarket({ symbol: args.symbol, name: args.name, kind: args.kind, query: args.query || '' }, { log, webSearchFn: (q) => webSearch(q, { log, signal }) });
+      case 'live_news':        return await liveNews(args.query || '', { log, webSearchFn: (q) => webSearch(q, { log, signal }) });
       case 'stock_research':   return await stockResearch(args, { log });
       case 'create_report':    return await createReport(args, { log });
       case 'create_pptx':      return await createPptx(args, { log });
-      case 'parallel_research': return await parallelResearch(args, { log, dispatchFn: (subName, subArgs) => executeServerTool(subName, subArgs, { log }) });
+      case 'parallel_research': return await parallelResearch(args, { log, dispatchFn: (subName, subArgs) => executeServerTool(subName, subArgs, { log, signal }) });
       default: return JSON.stringify({ error: 'unhandled tool: ' + name });
     }
   } catch (e) {
+    signal?.throwIfAborted();
     log && log('warn', 'tool-exec/' + name + ' failed: ' + (e.message || String(e)));
     return JSON.stringify({ error: e.message || String(e) });
   }

@@ -699,7 +699,8 @@ const STRUCTURED_RACERS = [
   { source: "tavily", fn: (q, s) => searchTavilyStructured(q, s), optional: true, envKey: "TAVILY_KEY" },
   { source: "serper", fn: (q, s) => searchSerperStructured(q, s), optional: true, envKey: "SERPER_KEY" }
 ];
-async function webSearchStructured(query, { log } = {}) {
+async function webSearchStructured(query, { log, signal } = {}) {
+  signal?.throwIfAborted();
   const rawQuery = String(query || "").trim();
   const override = String(envOr("WEB_SEARCH_PRIMARY_PROVIDER")).trim().toLowerCase();
   const deepseekPrimary = deepSeekSearchConfigured() && (!override || override === 'deepseek');
@@ -710,21 +711,25 @@ async function webSearchStructured(query, { log } = {}) {
     if (cached) return cached;
     if ([...rawQuery].length > 128) return { ok: false, error: 'Search query exceeds 128 Unicode characters; submit a concise query preserving the requested entities and date.', sources: [] };
     try {
-      const value = await searchDeepSeekStructured(rawQuery, AbortSignal.timeout(5000));
+      const deadline = AbortSignal.timeout(5000);
+      const value = await searchDeepSeekStructured(rawQuery, signal ? AbortSignal.any([signal, deadline]) : deadline);
       const result = { ok: true, query: rawQuery, provider: 'deepseek', ...value, sources: [{ name: 'deepseek', ok: true, ...value }] };
       structuredCache.set(cacheKey, result);
       log && log('info', 'tool-exec/web_search_structured primary=deepseek items=' + value.items.length);
       return result;
     } catch (error) {
+      signal?.throwIfAborted();
       const deepseekFailure = { name: 'deepseek', ok: false, error: error?.message || 'DeepSeek Search unavailable', items: [] };
       log && log('warn', 'tool-exec/web_search_structured DeepSeek failed; using existing fallback');
       const controller = new AbortController();
+      const fallbackSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
       const racers = STRUCTURED_RACERS.filter(source => !source.optional || envOr(source.envKey)).map(source => ({
         source: source.source,
-        fn: () => source.fn(rawQuery, controller.signal).then(value => requireUsableStructured(source.source, value)),
+        fn: () => source.fn(rawQuery, fallbackSignal).then(value => requireUsableStructured(source.source, value)),
       }));
       const settled = await raceUsableSources(racers, Math.max(1, Math.min(7000, 12000 - (Date.now() - startedAt))));
       controller.abort();
+      signal?.throwIfAborted();
       const sources = [deepseekFailure, ...settled.map(entry => ({ name: entry.source, ok: entry.ok, error: entry.error, items: entry.ok ? entry.value.items : [], summary: entry.ok ? entry.value.summary : undefined }))];
       const primary = sources.find(source => source.ok);
       if (!primary) return { ok: false, error: 'all search sources failed', sources };
@@ -996,9 +1001,10 @@ function formatStructuredSearchForTool(result, query) {
   }
   return lines.join(NL).trim() || JSON.stringify(result);
 }
-async function webSearch(query, { log } = {}) {
+async function webSearch(query, { log, signal } = {}) {
+  signal?.throwIfAborted();
   if (deepSeekSearchConfigured()) {
-    const structured = await webSearchStructured(query, { log });
+    const structured = await webSearchStructured(query, { log, signal });
     return formatStructuredSearchForTool(structured, query);
   }
   const q = normalizeSearchQueryIntent(query);

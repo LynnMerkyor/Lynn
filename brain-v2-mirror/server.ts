@@ -574,14 +574,22 @@ async function handleWebSearch(req: IncomingMessage, res: ServerResponse, pathna
     return;
   }
 
+  const controller = new AbortController();
+  const onSearchClose = () => { if (!res.writableEnded) controller.abort(); };
+  res.once('close', onSearchClose);
+  if (res.destroyed) controller.abort();
   try {
-    const result = await webSearchStructured(query, { log });
+    const result = await webSearchStructured(query, { log, signal: controller.signal });
+    if (controller.signal.aborted) return;
     res.writeHead(result.ok ? 200 : 503, { 'Content-Type': 'application/json', 'X-Brain-Version': VERSION });
     res.end(JSON.stringify(result));
   } catch (err) {
+    if (controller.signal.aborted) return;
     log('error', 'web-search proxy failed: ' + errorMessage(err));
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: false, error: errorMessage(err) }));
+  } finally {
+    res.removeListener('close', onSearchClose);
   }
 }
 // [/web-search proxy v1 handler]

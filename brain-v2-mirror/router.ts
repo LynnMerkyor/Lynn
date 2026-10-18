@@ -1938,6 +1938,7 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
     let nextRunnable = 0;
     const runToolWorker = async (): Promise<void> => {
       for (;;) {
+        signal?.throwIfAborted();
         const slot = nextRunnable;
         if (slot >= runnable.length) return;
         nextRunnable += 1;
@@ -1950,7 +1951,8 @@ export async function run({ messages, tools, capabilityRequired, signal, onChunk
           { type: 'tool_progress', event: 'start', name: tc.function.name, argsSummary },
           { providerId: roundProviderId }
         );
-        const toolResult = await executeServerTool(tc.function.name, tc.function.arguments || '{}', { log });
+        const toolResult = await executeServerTool(tc.function.name, tc.function.arguments || '{}', { log, signal });
+        signal?.throwIfAborted();
         const ms = Date.now() - t0;
         const ok = toolResultSucceeded(toolResult);
         const toolSummary = summarizeToolResult(tc.function.name, toolResult);
