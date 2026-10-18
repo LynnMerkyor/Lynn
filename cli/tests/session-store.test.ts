@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
+import callbackFs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appendSessionLine, appendSessionMetadata, appendSessionTurn, latestSessionPath, listSessions, readSessionLines, readSessionLinesResult, resolveDataDir, sessionIndexPath } from "../src/session/store.js";
 import { computeSessionStats } from "../src/session/stats.js";
 
@@ -14,6 +15,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await fs.rm(tmp, { recursive: true, force: true });
   if (originalDataDir === undefined) delete process.env.LYNN_DATA_DIR;
   else process.env.LYNN_DATA_DIR = originalDataDir;
@@ -22,6 +24,25 @@ afterEach(async () => {
 });
 
 describe("CLI session store", () => {
+  it("recovers a legacy file when Windows rmdir reports ENOENT", async () => {
+    const lockPath = `${sessionIndexPath(tmp)}.lock`;
+    await fs.mkdir(path.dirname(lockPath), { recursive: true });
+    await fs.writeFile(lockPath, "");
+    const stale = new Date(Date.now() - 60_000);
+    await fs.utimes(lockPath, stale, stale);
+    const realRmdir = callbackFs.rmdir.bind(callbackFs);
+    vi.spyOn(callbackFs, "rmdir").mockImplementation((target, callback) => {
+      if (target === lockPath && callbackFs.lstatSync(target).isFile()) {
+        callback(Object.assign(new Error("Windows file rmdir"), { code: "ENOENT" }));
+        return;
+      }
+      realRmdir(target, callback);
+    });
+    await appendSessionTurn({ dataDir: tmp, cwd: "/repo", prompt: "recovered", assistant: "done" });
+    expect(await listSessions(tmp)).toHaveLength(1);
+    await expect(fs.stat(lockPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it.each(["legacy-file", "directory"])("recovers an abandoned %s index lock", async (kind) => {
     const lockPath = `${sessionIndexPath(tmp)}.lock`;
     await fs.mkdir(path.dirname(lockPath), { recursive: true });

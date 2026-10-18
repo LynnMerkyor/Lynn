@@ -1,8 +1,9 @@
 import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   test: {
     testTimeout: 10_000,
-    setupFiles: [new URL("./tests/setup.ts", import.meta.url).pathname],
+    setupFiles: [fileURLToPath(new URL("./tests/setup.ts", import.meta.url))],
   },
 });

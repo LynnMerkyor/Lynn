@@ -57,6 +57,26 @@ if ($LASTEXITCODE -ne 0 -or "$workerOutput" -notmatch '"type":"worker.started"' 
 }
 Write-Host "[packaged-cli] final-installer version and worker smoke passed: $cliVersion"
 
+$sessionHome = Join-Path $env:RUNNER_TEMP ("Lynn-session-lock-" + [guid]::NewGuid().ToString("N"))
+$sessionDirectory = Join-Path $sessionHome "agents\cli\sessions"
+New-Item -ItemType Directory -Path $sessionDirectory -Force | Out-Null
+$legacyLock = Join-Path $sessionDirectory "session-index.json.lock"
+[System.IO.File]::WriteAllText($legacyLock, "")
+[System.IO.File]::SetLastWriteTimeUtc($legacyLock, [DateTime]::UtcNow.AddMinutes(-1))
+try {
+  $recoveryOutput = & $packagedNode $packagedCli -p "session lock recovery" --mock-brain --save-session --data-dir $sessionHome --json
+  if ($LASTEXITCODE -ne 0 -or "$recoveryOutput" -notmatch '"type":"session.saved"') {
+    throw "Final-installer CLI failed to recover an abandoned legacy session lock."
+  }
+  $sessionIndex = Get-Content (Join-Path $sessionDirectory "session-index.json") -Raw | ConvertFrom-Json
+  if (@($sessionIndex.sessions).Count -ne 1 -or (Test-Path $legacyLock)) {
+    throw "Recovered session must be indexed exactly once with no leftover lock."
+  }
+  Write-Host "[packaged-cli] abandoned Windows session lock recovery passed"
+} finally {
+  Remove-Item -Recurse -Force $sessionHome
+}
+
 $binary = Join-Path $appDir "resources\llamacpp\bin\llama-server.exe"
 if (-not (Test-Path $binary)) {
   throw "Packaged llama-server.exe not found at $binary"

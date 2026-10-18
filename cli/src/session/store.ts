@@ -110,7 +110,7 @@ async function withIndexLock<T>(dataDir: string, run: () => Promise<T>): Promise
       ...callbackFs,
       rmdir(lockPath, callback) {
         callbackFs.rmdir(lockPath, (error) => {
-          if (error?.code !== "ENOTDIR") return callback(error);
+          if (error?.code !== "ENOTDIR" && error?.code !== "ENOENT") return callback(error);
           callbackFs.lstat(lockPath, (statError, stat) => {
             if (statError) return callback(statError);
             if (!stat.isFile() || stat.size !== 0 || stat.mtimeMs >= Date.now() - 10_000) {

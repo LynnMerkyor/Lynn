@@ -53,6 +53,7 @@ Source: [Merkyor / Qwen3.8-27B-Coder390-EfficientThink](https://modelscope.cn/mo
 - **Reliable cancellation:** stopped searches do not launch fallback requests; request/body deadlines share a 30-second client search budget.
 - **Stable settings:** stale verification results no longer overwrite newer selections.
 - **Less duplicate evidence:** retain source links, dates and useful summaries without repeating extractive summaries.
+- **Recovery after interruption:** expired CLI session-index locks recover automatically instead of blocking later conversations.
 
 ### Retained conversation features
 
