@@ -79,7 +79,7 @@ export function hasVerifiedEmptySportsWindow({ toolEvents = [], prompt = "", cur
 }
 
 export function hasVerifiedEmptySportsResult(result) {
-  return /(?:0\s*场|(?:没有|无).{0,12}比赛)/u.test(String(result.assistantText || "").replace(/\*\*/g, ""))
+  return /(?:0\s*场|(?:没有|无|未(?:查[询找]?到|检索到))[^。！？；\n]{0,12}(?:比赛|赛事|球赛))/u.test(String(result.assistantText || "").replace(/\*\*/g, ""))
     && hasVerifiedEmptySportsWindow(result);
 }
 

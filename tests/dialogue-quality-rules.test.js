@@ -199,6 +199,12 @@ describe("dialogue quality rules", () => {
       ] }],
     };
     expect(hasVerifiedEmptySportsResult(result)).toBe(true);
+    for (const assistantText of ["昨晚没有世界杯足球赛。", "昨晚未查询到任何世界杯足球比赛。", "昨晚未查到该联赛赛事。", "昨晚未检索到该联赛比赛。"]) {
+      expect(hasVerifiedEmptySportsResult({ ...result, assistantText })).toBe(true);
+      expect(overridesVerifiedEmptySportsWindow({ ...result, assistantText })).toBe(false);
+      expect(hasVerifiedEmptySportsResult({ ...result, assistantText, toolEvents: [] })).toBe(false);
+      expect(hasVerifiedEmptySportsResult({ ...result, assistantText, currentDate: "2026-11-18" })).toBe(false);
+    }
     expect(hasVerifiedEmptySportsWindow({ ...result, assistantText: "历史决赛 Alpha 2-1 Beta。" })).toBe(true);
     const historical = { name: "sports_score", event: "end", ok: true, details: [
       "provider: espn_scoreboard", "directSourceStatus: ok", "matched: 4",

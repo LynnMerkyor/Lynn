@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { DIALOGUE_PROMPTS } from "./dialogue-scenario-bank.mjs";
+import { CLI_FUNCTIONAL_TIMEOUTS, createCliTurnDeadline, isCliTurnActivity } from "./cli-turn-deadline.mjs";
 import { hasUsdCnyRate, deniesAvailableToolCapability, additionalDialogueQualityReason, claimsFreshToolEvidence, containsMislabeledRelativeDate, containsPastDateFutureStartContradiction, hasVerifiedEmptySportsResult, hasVerifiedNoFixturePredictionAnswer, omitVerifiedSportsFetchWindows, overridesVerifiedEmptySportsWindow, requiresFreshEvidenceForDialogue } from "./dialogue-quality-rules.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -119,7 +120,9 @@ const CURRENT_DATE = resolveGateCurrentDate();
 function parseArgs(argv) {
   const args = {
     cli: process.env.LYNN_CLI_50_BIN || DEFAULT_CLI,
-    timeoutMs: Number(process.env.LYNN_CLI_50_TIMEOUT_MS || "120000"),
+    timeoutMs: Number(process.env.LYNN_CLI_50_TIMEOUT_MS || CLI_FUNCTIONAL_TIMEOUTS.totalMs),
+    firstChunkTimeoutMs: Number(process.env.LYNN_CLI_50_FIRST_CHUNK_TIMEOUT_MS || CLI_FUNCTIONAL_TIMEOUTS.firstChunkMs),
+    idleTimeoutMs: Number(process.env.LYNN_CLI_50_IDLE_TIMEOUT_MS || CLI_FUNCTIONAL_TIMEOUTS.idleMs),
     limit: PROMPTS.length,
     only: "",
     output: "",
@@ -134,6 +137,10 @@ function parseArgs(argv) {
     else if (arg.startsWith("--cli=")) args.cli = arg.slice("--cli=".length);
     else if (arg === "--timeout-ms") args.timeoutMs = Number(next());
     else if (arg.startsWith("--timeout-ms=")) args.timeoutMs = Number(arg.slice("--timeout-ms=".length));
+    else if (arg === "--first-chunk-timeout-ms") args.firstChunkTimeoutMs = Number(next());
+    else if (arg.startsWith("--first-chunk-timeout-ms=")) args.firstChunkTimeoutMs = Number(arg.slice("--first-chunk-timeout-ms=".length));
+    else if (arg === "--idle-timeout-ms") args.idleTimeoutMs = Number(next());
+    else if (arg.startsWith("--idle-timeout-ms=")) args.idleTimeoutMs = Number(arg.slice("--idle-timeout-ms=".length));
     else if (arg === "--limit") args.limit = Number(next());
     else if (arg.startsWith("--limit=")) args.limit = Number(arg.slice("--limit=".length));
     else if (arg === "--only") args.only = next();
@@ -158,7 +165,9 @@ Options:
   --cli PATH       CLI entry, default: cli/bin/lynn.mjs
   --limit N        run first N prompts for quick checks
   --only LIST      run prompt indexes, e.g. 14,15 or 11-15
-  --timeout-ms N   per-dialogue timeout, default 120000
+  --timeout-ms N   per-dialogue total safety deadline, default 660000
+  --first-chunk-timeout-ms N  first useful event deadline, default 600000
+  --idle-timeout-ms N  resettable useful-event idle deadline, default 120000
   --output PATH    write JSON report to this path
   --mode MODE      brain (default) or ambient
   --data-dir PATH  CLI data dir; brain mode defaults to a temporary empty dir
@@ -170,6 +179,9 @@ Options:
   }
   if (!["brain", "ambient"].includes(args.mode)) {
     throw new Error(`Unsupported --mode ${args.mode}; expected brain or ambient`);
+  }
+  for (const field of ["timeoutMs", "firstChunkTimeoutMs", "idleTimeoutMs"]) {
+    if (!Number.isFinite(args[field]) || args[field] <= 0 || args[field] > 2147483647) throw new Error(`Invalid ${field}: ${args[field]}`);
   }
   args.repeat = Math.max(1, Math.floor(Number(args.repeat) || 1));
   if (args.mode === "brain" && !args.dataDir) {
@@ -225,7 +237,7 @@ function classify(result) {
   const joinedErrors = result.errors.join("\n");
   const bad = BAD_TEXT_NEEDLES.find((needle) => text.includes(needle))
     || BAD_ERROR_NEEDLES.find((needle) => joinedErrors.includes(needle));
-  if (result.timedOut) return { status: "timeout", reason: "process timeout" };
+  if (result.timedOut) return { status: "timeout", reason: `${result.timeoutKind || "total"} timeout` };
   if (result.exitCode !== 0) return { status: "process_fail", reason: `exit ${result.exitCode}` };
   if (!text) return { status: "empty", reason: "no assistant text" };
   if (bad) return { status: "fallback_or_error_text", reason: bad };
@@ -632,14 +644,21 @@ function runOne(runIndex, index, category, prompt, repeatRound) {
       toolEvents: [],
       rawTail: "",
       timedOut: false,
+      timeoutKind: null,
     };
     let stdoutTail = "";
     let stderr = "";
-    const timer = setTimeout(() => {
-      result.timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 1500).unref();
-    }, args.timeoutMs);
+    const deadline = createCliTurnDeadline({
+      firstChunkMs: args.firstChunkTimeoutMs,
+      idleMs: args.idleTimeoutMs,
+      totalMs: args.timeoutMs,
+      onTimeout(kind) {
+        result.timedOut = true;
+        result.timeoutKind = kind;
+        child.kill("SIGTERM");
+        setTimeout(() => child.kill("SIGKILL"), 1500).unref();
+      },
+    });
     child.stdout.on("data", (buf) => {
       stdoutTail += buf.toString("utf8");
       const lines = stdoutTail.split(/\r?\n/);
@@ -649,6 +668,7 @@ function runOne(runIndex, index, category, prompt, repeatRound) {
         result.rawTail = `${result.rawTail}\n${line}`.slice(-4000);
         try {
           const event = JSON.parse(line);
+          if (isCliTurnActivity(event)) deadline.activity();
           if (event.type === "provider" && event.activeProvider) result.providerTrail.push(event.activeProvider);
           if (event.type === "tool.start") {
             const name = event.name || event.tool || "tool";
@@ -675,7 +695,7 @@ function runOne(runIndex, index, category, prompt, repeatRound) {
       stderr += buf.toString("utf8");
     });
     child.on("close", (code) => {
-      clearTimeout(timer);
+      deadline.stop();
       result.exitCode = code;
       result.durationMs = Date.now() - startedAt;
       if (stderr.trim()) result.errors.push(stderr.trim().slice(-1000));
@@ -709,7 +729,7 @@ const providerCounts = results.reduce((acc, item) => {
 const toolRuns = results.filter((item) => item.toolNames.length).length;
 const stepExecuteRuns = results.filter((item) => item.toolNames.includes("step_execute")).length;
 const avgMs = Math.round(results.reduce((sum, item) => sum + item.durationMs, 0) / Math.max(1, results.length));
-const summary = { outPath, mode: args.mode, dataDir: args.mode === "brain" ? args.dataDir : "", gateCurrentDate: CURRENT_DATE, prompts: selected.length / args.repeat, repeat: args.repeat, total: results.length, counts, providerCounts, toolRuns, stepExecuteRuns, avgMs };
+const summary = { outPath, mode: args.mode, dataDir: args.mode === "brain" ? args.dataDir : "", gateCurrentDate: CURRENT_DATE, timeouts: { firstChunkMs: args.firstChunkTimeoutMs, idleMs: args.idleTimeoutMs, totalMs: args.timeoutMs }, prompts: selected.length / args.repeat, repeat: args.repeat, total: results.length, counts, providerCounts, toolRuns, stepExecuteRuns, avgMs };
 
 writeFileSync(outPath, JSON.stringify({ ...summary, generatedAt: new Date().toISOString(), results }, null, 2));
 console.log(`SUMMARY ${JSON.stringify(summary)}`);

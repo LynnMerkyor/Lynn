@@ -7,6 +7,8 @@ import { resolveBetterSqliteRuntime } from './native-node-runtime.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const home = await fs.mkdtemp(path.join(os.tmpdir(), 'lynn-release-isolated-'));
+const workspaceRoot = path.join(home, 'workspaces');
+await fs.mkdir(workspaceRoot);
 const infoPath = path.join(home, 'server-info.json');
 const runtime = resolveBetterSqliteRuntime({ cwd: root, env: process.env });
 const server = spawn(runtime.bin, [...runtime.argsPrefix, '--import', 'tsx', 'server/index.ts'], {
@@ -51,7 +53,7 @@ try {
   if (!ready) throw new Error('Isolated release server readiness timed out');
   const code = await new Promise((resolve, reject) => {
     runner = spawn(process.execPath, ['scripts/run-release-regression.mjs', ...process.argv.slice(2), '--server-info', infoPath], {
-      cwd: root, env: { ...process.env, LYNN_HOME: home }, stdio: 'inherit',
+      cwd: root, env: { ...process.env, LYNN_HOME: home, LYNN_RELEASE_WORKSPACE_ROOT: workspaceRoot }, stdio: 'inherit',
     });
     runner.once('error', reject);
     runner.once('exit', result => resolve(result ?? 1));

@@ -6,7 +6,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { recordGuiToolLifecycle, releaseRegressionMustFail } from "./gui-task-quality.mjs";
+import { recordGuiToolLifecycle, releaseRegressionMustFail, rejectGuiToolAuthorization } from "./gui-task-quality.mjs";
 import { RELEASE_CASES, RELEASE_LEVELS } from "../tests/release-regression/release-regression-cases.mjs";
 import { releaseEfficiencyPlan, validReleaseEfficiencyPlan } from "./release-cli-efficiency.mjs";
 
@@ -926,12 +926,15 @@ async function runLiveCase(testCase, config) {
   // Each release case gets a fresh session so queued internal retries, tool
   // finalizers, or stale stream state from the previous case cannot pollute the
   // next one. Multi-turn memory is still tested inside the same case/WS.
+  const workspace = await fs.mkdtemp(path.join(process.env.LYNN_RELEASE_WORKSPACE_ROOT || os.tmpdir(), "lynn-release-case-"));
+  result.workspace = workspace;
   const sessionCreate = await httpJsonRequest(`${config.baseUrl}/api/sessions/new`, config.token, {
     method: "POST",
-    body: { cwd: ROOT, memoryEnabled: false },
+    body: { cwd: workspace, memoryEnabled: false },
     timeoutMs: 12000,
-  }).catch(() => null);
+  });
   const sessionPath = sessionCreate?.body?.path || null;
+  if (!sessionCreate.ok || !sessionPath) throw new Error("Isolated release session creation failed");
 
   const ws = await openWs(config.wsUrl, config.token);
   let active = null;
@@ -987,6 +990,15 @@ async function runLiveCase(testCase, config) {
       active.thinkingChars += String(message.delta || "").length;
     } else if (message.type === "tool_authorization") {
       active.authorizations.push(message);
+      const turn = active;
+      const decision = rejectGuiToolAuthorization(turn, message, {
+        sessionPath,
+        reject: async (confirmId, body) => {
+          const response = await httpJsonRequest(`${config.baseUrl}/api/confirm/${encodeURIComponent(confirmId)}`, config.token, { method: "POST", body, timeoutMs: 5000 });
+          return { ok: response.ok && response.body?.ok !== false };
+        },
+      });
+      turn.pendingAuthorizations.push(decision);
     } else if (message.type === "file_diff") {
       active.fileDiffs.push(message);
     } else if (message.type === "error") {
@@ -1021,6 +1033,9 @@ async function runLiveCase(testCase, config) {
         tools: [],
         orphanToolEnds: [],
         authorizations: [],
+        authorizationDecisions: [],
+        pendingAuthorizations: [],
+        timedOut: false,
         fileDiffs: [],
         errors: [],
         finishedNormally: false,
@@ -1035,7 +1050,9 @@ async function runLiveCase(testCase, config) {
         const timer = setTimeout(() => {
           if (active.endTimer) clearTimeout(active.endTimer);
           active.errors.push(`timeout ${timeoutMs}ms`);
+          active.timedOut = true;
           active.elapsedMs = Date.now() - active.startMs;
+          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "abort", sessionPath }));
           resolve();
         }, timeoutMs);
         const done = activeResolve;
@@ -1047,6 +1064,7 @@ async function runLiveCase(testCase, config) {
         if (sessionPath) payload.sessionPath = sessionPath;
         ws.send(JSON.stringify(payload));
       });
+      await Promise.all(active.pendingAuthorizations);
 
       const turnScore = scoreTurn(testCase, turn, active, i);
       const turnResult = {
@@ -1060,6 +1078,7 @@ async function runLiveCase(testCase, config) {
         tools: active.tools,
         orphanToolEnds: active.orphanToolEnds,
         authorizations: active.authorizations.length,
+        authorizationDecisions: active.authorizationDecisions,
         fileDiffs: active.fileDiffs.length,
         errors: active.errors,
         failures: turnScore.failures,
@@ -1070,10 +1089,11 @@ async function runLiveCase(testCase, config) {
       result.warnings.push(...turnScore.warnings.map((item) => `turn ${i + 1}: ${item}`));
       previousTexts.push({ marker: turnPromptMarker(turn.prompt), text: active.text });
       if (active.endTimer) clearTimeout(active.endTimer);
+      const timedOut = active.timedOut;
       active = null;
       activeResolve = null;
 
-      if (!turnScore.ok && testCase.severity === "blocker") break;
+      if (timedOut || (!turnScore.ok && testCase.severity === "blocker")) break;
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
   } finally {

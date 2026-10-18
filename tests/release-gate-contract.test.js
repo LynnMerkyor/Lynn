@@ -10,6 +10,19 @@ function readPackage() {
 }
 
 describe('release gate contract', () => {
+  it('isolates live cases from the source checkout and aborts timed out turns', () => {
+    const runner = fs.readFileSync(path.join(ROOT, 'scripts/run-release-regression.mjs'), 'utf8');
+    const wrapper = fs.readFileSync(path.join(ROOT, 'scripts/run-isolated-release-regression.mjs'), 'utf8');
+    expect(runner).toContain('body: { cwd: workspace, memoryEnabled: false }');
+    expect(runner).not.toContain('body: { cwd: ROOT, memoryEnabled: false }');
+    expect(runner).toContain('if (!sessionCreate.ok || !sessionPath) throw new Error');
+    expect(runner).toContain('JSON.stringify({ type: "abort", sessionPath })');
+    expect(runner).toContain('if (timedOut || (!turnScore.ok');
+    expect(runner).toContain('rejectGuiToolAuthorization(turn, message');
+    expect(runner).toContain('await Promise.all(active.pendingAuthorizations)');
+    expect(wrapper).toContain('LYNN_RELEASE_WORKSPACE_ROOT: workspaceRoot');
+    expect(wrapper).toContain('await fs.rm(home, { recursive: true, force: true })');
+  });
   it('requires a real manual review in addition to concurrent automatic reviews', () => {
     const runner = fs.readFileSync(path.join(ROOT, 'scripts/gate-installed-app.mjs'), 'utf8');
     expect(runner).toContain('await runManualReviewGate(baseUrl, wsUrl, info.token)');
