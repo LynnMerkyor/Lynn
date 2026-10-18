@@ -22,6 +22,32 @@ afterEach(async () => {
 });
 
 describe("CLI session store", () => {
+  it.each(["legacy-file", "directory"])("recovers an abandoned %s index lock", async (kind) => {
+    const lockPath = `${sessionIndexPath(tmp)}.lock`;
+    await fs.mkdir(path.dirname(lockPath), { recursive: true });
+    if (kind === "legacy-file") await fs.writeFile(lockPath, "");
+    else await fs.mkdir(lockPath);
+    const stale = new Date(Date.now() - 60_000);
+    await fs.utimes(lockPath, stale, stale);
+    await Promise.all(Array.from({ length: 6 }, (_, index) => appendSessionTurn({
+      dataDir: tmp, cwd: "/repo", prompt: `recovered ${index}`, assistant: "done",
+    })));
+    expect(await listSessions(tmp)).toHaveLength(6);
+    await expect(fs.stat(lockPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("waits for an active index lock without removing it", async () => {
+    const lockPath = `${sessionIndexPath(tmp)}.lock`;
+    await fs.mkdir(lockPath, { recursive: true });
+    const before = await fs.stat(lockPath);
+    const pending = appendSessionTurn({ dataDir: tmp, cwd: "/repo", prompt: "wait", assistant: "done" });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect((await fs.stat(lockPath)).ino).toBe(before.ino);
+    await fs.rmdir(lockPath);
+    await pending;
+    expect(await listSessions(tmp)).toHaveLength(1);
+  });
+
   it("writes GUI-compatible CLI agent sessions and index entries", async () => {
     const sessionPath = await appendSessionTurn({
       dataDir: tmp,

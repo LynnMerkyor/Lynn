@@ -2,6 +2,7 @@ import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    setupFiles: [new URL("./cli/tests/setup.ts", import.meta.url).pathname],
     testTimeout: 10_000,
     // Keep the release gate hermetic: this checkout can contain unrelated
     // user workspaces whose `*.test.*` files must not become Lynn tests.

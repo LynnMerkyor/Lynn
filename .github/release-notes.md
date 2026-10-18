@@ -20,6 +20,7 @@ Lynn --version
 - 搜索支持主动停止，取消后不再继续发起备用请求；单个搜索请求及正文读取有独立超时，客户端搜索链最多等待 30 秒。
 - 修复搜索设置验证期间切换选项后被旧结果覆盖的问题，避免重复点击造成并发验证。
 - 搜索证据去重，保留来源链接、日期和完整有效摘要，减少重复内容占用上下文。
+- 修复 CLI 异常退出后会话索引锁残留导致后续对话卡住的问题。
 - GUI 与 CLI 同步更新。保持 Step 5 Preview、StepAudio 2.5 Realtime 和 Coder390 llama.cpp Q2 / Q3；延续长推理超时设置与会话删除功能。
 
 ## English
@@ -28,6 +29,7 @@ Lynn --version
 - Stopping a search cancels active requests without starting additional fallback requests. Request and response-body deadlines operate within a 30-second client search budget.
 - Stale search verification results no longer overwrite a newer selection; repeated verification clicks are prevented.
 - Search evidence is deduplicated while retaining source links, dates and useful summaries.
+- CLI session indexing recovers abandoned locks after an interrupted process instead of blocking subsequent conversations.
 - GUI and CLI update together. Step 5 Preview, realtime voice, Coder390 Q2/Q3, long-reasoning controls and conversation deletion remain available.
 
 ## 仓库 / Repositories

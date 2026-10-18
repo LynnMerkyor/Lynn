@@ -1,4 +1,6 @@
 import fs from "node:fs/promises";
+import callbackFs from "node:fs";
+import lockfile from "proper-lockfile";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -99,31 +101,32 @@ async function writeIndex(dataDir: string, entries: CliSessionIndexEntry[]): Pro
 async function withIndexLock<T>(dataDir: string, run: () => Promise<T>): Promise<T> {
   const dir = cliSessionDir(dataDir);
   await fs.mkdir(dir, { recursive: true });
-  const lockPath = `${sessionIndexPath(dataDir)}.lock`;
-  let handle: fs.FileHandle | null = null;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    try {
-      handle = await fs.open(lockPath, "wx");
-      break;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "EEXIST") throw error;
-      await sleep(Math.min(250, 10 + attempt * 5));
-    }
-  }
-  if (!handle) {
-    throw new Error(`timed out waiting for session index lock: ${lockPath}`);
-  }
+  const release = await lockfile.lock(sessionIndexPath(dataDir), {
+    realpath: false,
+    stale: 10_000,
+    update: 2_000,
+    retries: { retries: 100, minTimeout: 250, maxTimeout: 250, factor: 1 },
+    fs: {
+      ...callbackFs,
+      rmdir(lockPath, callback) {
+        callbackFs.rmdir(lockPath, (error) => {
+          if (error?.code !== "ENOTDIR") return callback(error);
+          callbackFs.lstat(lockPath, (statError, stat) => {
+            if (statError) return callback(statError);
+            if (!stat.isFile() || stat.size !== 0 || stat.mtimeMs >= Date.now() - 10_000) {
+              return callback(error);
+            }
+            callbackFs.unlink(lockPath, callback);
+          });
+        });
+      },
+    },
+  });
   try {
     return await run();
   } finally {
-    await handle.close().catch(() => undefined);
-    await fs.unlink(lockPath).catch(() => undefined);
+    await release();
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export interface SessionReadResult {
