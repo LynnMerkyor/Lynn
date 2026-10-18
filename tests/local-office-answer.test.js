@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { buildLocalOfficeDirectAnswer } from "../server/chat/local-office-answer.js";
 
 describe("buildLocalOfficeDirectAnswer", () => {
+  it.each([
+    "会议记录：李雷下周三前补齐 Q2 客户名单；韩梅梅负责把报价模板统一，周五前；我明天约客户 B 做方案确认。",
+    "整理行动项表格：Alice 明天下午确认采购，我下周一联系供应商 Z，财务截止时间待定。",
+    "会议记录：韩梅梅负责把报价模板统一，周五前；我需要明天约客户 C 做方案确认；新同事月底提交审计材料。",
+  ])("leaves source-material extraction to the model: %s", prompt => {
+    expect(buildLocalOfficeDirectAnswer(prompt)).toBe("");
+  });
+
   it("handles regional growth prompts when unit is only declared once at the end", () => {
     const answer = buildLocalOfficeDirectAnswer("【DATA-01】华东 Q1 120 Q2 150；华南 Q1 90 Q2 81；华北 Q1 60 Q2 78（万元）。算环比增长率，给 3 条管理建议。");
     expect(answer).toContain("25%");

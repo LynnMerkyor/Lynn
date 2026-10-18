@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createLynnAgentSession } from "../core/agent-runtime/create-session.js";
 import { SessionManager } from "../core/agent-runtime/session-manager.js";
+import { createSessionResourceLoader } from "../core/session-resource-loader.js";
 
 function sseResponse(chunks) {
   const encoder = new TextEncoder();
@@ -62,6 +63,26 @@ describe("createLynnAgentSession native runtime", () => {
     globalThis.fetch = originalFetch;
     fs.rmSync(tempDir, { recursive: true, force: true });
     vi.restoreAllMocks();
+  });
+
+  it("sends source-preservation instructions without rewriting the user's material", async () => {
+    const prompt = "整理行动项：Morgan 后天交初稿，我本周联系合作方，审批时间待定。";
+    globalThis.fetch = vi.fn(async () => sseResponse(['data: {"choices":[{"delta":{"content":"材料已整理。"}}]}\n\n', "data: [DONE]\n\n"]));
+    const { session } = await createLynnAgentSession({
+      cwd: tempDir,
+      sessionManager: SessionManager.create(tempDir, tempDir),
+      resourceLoader: createSessionResourceLoader({ baseResourceLoader: { getAppendSystemPrompt: () => "Keep source facts intact." }, sessionEntry: {}, effectiveModel: null, getAgent: () => ({}), getHomeCwd: () => null }),
+      model: { id: "test-model", provider: "test-provider", api: "openai-completions", baseUrl: "http://127.0.0.1:65530/v1", apiKey: "test-key" },
+    });
+    await session.prompt(prompt);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
+    const system = body.messages.filter(message => message.role === "system").map(message => message.content).join("\n");
+    expect(system).toContain("Keep source facts intact.");
+    expect(system).toContain("保留所有事项、实体、负责人（包括第一人称）、时间和不确定性");
+    expect(system).toContain("除非用户要求换算日期，否则保留原文相对时间");
+    expect(system).toContain("用户要求核验或执行时，仍由模型选择适合的工具与参数");
+    expect(body.messages).toContainEqual(expect.objectContaining({ role: "user", content: prompt }));
   });
 
   it.each(["brain", "test-provider"])("forwards Brain tool progress only from a trusted model transport: %s", async (provider) => {

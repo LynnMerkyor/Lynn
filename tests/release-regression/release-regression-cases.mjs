@@ -294,6 +294,22 @@ export const RELEASE_CASES = [
     ],
   },
   {
+    id: "OFFICE-02",
+    area: "office",
+    severity: "extended",
+    title: "Preserve varied action owners and unresolved relative dates",
+    timeoutMs: 120000,
+    turns: [
+      {
+        prompt: "把这段交接记录整理为事项、负责人、期限、风险表：Morgan 后天下午交设计初稿；我下周一联系供应商 Z 确认样品；陈晓负责复核账单，日期待定；QA 组本月底提交验收记录，依赖测试环境恢复。保留原文时间，不换算日期。",
+        minChars: 160,
+        forbidTools: true,
+        mustMatch: ["Morgan", "后天下午", "下周一", "供应商 Z", "陈晓", "待定", "QA", "月底", "测试环境"],
+        mustNotMatch: ["客户 A", "李雷", "韩梅梅"],
+      },
+    ],
+  },
+  {
     id: "UI-CONTRACT-01",
     area: "ui-contract",
     severity: "blocker",

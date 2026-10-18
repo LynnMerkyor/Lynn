@@ -118,8 +118,8 @@ export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
 
 export interface ResourceLoader {
   reload?: () => Promise<void> | void;
-  getAppendSystemPrompt?: () => string | Promise<string>;
-  getSystemPrompt?: () => string | Promise<string>;
+  getAppendSystemPrompt?: () => string | string[] | Promise<string | string[]>;
+  getSystemPrompt?: () => string | string[] | Promise<string | string[]>;
   getSkills?: () => unknown[] | Promise<unknown[]>;
   [key: string]: unknown;
 }

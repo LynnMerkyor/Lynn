@@ -1,16 +1,5 @@
 import { parseBudgetCalculation } from "./prefetch-context.js";
 
-type ActionItemRow = {
-  item: string;
-  owner: string;
-  deadline: string;
-  risk: string;
-};
-
-function textOf(value: unknown): string {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
-
 function formatPercent(value: number): string {
   const fixed = value.toFixed(1);
   return `${fixed.replace(/\.0$/, "")}%`;
@@ -447,62 +436,6 @@ function buildSocialTheoryAnswer(raw: unknown): string {
     "| 运作方式 | 按章办事、层级审批 | 自我约束、自我优化 |",
     "| 典型工具 | 规章、表格、权限链 | KPI、打卡、排名、360 评价 |",
     "| 主要风险 | 人被流程化、灵活性下降 | 人把外部标准内化，持续自我监控 |",
-  ].join("\n");
-}
-
-function buildActionItemRows(raw: unknown): ActionItemRow[] {
-  const text = String(raw || "");
-  const rows: ActionItemRow[] = [];
-  const push = (item: unknown, owner: unknown, deadline: unknown, risk: unknown) => {
-    const normalizedItem = textOf(item);
-    if (!normalizedItem || !owner) return;
-    rows.push({
-      item: normalizedItem,
-      owner: textOf(owner),
-      deadline: textOf(deadline || "待确认"),
-      risk: textOf(risk || "未按时完成会影响后续推进"),
-    });
-  };
-
-  const customerList = text.match(/([\u4e00-\u9fa5]{2,4})\s*下周三前\s*补齐\s*(Q[1-4]\s*客户名单)/i);
-  if (customerList) {
-    push(`补齐 ${customerList[2]}`, customerList[1], "下周三前", "客户名单不完整会影响销售跟进和后续方案确认");
-  }
-
-  const quoteTemplate = text.match(/([\u4e00-\u9fa5]{2,4})\s*负责把(.{0,30}?报价模板.{0,20}?统一).*?(?:最好)?(周[一二三四五六日天]前)/);
-  if (quoteTemplate) {
-    push(quoteTemplate[2], quoteTemplate[1], quoteTemplate[3], "报价模板不统一会影响销售口径和客户体验");
-  }
-
-  const contract = text.match(/([\u4e00-\u9fa5]{2,4})说(.{0,40}?合同.{0,40}?法务.{0,30}?)(?:，|,)?可能(.{0,30}?签约)/);
-  if (contract) {
-    push("跟进新版合同法务审核排期", contract[1], "月底签约前", contract[3]);
-  }
-
-  const customerConfirm = text.match(/我需要\s*(明天|后天|今天|下周[一二三四五六日天]?)\s*约\s*(客户\s*[A-Z])\s*做(.{0,20}?确认)/i);
-  if (customerConfirm) {
-    push(`约${customerConfirm[2]}做${customerConfirm[3]}`.replace(/客户\s*([A-Z])做/i, "客户 $1 做"), "我", customerConfirm[1], "方案未确认会影响后续交付、报价或签约节奏");
-  }
-
-  return rows;
-}
-
-function buildActionItemsAnswer(raw: unknown): string {
-  const text = String(raw || "");
-  if (!/(?:会议记录|会议纪要|行动项表格|负责人|截止时间)/.test(text)) return "";
-  const rows = buildActionItemRows(text);
-  if (rows.length < 2) return "";
-
-  const table = [
-    "| 事项 | 负责人 | 截止时间 | 风险 |",
-    "|---|---|---|---|",
-    ...rows.map((row) => `| ${row.item} | ${row.owner} | ${row.deadline} | ${row.risk} |`),
-  ].join("\n");
-
-  return [
-    table,
-    "",
-    "建议会后立刻确认两件事：新版合同的法务排期，以及客户 A 方案确认的具体时间。它们最容易影响月底签约节奏。",
   ].join("\n");
 }
 
@@ -1201,7 +1134,6 @@ export function buildLocalOfficeDirectAnswer(raw: unknown): string {
     || buildGroupByAnswer(raw)
     || buildAverageReviewAnswer(raw)
     || buildRegionalGrowthAnswer(raw)
-    || buildActionItemsAnswer(raw)
     || buildCongruenceAnswer(raw)
     || "";
 }

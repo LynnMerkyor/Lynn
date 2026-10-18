@@ -54,6 +54,8 @@ Source: [Merkyor / Qwen3.8-27B-Coder390-EfficientThink](https://modelscope.cn/mo
 - **Stable settings:** stale verification results no longer overwrite newer selections.
 - **Less duplicate evidence:** retain source links, dates and useful summaries without repeating extractive summaries.
 - **Recovery after interruption:** expired CLI session-index locks recover automatically instead of blocking later conversations.
+- **GUI instructions remain intact:** both string and array instruction fragments are preserved. GUI and CLI share source-preservation guidance for all action owners, including first-person items and relative dates.
+- **Bounded command execution:** GUI shell commands default to a 60-second deadline with explicit overrides; CLI retains its existing command deadline. This is separate from model reasoning timeouts.
 
 ### Retained conversation features
 

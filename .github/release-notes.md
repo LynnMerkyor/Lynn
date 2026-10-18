@@ -21,6 +21,8 @@ Lynn --version
 - 修复搜索设置验证期间切换选项后被旧结果覆盖的问题，避免重复点击造成并发验证。
 - 搜索证据去重，保留来源链接、日期和完整有效摘要，减少重复内容占用上下文。
 - 修复 CLI 异常退出后会话索引锁残留导致后续对话卡住的问题。
+- 修复 GUI 运行时遗漏数组形式的附加指令，以及把字符串指令拆成字符的问题，保留项目要求和工具使用约束。
+- GUI 命令工具默认 60 秒超时，支持显式调整，避免未设置时无限等待；文本整理移除易漏项的旧行动项抽取规则，改由模型逐项保留原文信息。
 - GUI 与 CLI 同步更新。保持 Step 5 Preview、StepAudio 2.5 Realtime 和 Coder390 llama.cpp Q2 / Q3；延续长推理超时设置与会话删除功能。
 
 ## English
@@ -30,6 +32,8 @@ Lynn --version
 - Stale search verification results no longer overwrite a newer selection; repeated verification clicks are prevented.
 - Search evidence is deduplicated while retaining source links, dates and useful summaries.
 - CLI session indexing recovers abandoned locks after an interrupted process instead of blocking subsequent conversations.
+- GUI runtime preserves both array-based and string-based instruction fragments, including project requirements and tool-use constraints.
+- GUI shell commands default to a configurable 60-second deadline instead of waiting indefinitely. Source-text organization delegates action-item extraction to the model rather than brittle pattern matching.
 - GUI and CLI update together. Step 5 Preview, realtime voice, Coder390 Q2/Q3, long-reasoning controls and conversation deletion remain available.
 
 ## 仓库 / Repositories

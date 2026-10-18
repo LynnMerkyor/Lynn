@@ -268,5 +268,6 @@ export function buildPromptUserContent(prompt: string, options?: PromptOptions):
 
 export async function maybeString(value: unknown): Promise<string> {
   const resolved = await value;
+  if (Array.isArray(resolved)) return resolved.filter((part): part is string => typeof part === "string" && part.trim().length > 0).join("\n\n");
   return typeof resolved === "string" ? resolved : "";
 }

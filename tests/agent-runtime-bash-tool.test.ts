@@ -7,6 +7,16 @@ import path from "node:path";
 import { createSeatbeltExec } from "../lib/sandbox/seatbelt.js";
 
 describe("runtime Bash executor contract", () => {
+  it.each([undefined, 0, 600])("uses a bounded default and preserves explicit timeout %s", async timeout => {
+    const execute = vi.fn(async (_command, _directory, settings) => {
+      expect(settings.timeout).toBe(timeout === undefined ? 60 : timeout);
+      return { exitCode: 0 };
+    });
+    const tool = createBashTool(process.cwd(), { operations: { exec: execute } });
+    expect(await tool.execute("deadline", { command: "test-command", ...(timeout === undefined ? {} : { timeout }) })).toMatchObject({ isError: false });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it("passes the three-argument sandbox contract and combines byte chunks", async () => {
     const controller = new AbortController();
     const execute = vi.fn(async (_command, directory, { onData, signal, timeout }) => {
@@ -77,6 +87,18 @@ describe("runtime Bash executor contract", () => {
   it("propagates the executor's real timeout", async () => {
     const tool = createBashTool(process.cwd(), { operations: { exec: (_command, directory, options) => spawnAndStream(process.execPath, ["-e", "setTimeout(()=>{},30000)"], { ...options, cwd: directory }) } });
     await expect(tool.execute("timeout", { command: "safe wait", timeout: 0.05 })).rejects.toThrow("timeout:0.05");
+  });
+
+  it("terminates a real subprocess at the default deadline", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const tool = createBashTool(process.cwd(), { operations: { exec: (_command, directory, options) => spawnAndStream(process.execPath, ["-e", "setInterval(()=>{},1000)"], { ...options, cwd: directory }) } });
+      const result = expect(tool.execute("default-timeout", { command: "safe wait" })).rejects.toThrow("timeout:60");
+      await vi.advanceTimersByTimeAsync(60_000);
+      await result;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("runs the native shell without an injected executor", async () => {

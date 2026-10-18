@@ -156,12 +156,12 @@ type BashExecutor = (command: string, cwd: string, options: Omit<SpawnAndStreamO
 export function createBashTool(cwd = process.cwd(), options: { operations?: { exec?: BashExecutor } } = {}): Tool {
   return {
     name: "bash",
-    description: "Run a shell command in the workspace.",
-    parameters: Type.Object({ command: Type.String(), timeout: Type.Optional(Type.Number({ minimum: 0, maximum: 2147483 })) }),
+    description: "Run a shell command in the workspace. Commands time out after 60 seconds by default; set timeout explicitly for longer work. Avoid unbounded filesystem searches.",
+    parameters: Type.Object({ command: Type.String(), timeout: Type.Optional(Type.Number({ minimum: 0, maximum: 2147483, description: "Timeout in seconds; defaults to 60. Set a larger value for known long-running work. Zero explicitly disables the command deadline; cancellation still applies." })) }),
     async execute(_id, params, runtime) {
       const command = String(params.command || "");
       if (!command.trim()) return textResult("Bash command must not be empty", true);
-      const timeout = params.timeout;
+      const timeout = params.timeout === undefined ? 60 : params.timeout;
       if (timeout !== undefined && (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout < 0 || timeout > 2147483)) {
         return textResult("Bash timeout must be a finite number of seconds between 0 and 2147483", true);
       }

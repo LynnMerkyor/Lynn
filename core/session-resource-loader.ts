@@ -39,7 +39,7 @@ export function createSessionResourceLoader(opts: {
     getAppendSystemPrompt: {
       value: () => {
         const base = baseResourceLoader.getAppendSystemPrompt?.() || [];
-        const extras = [...base, TASK_TOOL_POLICY];
+        const extras = [...(Array.isArray(base) ? base : [base]), TASK_TOOL_POLICY];
 
         if (sessionEntry._lastRecallContext) {
           extras.push(sessionEntry._lastRecallContext);
