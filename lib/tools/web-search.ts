@@ -1,12 +1,10 @@
 /**
  * web-search.ts — web_search 客户端工具
  *
- * 优先级 cascade (2026-05-28 重构):
- *   Tier 1: Lynn brain v2 proxy (POST /v1/web-search 到 BRAIN_V2_URL)
- *           ← MiMo + GLM (Zhipu) 等 LLM-summarized 多源聚合,server 端持 key,
- *             客户端零暴露。返回结构化 { items, summary, sources[] }。
- *   Tier 2: 用户在 cfg.search 显式配置的 paid provider
- *           (tavily / serper / brave / searxng,带用户自己的 key)
+ * 优先级 cascade:
+ *   Tier 1: 用户显式配置的搜索 BYOK，与模型 BYOK 独立。
+ *   Tier 2: Lynn Brain 云端搜索（DeepSeek 优先，保留备用源）。
+ *           未配置搜索 BYOK 时默认走此路径，公共密钥仅在服务端。
  *   Tier 3: 零配置 HTML scrape 兜底
  *           zh locale → Bing-first;其他 locale → DDG-first
  *           (cn.bing.com 国内可直连,html.duckduckgo.com 国内常超时)
@@ -20,6 +18,7 @@ import { t, getLocale } from "../../shared/i18n-runtime.js";
 import { safeParseResponse } from "../../shared/safe-parse.js";
 import { BRAIN_API_ROOTS } from "../../shared/brain-provider.js";
 import { readSignedClientAgentHeaders } from "../../shared/client-agent-identity.js";
+import { searchDeepSeek } from "../../shared/deepseek-search.js";
 
 type SearchScene = "general" | "docs" | "finance" | "sports" | "realtime" | "research" | string;
 
@@ -56,12 +55,14 @@ interface InitWebSearchOptions {
 }
 
 interface SearchProviderOptions {
+  signal?: AbortSignal;
   base_url?: string;
   scene?: SearchScene;
   sceneHint?: string;
 }
 
 interface SearchRunOptions {
+  signal?: AbortSignal;
   sceneHint?: string;
 }
 
@@ -120,6 +121,13 @@ interface SearxngResponse {
 let _configPath: string | null = null;
 let _searchConfigResolver: (() => SearchConfig | null | undefined) | null = null;
 
+function searchRequestSignal(parent?: AbortSignal, timeoutMs = 10000): AbortSignal {
+  const deadline = AbortSignal.timeout(timeoutMs);
+  const signal = parent ? AbortSignal.any([parent, deadline]) : deadline;
+  signal.throwIfAborted();
+  return signal;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -133,7 +141,7 @@ function normalizeSearxngBaseUrl(raw: unknown): string {
 
 export function initWebSearch(configPath: string, opts: InitWebSearchOptions = {}): void {
   _configPath = configPath;
-  if (opts.searchConfigResolver) _searchConfigResolver = opts.searchConfigResolver;
+  _searchConfigResolver = opts.searchConfigResolver || null;
 }
 
 function toSearchResultItem(item: Partial<SearchResultItem> | null | undefined): SearchResultItem {
@@ -415,11 +423,13 @@ async function searchLynnBrainProxy(
   if (!roots.length) throw new Error("brain proxy root not configured");
   const errors: string[] = [];
   for (const root of roots) {
+    signal?.throwIfAborted();
     const ctrl = new AbortController();
     const abortFromParent = () => ctrl.abort(signal?.reason);
     if (signal) signal.addEventListener("abort", abortFromParent, { once: true });
     const timer = setTimeout(() => ctrl.abort(), BRAIN_PROXY_TIMEOUT_MS);
     let res: Response;
+    let data: BrainProxyResponse | null;
     try {
       res = await fetch(`${root}${BRAIN_PROXY_PATHNAME}`, {
         method: "POST",
@@ -430,16 +440,16 @@ async function searchLynnBrainProxy(
         body: JSON.stringify({ query, maxResults }),
         signal: ctrl.signal,
       });
+      data = await safeParseResponse<BrainProxyResponse>(res, null);
     } catch (err) {
+      signal?.throwIfAborted();
       errors.push(`${root}: ${errorMessage(err)}`);
-      clearTimeout(timer);
       continue;
     } finally {
       clearTimeout(timer);
       signal?.removeEventListener("abort", abortFromParent);
     }
 
-    const data = await safeParseResponse<BrainProxyResponse>(res, null);
     if (!data) {
       errors.push(`${root}: HTTP ${res.status}`);
       continue;
@@ -450,6 +460,7 @@ async function searchLynnBrainProxy(
     }
 
     const items = (data.items || []).slice(0, maxResults).map((it) => ({
+      ...it,
       title: String(it.title || ""),
       url: String(it.url || ""),
       snippet: String(it.snippet || ""),
@@ -472,8 +483,9 @@ async function searchLynnBrainProxy(
 // Provider: Tavily
 // ════════════════════════════════════════
 
-async function searchTavily(query: string, maxResults: number, apiKey: string): Promise<SearchResultItem[]> {
+async function searchTavily(query: string, maxResults: number, apiKey: string, opts: SearchProviderOptions = {}): Promise<SearchResultItem[]> {
   const res = await fetch("https://api.tavily.com/search", {
+    signal: searchRequestSignal(opts.signal),
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -500,8 +512,9 @@ async function searchTavily(query: string, maxResults: number, apiKey: string): 
 // Provider: Serper (Google)
 // ════════════════════════════════════════
 
-async function searchSerper(query: string, maxResults: number, apiKey: string): Promise<SearchResultItem[]> {
+async function searchSerper(query: string, maxResults: number, apiKey: string, opts: SearchProviderOptions = {}): Promise<SearchResultItem[]> {
   const res = await fetch("https://google.serper.dev/search", {
+    signal: searchRequestSignal(opts.signal),
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -524,9 +537,10 @@ async function searchSerper(query: string, maxResults: number, apiKey: string): 
 // Provider: Brave Search
 // ════════════════════════════════════════
 
-async function searchBrave(query: string, maxResults: number, apiKey: string): Promise<SearchResultItem[]> {
+async function searchBrave(query: string, maxResults: number, apiKey: string, opts: SearchProviderOptions = {}): Promise<SearchResultItem[]> {
   const params = new URLSearchParams({ q: query, count: String(maxResults) });
   const res = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
+    signal: searchRequestSignal(opts.signal),
     headers: {
       "Accept": "application/json",
       "Accept-Encoding": "gzip",
@@ -577,6 +591,7 @@ async function searchSearxng(
     : `${baseUrl}/search?${params.toString()}`;
 
   const res = await fetch(url, {
+    signal: searchRequestSignal(opts.signal),
     headers: {
       "Accept": "application/json",
       "User-Agent": "Lynn/0.76 web-search searxng",
@@ -599,6 +614,7 @@ async function searchSearxng(
 }
 
 const PROVIDERS: Record<string, SearchProvider> = {
+  deepseek: async (query, maxResults, apiKey, opts) => (await searchDeepSeek(query, maxResults, apiKey, opts?.signal)).map(item => ({ ...item })),
   tavily: searchTavily,
   serper: searchSerper,
   brave: searchBrave,
@@ -630,9 +646,10 @@ function resolveDuckDuckGoHref(rawHref: string | undefined): string {
   }
 }
 
-export async function searchDuckDuckGoHtml(query: string, maxResults: number): Promise<SearchResultItem[]> {
+export async function searchDuckDuckGoHtml(query: string, maxResults: number, signal?: AbortSignal): Promise<SearchResultItem[]> {
   const params = new URLSearchParams({ q: query, kl: "cn-zh" });
   const res = await fetch(`https://html.duckduckgo.com/html/?${params.toString()}`, {
+    signal: searchRequestSignal(signal),
     headers: {
       "User-Agent": "Lynn/0.73 web-search fallback",
       "Accept": "text/html,application/xhtml+xml",
@@ -661,9 +678,10 @@ export async function searchDuckDuckGoHtml(query: string, maxResults: number): P
   return dedupeResults(results);
 }
 
-export async function searchBingHtml(query: string, maxResults: number): Promise<SearchResultItem[]> {
+export async function searchBingHtml(query: string, maxResults: number, signal?: AbortSignal): Promise<SearchResultItem[]> {
   const params = new URLSearchParams({ q: query, mkt: "zh-CN" });
   const res = await fetch(`https://cn.bing.com/search?${params.toString()}`, {
+    signal: searchRequestSignal(signal),
     headers: {
       "User-Agent": "Lynn/0.78 web-search bing fallback",
       "Accept": "text/html,application/xhtml+xml",
@@ -724,52 +742,22 @@ export async function verifySearchKey(provider: string, apiKey: string, opts: Se
 }
 
 function resolveUserSearchConfig(): { provider: string; baseUrl: string; apiKey: string } {
-  let provider = "";
-  let baseUrl = "";
-  let apiKey = "";
-  if (_searchConfigResolver) {
-    const resolved = _searchConfigResolver() || {};
-    provider = resolved.provider || "";
-    baseUrl = resolved.base_url || "";
-    apiKey = resolved.api_key || "";
-  }
-  if (!provider || !apiKey) {
-    const cfg = (_configPath ? loadConfig(_configPath) : {}) as AgentConfig;
-    const searchCfg = cfg.search || {};
-    if (!provider) provider = searchCfg.provider || "";
-    if (!baseUrl) baseUrl = searchCfg.base_url || "";
-    if (!apiKey) apiKey = searchCfg.api_key || "";
-  }
-  return { provider, baseUrl, apiKey };
+  const resolved = _searchConfigResolver?.();
+  const search = resolved ?? ((_configPath ? loadConfig(_configPath) : {}) as AgentConfig).search ?? {};
+  return { provider: search.provider || '', baseUrl: search.base_url || '', apiKey: search.api_key || '' };
 }
 
 async function doSearch(query: string, maxResults: number, opts: SearchRunOptions = {}): Promise<SearchRunResult> {
+  const signal = searchRequestSignal(opts.signal, 30000);
+  const result = await doSearchWithinBudget(query, maxResults, { ...opts, signal });
+  signal.throwIfAborted();
+  return result;
+}
+
+async function doSearchWithinBudget(query: string, maxResults: number, opts: SearchRunOptions): Promise<SearchRunResult> {
+  const signal = opts.signal!;
   const plan = buildSearchPlan(query, opts.sceneHint);
   const errors: string[] = [];
-
-  // ── Tier 1: Lynn brain v2 proxy ────────────────────────────────────
-  // Server-side MiMo / Zhipu / Bocha / Tavily / Serper multi-source race.
-  // Returns LLM-synthesized summary + structured sources. No client keys.
-  // Set BRAIN_V2_URL='' or LYNN_DISABLE_BRAIN_SEARCH=1 to skip this tier.
-  const brainDisabled = String(process.env.LYNN_DISABLE_BRAIN_SEARCH || '').trim() === '1';
-  if (!brainDisabled) {
-    try {
-      const brain = await searchLynnBrainProxy(plan.expandedQuery, maxResults);
-      return {
-        results: brain.results,
-        provider: brain.provider,
-        plan,
-        summary: brain.summary,
-        sources: brain.sources,
-      };
-    } catch (brainErr) {
-      // Brain v2 may not be running (CLI / headless agent / brain disabled).
-      // Silently cascade to user-configured paid provider next.
-      errors.push(`brain-proxy: ${errorMessage(brainErr)}`);
-    }
-  }
-
-  // ── Tier 2: user-configured paid provider ─────────────────────────
   const { provider, baseUrl, apiKey } = resolveUserSearchConfig();
   if (provider) {
     if (provider === "searxng" && !baseUrl) {
@@ -781,16 +769,35 @@ async function doSearch(query: string, maxResults: number, opts: SearchRunOption
     } else if (PROVIDERS[provider]) {
       try {
         return {
-          results: await PROVIDERS[provider](plan.expandedQuery, maxResults, apiKey, {
+          results: await PROVIDERS[provider](provider === 'deepseek' ? query.trim() : plan.expandedQuery, maxResults, apiKey, {
             base_url: baseUrl,
             scene: plan.scene,
+            signal,
           }),
           provider,
-          plan,
+          plan: provider === 'deepseek' ? { ...plan, expandedQuery: query.trim() } : plan,
         };
       } catch (err) {
+        signal.throwIfAborted();
         errors.push(t("error.searchFailed", { msg: errorMessage(err) }));
       }
+    }
+  }
+
+  const brainDisabled = String(process.env.LYNN_DISABLE_BRAIN_SEARCH || '').trim() === '1';
+  if (!brainDisabled) {
+    try {
+      const brain = await searchLynnBrainProxy(query.trim(), maxResults, signal);
+      return {
+        results: brain.results,
+        provider: brain.provider,
+        plan: { ...plan, expandedQuery: query.trim() },
+        summary: brain.summary,
+        sources: brain.sources,
+      };
+    } catch (brainErr) {
+      signal.throwIfAborted();
+      errors.push(`brain-proxy: ${errorMessage(brainErr)}`);
     }
   }
 
@@ -798,7 +805,7 @@ async function doSearch(query: string, maxResults: number, opts: SearchRunOption
   // zh locale → Bing first (cn.bing.com is reachable from China);
   // other locales → DDG first (html.duckduckgo.com is the historical default).
   const noKeyVariants = normalizeNoKeySearchVariants(query, plan.expandedQuery);
-  const scrapeOrder: Array<{ name: string; fn: (q: string, n: number) => Promise<SearchResultItem[]> }> = isZhLocale()
+  const scrapeOrder: Array<{ name: string; fn: (q: string, n: number, signal?: AbortSignal) => Promise<SearchResultItem[]> }> = isZhLocale()
     ? [
         { name: "bing-html", fn: searchBingHtml },
         { name: "duckduckgo-html", fn: searchDuckDuckGoHtml },
@@ -810,13 +817,15 @@ async function doSearch(query: string, maxResults: number, opts: SearchRunOption
 
   for (const scraper of scrapeOrder) {
     for (const variant of noKeyVariants) {
+      signal.throwIfAborted();
       try {
         return {
-          results: await scraper.fn(variant, maxResults),
+          results: await scraper.fn(variant, maxResults, signal),
           provider: scraper.name,
           plan,
         };
       } catch (fallbackErr) {
+        signal.throwIfAborted();
         errors.push(`${scraper.name}: ${errorMessage(fallbackErr)}`);
       }
     }
@@ -847,12 +856,13 @@ export function createWebSearchTool() {
     label: t("toolDef.webSearch.label"),
     description: t("toolDef.webSearch.description"),
     parameters: Type.Object({
-      query: Type.String({ description: t("toolDef.webSearch.queryDesc") }),
+      query: Type.String({ description: t("toolDef.webSearch.queryDesc"), minLength: 1, maxLength: 128 }),
       maxResults: Type.Optional(
-        Type.Number({ description: t("toolDef.webSearch.maxResultsDesc"), default: 5 })
+        Type.Integer({ description: t("toolDef.webSearch.maxResultsDesc"), default: 5, minimum: 1, maximum: 50 })
       ),
     }),
-    execute: async (_toolCallId: string, params: WebSearchToolParams): Promise<WebSearchToolResult> => {
+    execute: async (_toolCallId: string, params: WebSearchToolParams, runtime?: { signal?: AbortSignal }): Promise<WebSearchToolResult> => {
+      runtime?.signal?.throwIfAborted();
       const query = params.query?.trim();
       if (!query) {
         return {
@@ -862,7 +872,7 @@ export function createWebSearchTool() {
       }
 
       try {
-        const { results, provider, plan, summary, sources } = await doSearch(query, params.maxResults ?? 5);
+        const { results, provider, plan, summary, sources } = await doSearch(query, params.maxResults ?? 5, { signal: runtime?.signal });
 
         if (results.length === 0 && !summary) {
           return {
@@ -882,7 +892,9 @@ export function createWebSearchTool() {
               ? (isZhLocale() ? `   来源：${source}\n` : `   Source: ${source}\n`)
               : "";
             const urlLine = hideSearchPage ? "" : `   ${r.url}\n`;
-            return `${i + 1}. **${r.title}**\n${sourceLine}${urlLine}   ${r.snippet}`;
+            const published = typeof r.date === 'string' ? `   Published: ${r.date}\n` : '';
+            const retrieved = typeof r.retrievedAt === 'string' ? `   Retrieved: ${r.retrievedAt}\n` : '';
+            return `${i + 1}. **${r.title}**\n${sourceLine}${urlLine}${published}${retrieved}   ${r.snippet}`;
           })
           .join("\n\n");
 
@@ -898,7 +910,8 @@ export function createWebSearchTool() {
           && translatedFollowupHint !== "error.searchFollowupHint"
           ? `\n\n${translatedFollowupHint}`
           : "";
-        const summaryBlock = summary
+        const duplicateSummary = provider === 'lynn-brain/deepseek' && results.length > 0;
+        const summaryBlock = summary && !duplicateSummary
           ? t("error.searchSynthesized", { summary }) + "\n\n"
           : "";
 
@@ -927,6 +940,7 @@ export function createWebSearchTool() {
           },
         };
       } catch (err) {
+        runtime?.signal?.throwIfAborted();
         return {
           content: [{ type: "text", text: t("error.searchError", { msg: errorMessage(err) }) }],
           details: {},

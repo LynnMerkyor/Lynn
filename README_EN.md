@@ -16,11 +16,11 @@
 
 ---
 
-## Lynn V0.87.2 · Step 5 Cloud + Coder390 Local
+## Lynn V0.87.3 · Step 5 Cloud + Coder390 Local
 
-Lynn is an open-source AI agent with a desktop GUI and standalone CLI for search, files, coding and realtime voice. It also runs as a headless worker for other agents and CI. **GUI and CLI are both V0.87.2; the default working model is Step 5 Preview, not Step 3.7.**
+Lynn is an open-source AI agent with a desktop GUI and standalone CLI for search, files, coding and realtime voice. It also runs as a headless worker for other agents and CI. **GUI and CLI are both V0.87.3; the default working model is Step 5 Preview, not Step 3.7.**
 
-[Download mirror (recommended)](https://download.merkyorlynn.com/download.html) · [V0.87.2 release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.2) · [Primary GitHub](https://github.com/MerkyorLynn/Lynn) · [Backup GitHub](https://github.com/LynnMerkyor/Lynn) · [Gitee](https://gitee.com/merkyor/Lynn)
+[Download mirror (recommended)](https://download.merkyorlynn.com/download.html) · [V0.87.3 release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.3) · [Primary GitHub](https://github.com/MerkyorLynn/Lynn) · [Backup GitHub](https://github.com/LynnMerkyor/Lynn) · [Gitee](https://gitee.com/merkyor/Lynn)
 
 ### Current Models and Runtime
 
@@ -47,7 +47,14 @@ Source: [Merkyor / Qwen3.8-27B-Coder390-EfficientThink](https://modelscope.cn/mo
 - File size is not runtime memory use: KV cache, compute buffers and the OS need additional headroom.
 - Installation and startup require explicit user action. Switching tiers preserves existing files; Settings offers Q2 / Q3 rather than recommending the old 9B / 4B models.
 
-### V0.87.2 Highlights
+### V0.87.3 Highlights
+
+- **Direct search:** DeepSeek Search takes priority, preserving model-supplied locations, dates and search operators.
+- **Reliable cancellation:** stopped searches do not launch fallback requests; request/body deadlines share a 30-second client search budget.
+- **Stable settings:** stale verification results no longer overwrite newer selections.
+- **Less duplicate evidence:** retain source links, dates and useful summaries without repeating extractive summaries.
+
+### Retained conversation features
 
 - **Long reasoning stays connected:** OpenAI-compatible endpoints and the built-in Qwen bridge share a 600-second first-chunk timeout, a 600-second resettable idle timeout and no default model-wide deadline. Continued output can run beyond ten minutes. Saved settings and explicit environment overrides remain authoritative; settings and `Lynn doctor --offline` show effective values and their sources.
 - **No punctuation-based continuations:** one recovery attempt is allowed for an explicit `finish_reason=length` or a reasoning-only empty answer, not because an English answer is short.
@@ -76,12 +83,12 @@ Use the desktop for conversations, files, task progress and change acceptance. U
 # Windows: winget install OpenJS.NodeJS.LTS
 
 # 2. Install or update from the Lynn mirror.
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.2.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.3.tgz"
 
 # 3. Launch.
 Lynn          # interactive chat TUI; type /voice or lynn voice for realtime voice
 Lynn code     # coding-agent TUI
-Lynn --version  # should print 0.87.2
+Lynn --version  # should print 0.87.3
 Lynn agents   # copyable headless worker commands for other agents
 ```
 
@@ -106,7 +113,7 @@ Agents should parse JSONL, not the human terminal TUI. See [`docs/ops/lynn-code-
 
 ## 🆕 Recent Updates
 
-The current version is **V0.87.2**; see the introduction for current models and installation requirements. The entries below are historical release notes. Their models, memory tiers and routing describe those older versions, not current installation recommendations.
+The current version is **V0.87.3**; see the introduction for current models and installation requirements. The entries below are historical release notes. Their models, memory tiers and routing describe those older versions, not current installation recommendations.
 
 <details>
 <summary><strong>Lynn v0.86.8</strong> · 2026-09-08 · Kimi QR sign-in, conversation search and mobile continuation</summary>
@@ -1035,7 +1042,7 @@ Interface available in 5 languages: Chinese, English, Japanese, Korean, and Trad
 
 Lynn doesn't just slap an OpenAI-compatible wrapper and call it a day. From 9B small models to GLM-5 reasoning models, every tier has purpose-built adaptations:
 
-**Free built-in models (Brain v2)** — Quick Start ships with a built-in model pool. V0.87.2 uses Step 5 Preview as the ordinary GUI/CLI default route, with vendor fallbacks and an explicit local manager path:
+**Free built-in models (Brain v2)** — Quick Start ships with a built-in model pool. V0.87.3 uses Step 5 Preview as the ordinary GUI/CLI default route, with vendor fallbacks and an explicit local manager path:
 
 ```
 T1  ⭐ Step 5 Preview (step-5-preview, text/coding route)
@@ -1147,7 +1154,7 @@ Read/write files, run terminal commands, browse the web, search the internet, ta
 
 ### Download
 
-**macOS (Apple Silicon / Intel):** download the `.dmg` for your architecture from the [download mirror](https://download.merkyorlynn.com/download.html); see the [V0.87.2 release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.2). Official DMGs must pass Developer ID signing, Apple notarization, stapling and Gatekeeper validation before publication.
+**macOS (Apple Silicon / Intel):** download the `.dmg` for your architecture from the [download mirror](https://download.merkyorlynn.com/download.html); see the [V0.87.3 release notes](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.3). Official DMGs must pass Developer ID signing, Apple notarization, stapling and Gatekeeper validation before publication.
 
 **Windows:** download the latest `.exe` installer from the [download mirror](https://download.merkyorlynn.com/download.html) and run it directly; release records live on [GitHub Releases](https://github.com/MerkyorLynn/Lynn/releases).
 

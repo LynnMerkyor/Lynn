@@ -14,6 +14,7 @@ import {
 import { makeLruCache } from "./_helpers.js";
 import { calendar, exchangeRate, sportsScore } from "./utility.js";
 import { lookupOfficialSources } from "./official-source-mesh.js";
+import { deepSeekSearchConfigured, searchDeepSeekStructured } from "./deepseek-search.js";
 const cache = makeLruCache(200, 5 * 60 * 1e3);
 const structuredCache = makeLruCache(200, 5 * 60 * 1e3);
 const BUDGET_MS = 14e3;
@@ -700,6 +701,36 @@ const STRUCTURED_RACERS = [
 ];
 async function webSearchStructured(query, { log } = {}) {
   const rawQuery = String(query || "").trim();
+  const override = String(envOr("WEB_SEARCH_PRIMARY_PROVIDER")).trim().toLowerCase();
+  const deepseekPrimary = deepSeekSearchConfigured() && (!override || override === 'deepseek');
+  if (rawQuery && deepseekPrimary) {
+    const startedAt = Date.now();
+    const cacheKey = `deepseek:${rawQuery}`;
+    const cached = structuredCache.get(cacheKey);
+    if (cached) return cached;
+    if ([...rawQuery].length > 128) return { ok: false, error: 'Search query exceeds 128 Unicode characters; submit a concise query preserving the requested entities and date.', sources: [] };
+    try {
+      const value = await searchDeepSeekStructured(rawQuery, AbortSignal.timeout(5000));
+      const result = { ok: true, query: rawQuery, provider: 'deepseek', ...value, sources: [{ name: 'deepseek', ok: true, ...value }] };
+      structuredCache.set(cacheKey, result);
+      log && log('info', 'tool-exec/web_search_structured primary=deepseek items=' + value.items.length);
+      return result;
+    } catch (error) {
+      const deepseekFailure = { name: 'deepseek', ok: false, error: error?.message || 'DeepSeek Search unavailable', items: [] };
+      log && log('warn', 'tool-exec/web_search_structured DeepSeek failed; using existing fallback');
+      const controller = new AbortController();
+      const racers = STRUCTURED_RACERS.filter(source => !source.optional || envOr(source.envKey)).map(source => ({
+        source: source.source,
+        fn: () => source.fn(rawQuery, controller.signal).then(value => requireUsableStructured(source.source, value)),
+      }));
+      const settled = await raceUsableSources(racers, Math.max(1, Math.min(7000, 12000 - (Date.now() - startedAt))));
+      controller.abort();
+      const sources = [deepseekFailure, ...settled.map(entry => ({ name: entry.source, ok: entry.ok, error: entry.error, items: entry.ok ? entry.value.items : [], summary: entry.ok ? entry.value.summary : undefined }))];
+      const primary = sources.find(source => source.ok);
+      if (!primary) return { ok: false, error: 'all search sources failed', sources };
+      return { ok: true, query: rawQuery, provider: primary.name, items: primary.items, summary: primary.summary, sources };
+    }
+  }
   const q = normalizeSearchQueryIntent(rawQuery);
   if (!q) return { ok: false, error: "empty query", sources: [] };
   const cached = structuredCache.get(q.toLowerCase());
@@ -927,8 +958,9 @@ function formatStructuredSearchForTool(result, query) {
     lines.push("");
   }
   if (result.provider) lines.push("provider: " + result.provider);
-  if (result.summary) lines.push("\u6458\u8981: " + String(result.summary).trim());
   const items = usefulItems(result.items).slice(0, 8);
+  const extractive = result.provider === 'deepseek' && items.length > 0;
+  if (result.summary && !extractive) lines.push("\u6458\u8981: " + String(result.summary).trim());
   if (items.length) {
     if (lines.length) lines.push("");
     lines.push("\u641C\u7D22\u7ED3\u679C:");
@@ -936,7 +968,9 @@ function formatStructuredSearchForTool(result, query) {
       lines.push(index + 1 + ". " + String(item.title || item.url || "source").trim());
       lines.push("   " + String(item.url || "").trim());
       const snippet = String(item.snippet || item.summary || "").replace(/\s+/g, " ").trim();
-      if (snippet) lines.push("   " + snippet.slice(0, 240));
+      if (item.date) lines.push("   Published: " + String(item.date));
+      if (item.retrievedAt) lines.push("   Retrieved: " + String(item.retrievedAt));
+      if (snippet) lines.push("   " + (extractive ? snippet : snippet.slice(0, 240)));
     });
     if (isProductReleaseOrVersionQuery(query || result.query || "")) {
       lines.push("");
@@ -963,6 +997,10 @@ function formatStructuredSearchForTool(result, query) {
   return lines.join(NL).trim() || JSON.stringify(result);
 }
 async function webSearch(query, { log } = {}) {
+  if (deepSeekSearchConfigured()) {
+    const structured = await webSearchStructured(query, { log });
+    return formatStructuredSearchForTool(structured, query);
+  }
   const q = normalizeSearchQueryIntent(query);
   if (!q) return JSON.stringify({ error: "empty query" });
   const cached = cache.get(q.toLowerCase());

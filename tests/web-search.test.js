@@ -200,10 +200,7 @@ describe("web search Tier 1 brain proxy", () => {
       expect(opts?.headers).toHaveProperty("X-Agent-Key");
       expect(opts?.headers).toHaveProperty("X-Lynn-Signature");
       const body = JSON.parse(String(opts?.body || "{}"));
-      expect(body.query).toContain("2026世界杯");
-      expect(body.query).toContain("小组赛");
-      expect(body.query).toContain("对阵");
-      expect(body.query).toContain("比分");
+      expect(body.query).toBe("世界杯今天有什么赛程安排");
       const payload = {
         ok: true,
         provider: "glm",

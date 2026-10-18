@@ -761,8 +761,10 @@ export function createConfigRoute(engine: ConfigRouteEngine): Hono {
     try {
       const { verifySearchKey } = await import("../../lib/tools/web-search.js");
       await verifySearchKey(provider, api_key, { base_url });
-      engine.setSearchConfig({ provider, api_key, base_url });
-      await engine.updateConfig({ search: { provider, api_key, base_url } });
+      if (body.save !== false) {
+        engine.setSearchConfig({ provider, api_key, base_url });
+        await engine.updateConfig({ search: { provider, api_key, base_url } });
+      }
       debugLog()?.log("api", `POST /api/search/verify provider=${provider} (ok)`);
       return c.json({ ok: true });
     } catch (err) {

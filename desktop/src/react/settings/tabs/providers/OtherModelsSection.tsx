@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSettingsStore } from '../../store';
 import { hanaFetch } from '../../api';
 import { BRAIN_PROVIDER_ID, isBrainModelId } from '../../../../../../shared/brain-provider.js';
 import {
   t, lookupModelMeta, formatContext, autoSaveGlobalModels,
 } from '../../helpers';
-import { loadSettingsConfig } from '../../actions';
 import { SelectWidget } from '../../widgets/SelectWidget';
 import { ModelWidget } from '../../widgets/ModelWidget';
 import { KeyInput } from '../../widgets/KeyInput';
@@ -71,6 +70,11 @@ export function OtherModelsSection({ providers }: { providers: Record<string, { 
   const [searchBaseUrl, setSearchBaseUrl] = useState('');
   const [searchKeyEdited, setSearchKeyEdited] = useState(false);
   const [searchBaseUrlEdited, setSearchBaseUrlEdited] = useState(false);
+  const searchRevision = useRef(0);
+  const searchSaving = useRef(false);
+  const [searchVerifying, setSearchVerifying] = useState(false);
+  const [searchCommitting, setSearchCommitting] = useState(false);
+  useEffect(() => () => { searchRevision.current++; }, []);
 
   // 从后端同步已保存的 key
   useEffect(() => {
@@ -84,28 +88,38 @@ export function OtherModelsSection({ providers }: { providers: Record<string, { 
   const searchNeedsApiKey = searchProvider !== 'searxng';
 
   const verifySearch = async () => {
+    if (searchVerifying || searchSaving.current) return;
     const provider = (globalModelsConfig?.search?.provider || '').trim();
     const apiKey = searchApiKey.trim();
     const baseUrl = searchBaseUrl.trim();
     if (!provider) { showToast(t('settings.search.noProvider'), 'error'); return; }
     if (provider === 'searxng' && !baseUrl) { showToast(t('settings.search.noBaseUrl'), 'error'); return; }
     if (provider !== 'searxng' && !apiKey) { showToast(t('settings.search.noKey'), 'error'); return; }
+    const revision = ++searchRevision.current;
+    setSearchVerifying(true);
     try {
       const res = await hanaFetch('/api/search/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, api_key: apiKey, base_url: baseUrl }),
+        body: JSON.stringify({ provider, api_key: apiKey, base_url: baseUrl, save: false }),
       });
       const data = await res.json();
+      if (revision !== searchRevision.current) return;
       if (data.ok) {
-        showToast(t('settings.search.verified'), 'success');
-        await loadSettingsConfig();
+        searchSaving.current = true;
+        setSearchCommitting(true);
+        await autoSaveGlobalModels({ search: { provider, api_key: apiKey, base_url: baseUrl } });
       } else {
         showToast(t('settings.search.verifyFailed') + (data.error ? ': ' + data.error : ''), 'error');
       }
     } catch (err: unknown) {
+      if (revision !== searchRevision.current) return;
       const msg = err instanceof Error ? err.message : String(err);
       showToast(t('settings.saveFailed') + ': ' + msg, 'error');
+    } finally {
+      searchSaving.current = false;
+      setSearchCommitting(false);
+      setSearchVerifying(false);
     }
   };
 
@@ -185,16 +199,27 @@ export function OtherModelsSection({ providers }: { providers: Record<string, { 
           <label className={styles['settings-field-label']}>{t('settings.api.searchProviderField')}</label>
           <SelectWidget
             options={[
-              { value: '', label: 'Not configured' },
+              { value: '', label: t('settings.api.searchCloudDefault') },
+              { value: 'deepseek', label: 'DeepSeek Search (BYOK)' },
               { value: 'searxng', label: 'searXNG' },
               { value: 'tavily', label: 'Tavily' },
               { value: 'brave', label: 'Brave Search' },
               { value: 'serper', label: 'Serper (Google)' },
             ]}
             value={searchProvider}
-            onChange={(val) => autoSaveGlobalModels({ search: { provider: val } })}
+            disabled={searchCommitting}
+            onChange={(val) => {
+              if (val === searchProvider || searchSaving.current) return;
+              searchRevision.current++;
+              setSearchApiKey('');
+              setSearchBaseUrl('');
+              setSearchKeyEdited(true);
+              setSearchBaseUrlEdited(true);
+              autoSaveGlobalModels({ search: { provider: val, api_key: '', base_url: '' } });
+            }}
             placeholder={t('settings.api.searchProviderField')}
           />
+          <span className={styles['settings-field-hint']}>{t('settings.api.searchRoutingHint')}</span>
         </div>
         <div className={`${styles['settings-field']} ${styles['settings-field-half']}`}>
           <label className={styles['settings-field-label']}>
@@ -203,18 +228,19 @@ export function OtherModelsSection({ providers }: { providers: Record<string, { 
           {searchNeedsApiKey ? (
             <KeyInput
               value={searchApiKey}
-              onChange={(v) => { setSearchApiKey(v); setSearchKeyEdited(true); }}
+              onChange={(v) => { if (searchSaving.current) return; searchRevision.current++; setSearchApiKey(v); setSearchKeyEdited(true); }}
               placeholder={t('settings.api.apiKeyPlaceholder')}
             />
           ) : (
             <input
               className={styles['settings-input']}
               value={searchBaseUrl}
-              onChange={(e) => { setSearchBaseUrl(e.target.value); setSearchBaseUrlEdited(true); }}
+              disabled={searchCommitting}
+              onChange={(e) => { searchRevision.current++; setSearchBaseUrl(e.target.value); setSearchBaseUrlEdited(true); }}
               placeholder="https://search.example.com"
             />
           )}
-          <button className={styles['search-verify-btn']} onClick={verifySearch}>
+          <button className={styles['search-verify-btn']} onClick={verifySearch} disabled={!searchProvider || searchVerifying}>
             {t('settings.search.verify')}
           </button>
           <span className={styles['settings-field-hint']}>
