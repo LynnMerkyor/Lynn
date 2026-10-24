@@ -55,6 +55,10 @@ Source: [Merkyor / Qwen3.8-27B-Coder390-EfficientThink](https://modelscope.cn/mo
 - **Safer execution:** explicit permissions take precedence, broken guards fail closed, cancellation stops process trees, and read state is task-scoped.
 - **Installer and web fixes:** preserve unrelated command links, validate redirect targets and propagate cancellation.
 - **Dated evidence:** distinguish publication, retrieval and event times; verify conflicting news and structured data instead of presenting old events as current results.
+- **Retrieved content stays distinct from user input:** check the original server-held request while keeping retrieved evidence available to the model.
+- **Complete sports answers:** let the model finish its analysis after tool results arrive, and remove canned score predictions.
+
+See the [V0.87.4 verification and follow-up record](docs/ops/v0874-follow-ups.md).
 
 ### Retained conversation features
 

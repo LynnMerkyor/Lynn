@@ -23,6 +23,8 @@ Lynn --version
 - 修复增强 CLI 的读取/写入竞态、断流后的残留工具调用、跨任务阅读缓存污染和仅停止父进程的问题。后台日志只读取有界尾部，安装脚本不改动其他程序的命令链接。
 - CLI 网页抓取逐跳检查重定向，支持主动取消，并修正部分 IPv6 内网地址与普通域名的误判。
 - 搜索结果明确区分发布时间与抓取时间；遇到实时数据和搜索新闻冲突时要求核验事件日期，避免把历史内容当作当日结果。
+- 修复搜索资料误触发内容过滤：使用服务器保存的原始用户请求进行输入检查，同时保留检索资料供模型分析。
+- 修复体育工具返回后对话提前结束：模型继续整理和解释真实赛程、比分；移除写死的预测比分。
 - GUI / CLI 同步升级。默认模型仍为 Step 5 Preview，实时语音仍为 StepAudio 2.5 Realtime；保留 Coder390 llama.cpp Q2 / Q3、长推理超时设置和会话删除功能。
 
 ## English
@@ -33,6 +35,9 @@ Lynn --version
 - Enforce explicit permission rules and trusted hooks; fail closed on invalid policy or failed guards. Fix tool ordering, interrupted-stream dispatch, read-cache isolation, process-tree cancellation and installer shim ownership.
 - Validate web redirects at each hop and propagate cancellation. GUI and CLI retain Step 5, realtime voice, Coder390 Q2/Q3, long-reasoning controls and conversation deletion.
 - Distinguish publication dates from retrieval timestamps and require dated evidence when search reports conflict with live structured data.
+
+- Check the original user request without mistaking retrieved page contents for user input; keep the retrieved evidence available to the model.
+- Let the model finish its sports analysis after tool results arrive, and remove canned score predictions.
 
 ## 仓库 / Repositories
 
