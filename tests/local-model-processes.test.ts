@@ -15,7 +15,7 @@ beforeEach(() => { probe.stdout = ""; probe.error = null; probe.calls = []; });
 describe("local model native process probes", () => {
   it("never invokes PATH ps/lsof on Windows and hides every repeated query", async () => {
     for (let iteration = 0; iteration < 13; iteration += 1) {
-      probe.stdout = JSON.stringify({ ProcessId: 123, CommandLine: '"C:\\模型\\llama-server.exe" --port 8081' });
+      probe.stdout = '123\t"C:\\模型\\llama-server.exe" --port 8081';
       expect(await localLlamaProcesses("win32")).toHaveLength(1);
       probe.stdout = " TCP 127.0.0.1:8081 0.0.0.0:0 LISTENING 123\r\n TCP [::]:8081 [::]:0 LISTENING 123\r\n TCP 127.0.0.1:18081 0.0.0.0:0 LISTENING 456\r\n";
       expect(await localListenerPids("8081", "win32")).toEqual([123]);
@@ -26,11 +26,11 @@ describe("local model native process probes", () => {
       expect(options).toMatchObject({ windowsHide: true, timeout: 2000 });
     }
     expect(probe.calls[0][1]).toContain("-NonInteractive");
-    expect(probe.calls[0][1]).toContain("Hidden");
+    expect(probe.calls[0][1]).toContain("-EncodedCommand");
   });
   it("parses empty, multiple and inaccessible Windows command lines", async () => {
     expect(await localLlamaProcesses("win32")).toEqual([]);
-    probe.stdout = JSON.stringify([{ ProcessId: 7, CommandLine: "llama-server.exe --port=8081" }, { ProcessId: 8, CommandLine: null }, { ProcessId: -1, CommandLine: "bad" }]);
+    probe.stdout = '7\tllama-server.exe --port=8081\n8\t\n-1\tbad';
     expect(await localLlamaProcesses("win32")).toEqual([{ pid: 7, command: "llama-server.exe --port=8081" }]);
     probe.stdout = "invalid JSON";
     expect(await localLlamaProcesses("win32")).toEqual([]);

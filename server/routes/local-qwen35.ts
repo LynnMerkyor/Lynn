@@ -26,7 +26,7 @@ import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { fromRoot } from "../../shared/lynn-root.js";
 import localHardware from '../../shared/local-model-hardware.cjs';
-import { localListenerPids, localLlamaProcesses } from "../local-model-processes.js";
+import { localListenerPids, localLlamaProcesses, selectQwen35ProcessPids } from "../local-model-processes.js";
 const localCatalog = localHardware.catalog;
 
 const execFileAsync = promisify(execFile);
@@ -331,6 +331,8 @@ function isPidAlive(pid: number | null | undefined): boolean {
   }
 }
 
+export { localQwenListenerInvocation, localQwenProcessListInvocation, parseProcessCommandLines, parseWindowsListenerPids, selectQwen35ProcessPids } from "../local-model-processes.js";
+
 async function listenerPids(port: string): Promise<number[]> {
   return localListenerPids(port);
 }
@@ -339,19 +341,7 @@ async function qwen35ProcessPids(state: LocalQwen35State = defaultState()): Prom
   const modelPaths = candidateModelPaths(state);
   try {
     const processes = await localLlamaProcesses();
-    return processes
-      .map(({ pid, command }): number | null => {
-        if (!Number.isFinite(pid) || pid <= 0) return null;
-        if (!/llama-server(?:\s|$)/.test(command) && !/llama-server\b/.test(command)) return null;
-        const mentionsPort = new RegExp(`(?:^|\\s)--port(?:=|\\s+)"?${Number(state.port)}"?(?=\\s|$)`).test(command);
-        const mentionsModel = modelPaths.some((candidate) => candidate && command.includes(candidate))
-          || /Q4-imatrix-MTP-00001-of-00004/i.test(command)
-          || /qwen36-27b-dsv4pro-coding-q4-mtp/i.test(command)
-          || /Qwen3\.6-27B-DSV4Pro-Distill-MTP-Q5_K_M/i.test(command)
-          || /qwen36-27b-dsv4pro-distill-q5km/i.test(command);
-        return mentionsPort || mentionsModel ? pid : null;
-      })
-      .filter(isPositiveFiniteNumber);
+    return selectQwen35ProcessPids(processes, state.port, modelPaths);
   } catch {
     return [];
   }

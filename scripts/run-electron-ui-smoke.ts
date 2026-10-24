@@ -10,6 +10,7 @@ import { createRequire } from "node:module";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
+import { evaluateRetained } from "./cdp-evaluate.js";
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -49,11 +50,6 @@ interface CdpResponse {
   result?: Record<string, unknown>;
   error?: { message?: string };
   exceptionDetails?: { text?: string };
-}
-
-interface RuntimeEvaluateResult extends Record<string, unknown> {
-  exceptionDetails?: { text?: string };
-  result?: { value?: unknown };
 }
 
 interface Snapshot {
@@ -204,15 +200,7 @@ class CdpClient {
   }
 
   async evaluate(expression: string): Promise<unknown> {
-    const result = await this.call("Runtime.evaluate", {
-      expression,
-      awaitPromise: true,
-      returnByValue: true,
-    }) as RuntimeEvaluateResult;
-    if (result.exceptionDetails) {
-      throw new Error(result.exceptionDetails.text || "Runtime.evaluate failed");
-    }
-    return result.result?.value;
+    return evaluateRetained(this.call.bind(this), expression);
   }
 
   close(): void {
