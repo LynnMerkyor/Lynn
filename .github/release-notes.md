@@ -1,43 +1,37 @@
-# Lynn v0.87.3 · 搜索与交互稳定性更新
-
-2026-10-18
+# Lynn v0.87.4 · Windows 稳定性与增强 CLI
 
 ## 下载 / Downloads
 
-- [macOS Apple Silicon](https://download.merkyorlynn.com/downloads/Lynn-0.87.3-macOS-arm64.dmg)
-- [macOS Intel](https://download.merkyorlynn.com/downloads/Lynn-0.87.3-macOS-x64.dmg)
-- [Windows x64](https://download.merkyorlynn.com/downloads/Lynn-0.87.3-Windows-Setup.exe)
+- [macOS Apple Silicon](https://download.merkyorlynn.com/downloads/Lynn-0.87.4-macOS-arm64.dmg)
+- [macOS Intel](https://download.merkyorlynn.com/downloads/Lynn-0.87.4-macOS-x64.dmg)
+- [Windows x64](https://download.merkyorlynn.com/downloads/Lynn-0.87.4-Windows-Setup.exe)
 - [下载说明页](https://download.merkyorlynn.com/download.html)
 
 ```bash
-npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.3.tgz"
+npm install -g --force "https://download.merkyorlynn.com/downloads/cli/lynn-cli-0.87.4.tgz"
 Lynn --version
 ```
 
 ## 中文
 
-- 默认联网搜索优先使用 DeepSeek Search，保留备用搜索源；模型提供完整查询，保留地点、日期及搜索运算符。
-- 搜索支持主动停止，取消后不再继续发起备用请求；单个搜索请求及正文读取有独立超时，客户端搜索链最多等待 30 秒。
-- 修复搜索设置验证期间切换选项后被旧结果覆盖的问题，避免重复点击造成并发验证。
-- 搜索证据去重，保留来源链接、日期和完整有效摘要，减少重复内容占用上下文。
-- 修复 CLI 异常退出后会话索引锁残留导致后续对话卡住的问题。
-- 修复 GUI 运行时遗漏数组形式的附加指令，以及把字符串指令拆成字符的问题，保留项目要求和工具使用约束。
-- GUI 命令工具默认 60 秒超时，支持显式调整，避免未设置时无限等待；文本整理移除易漏项的旧行动项抽取规则，改由模型逐项保留原文信息。
-- GUI 与 CLI 同步更新。保持 Step 5 Preview、StepAudio 2.5 Realtime 和 Coder390 llama.cpp Q2 / Q3；延续长推理超时设置与会话删除功能。
+- 修复 #76：Windows 本地模型状态查询改用系统目录中的原生工具，并隐藏查询窗口；不再调用 PATH 中 Anaconda 等环境提供的 ps.exe，也不再向 Windows 工具传递 POSIX 参数。
+- 实现 #77：汇率主源不可用时回退到 AllRatesToday，标明来源、更新时间和 ECB 每日参考汇率属性；支持黄金美元/人民币换算。备用源成功结果缓存一小时，并合并并发请求；无有效数据时明确报错。
+- 合入增强 CLI：流式工具调用、并发只读工具、串行写入屏障、精确字符串编辑、任务内阅读去重、长命令后台执行、计划模式、技能与项目命令、会话分支、上下文压缩、长结果落盘及输入排队。
+- CLI 权限规则支持 allow/ask/deny；仓库中的允许规则和 hook 需要明确建立信任。拒绝规则优先，配置损坏或守门 hook 失败时不继续执行，明确的 ask 规则不会被 yolo 模式跳过。
+- 修复增强 CLI 的读取/写入竞态、断流后的残留工具调用、跨任务阅读缓存污染和仅停止父进程的问题。后台日志只读取有界尾部，安装脚本不改动其他程序的命令链接。
+- CLI 网页抓取逐跳检查重定向，支持主动取消，并修正部分 IPv6 内网地址与普通域名的误判。
+- GUI / CLI 同步升级。默认模型仍为 Step 5 Preview，实时语音仍为 StepAudio 2.5 Realtime；保留 Coder390 llama.cpp Q2 / Q3、长推理超时设置和会话删除功能。
 
 ## English
 
-- DeepSeek Search is now the preferred web search source, with fallback providers retained and model-supplied locations, dates and search operators preserved.
-- Stopping a search cancels active requests without starting additional fallback requests. Request and response-body deadlines operate within a 30-second client search budget.
-- Stale search verification results no longer overwrite a newer selection; repeated verification clicks are prevented.
-- Search evidence is deduplicated while retaining source links, dates and useful summaries.
-- CLI session indexing recovers abandoned locks after an interrupted process instead of blocking subsequent conversations.
-- GUI runtime preserves both array-based and string-based instruction fragments, including project requirements and tool-use constraints.
-- GUI shell commands default to a configurable 60-second deadline instead of waiting indefinitely. Source-text organization delegates action-item extraction to the model rather than brittle pattern matching.
-- GUI and CLI update together. Step 5 Preview, realtime voice, Coder390 Q2/Q3, long-reasoning controls and conversation deletion remain available.
+- Fix #76: use hidden native Windows process/listener queries through absolute system paths instead of PATH-provided ps.exe or POSIX arguments.
+- Implement #77: fall back to AllRatesToday for FX and gold currency conversion. Attribute its ECB daily reference rates and timestamps, cache successful tables for one hour, and report unavailable data explicitly.
+- Integrate the enhanced CLI: streaming tool execution, concurrent reads with write barriers, exact-string edits, task-scoped read tracking, background jobs, plan mode, skills/project commands, session forks, compaction, result spilling and queued input.
+- Enforce explicit permission rules and trusted hooks; fail closed on invalid policy or failed guards. Fix tool ordering, interrupted-stream dispatch, read-cache isolation, process-tree cancellation and installer shim ownership.
+- Validate web redirects at each hop and propagate cancellation. GUI and CLI retain Step 5, realtime voice, Coder390 Q2/Q3, long-reasoning controls and conversation deletion.
 
 ## 仓库 / Repositories
 
-- [GitHub 主仓](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.3)
-- [GitHub 备份仓](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.87.3)
-- [Gitee](https://gitee.com/merkyor/Lynn/releases/tag/v0.87.3)
+- [GitHub 主仓](https://github.com/MerkyorLynn/Lynn/releases/tag/v0.87.4)
+- [GitHub 备份仓](https://github.com/LynnMerkyor/Lynn/releases/tag/v0.87.4)
+- [Gitee](https://gitee.com/merkyor/Lynn/releases/tag/v0.87.4)

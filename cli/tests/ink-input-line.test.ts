@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeSlashInput } from "../src/completion.js";
+import { looksLikeSlashCommand, normalizeSlashInput } from "../src/completion.js";
 import { editInputBuffer, inputDisplayRows, slashHint, slashPalette, slashPaletteItems, stripBracketedPasteMarkers } from "../src/ink-input-line.js";
 
 describe("Ink input slash hints", () => {
@@ -80,5 +80,16 @@ describe("Ink input slash hints", () => {
   it("strips bracketed-paste markers before they reach the input buffer", () => {
     expect(stripBracketedPasteMarkers('\u001b[200~第一行\n第二行\u001b[201~')).toBe('第一行\n第二行');
     expect(stripBracketedPasteMarkers('[200~内容[201~')).toBe('内容');
+  });
+
+  it("does not treat a dragged absolute path as a slash command", () => {
+    const path = "/Users/lynn/Desktop/截屏2026-10-21\\ 10.55.01.png";
+    expect(looksLikeSlashCommand(path)).toBe(false);
+    expect(slashHint(path, ["/help", "/model"], 80)).toBe("");
+    expect(slashPalette(path, ["/help", "/model"])).toBe("");
+    expect(slashPaletteItems(path, ["/help", "/model"])).toEqual([]);
+    expect(looksLikeSlashCommand("/help")).toBe(true);
+    expect(looksLikeSlashCommand("/mode yolo")).toBe(true);
+    expect(looksLikeSlashCommand("／help")).toBe(true);
   });
 });

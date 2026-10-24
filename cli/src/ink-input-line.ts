@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text, useStdout } from "ink";
-import { completeSlash, normalizeSlashInput } from "./completion.js";
+import { completeSlash, looksLikeSlashCommand, normalizeSlashInput } from "./completion.js";
 import { t } from "./i18n.js";
 import { visibleLength } from "./startup.js";
 
@@ -20,7 +20,7 @@ export function InkInputLine({ value, placeholder, cursorIndex, focused = true, 
   const width = Math.max(20, (stdout.columns || 80) - 2);
   const hint = slashHint(value, commands, width - visibleLength(prompt));
   const paletteItems = slashPaletteItems(value, commands);
-  const showUnknownSlash = !paletteItems.length && normalizeSlashInput(value).startsWith("/") && commands.length > 0;
+  const showUnknownSlash = !paletteItems.length && looksLikeSlashCommand(value) && commands.length > 0;
   const visibleText = value || placeholder;
   const rows = inputDisplayRows(visibleText, hint, width, prompt);
   const cursor = Math.max(0, Math.min(cursorIndex ?? Array.from(value).length, Array.from(value).length));
@@ -132,7 +132,7 @@ export function inputDisplayRows(value: string, hint: string, width: number, pro
 }
 
 export function slashHint(input: string, commands: string[], maxWidth = 72): string {
-  if (!input.startsWith("/") || !commands.length) return "";
+  if (!looksLikeSlashCommand(input) || !commands.length) return "";
   const completion = completeSlash(input, commands);
   if (!completion.matches.length) return "";
   const suffix = completion.completed.length > input.length ? completion.completed.slice(input.length) : "";
@@ -143,7 +143,7 @@ export function slashHint(input: string, commands: string[], maxWidth = 72): str
 
 export function slashPalette(input: string, commands: string[], maxItems = 6): string {
   const normalized = normalizeSlashInput(input);
-  if (!normalized.startsWith("/") || !commands.length) return "";
+  if (!looksLikeSlashCommand(normalized) || !commands.length) return "";
   const completion = completeSlash(normalized, commands);
   if (!completion.matches.length) return t("slash.unknown");
   return completion.matches
@@ -154,7 +154,7 @@ export function slashPalette(input: string, commands: string[], maxItems = 6): s
 
 export function slashPaletteItems(input: string, commands: string[], maxItems = 6): { command: string; label: string }[] {
   const normalized = normalizeSlashInput(input);
-  if (!normalized.startsWith("/") || !commands.length) return [];
+  if (!looksLikeSlashCommand(normalized) || !commands.length) return [];
   const completion = completeSlash(normalized, commands);
   if (!completion.matches.length) return [];
   return completion.matches.slice(0, maxItems).map((command) => ({ command, label: slashCommandLabel(command) }));

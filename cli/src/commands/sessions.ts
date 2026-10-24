@@ -2,7 +2,7 @@ import path from "node:path";
 import { getStringFlag, type ParsedArgs } from "../args.js";
 import { resumeCommandForSession } from "./code.js";
 import { writeJsonLine } from "../jsonl.js";
-import { listSessions, readSessionLines, resolveDataDir } from "../session/store.js";
+import { forkSession, listSessions, readSessionLines, resolveDataDir } from "../session/store.js";
 import { buildSessionReplayEvents, renderSessionReplay } from "../session/replay.js";
 import { computeSessionStats, renderSessionStats } from "../session/stats.js";
 
@@ -31,6 +31,15 @@ export async function runSessions(args: ParsedArgs, json: boolean): Promise<numb
         process.stdout.write(`[${line.type}] ${line.content || JSON.stringify(line.data || {})}\n`);
       }
     }
+    return 0;
+  }
+
+  if (subcommand === "fork") {
+    const sessionPath = args.positionals[1] || getStringFlag(args.flags, "session");
+    if (!sessionPath) throw new Error("sessions fork requires a session path");
+    const forked = await forkSession({ dataDir, sourcePath: sessionPath });
+    if (json) writeJsonLine({ type: "sessions.forked", ts: new Date().toISOString(), ...forked });
+    else process.stdout.write(`forked ${forked.lines} lines\n  ${forked.path}\n`);
     return 0;
   }
 

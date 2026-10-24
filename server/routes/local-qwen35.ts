@@ -26,6 +26,7 @@ import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { fromRoot } from "../../shared/lynn-root.js";
 import localHardware from '../../shared/local-model-hardware.cjs';
+import { localListenerPids, localLlamaProcesses } from "../local-model-processes.js";
 const localCatalog = localHardware.catalog;
 
 const execFileAsync = promisify(execFile);
@@ -331,41 +332,18 @@ function isPidAlive(pid: number | null | undefined): boolean {
 }
 
 async function listenerPids(port: string): Promise<number[]> {
-  try {
-    const { stdout } = await execFileAsync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], {
-      timeout: 2_000,
-      maxBuffer: 32 * 1024,
-    });
-    return stdout
-      .split(/\s+/)
-      .map((value) => Number(value))
-      .filter(isPositiveFiniteNumber);
-  } catch (err: unknown) {
-    const stdout = errorOutput(err, "stdout");
-    return stdout
-      .split(/\s+/)
-      .map((value) => Number(value))
-      .filter(isPositiveFiniteNumber);
-  }
+  return localListenerPids(port);
 }
 
 async function qwen35ProcessPids(state: LocalQwen35State = defaultState()): Promise<number[]> {
   const modelPaths = candidateModelPaths(state);
   try {
-    const { stdout } = await execFileAsync("ps", ["-axo", "pid=,command="], {
-      timeout: 2_000,
-      maxBuffer: 512 * 1024,
-    });
-    return stdout
-      .split("\n")
-      .map((line): number | null => {
-        const match = line.trim().match(/^(\d+)\s+(.+)$/);
-        if (!match) return null;
-        const pid = Number(match[1]);
-        const command = match[2] || "";
+    const processes = await localLlamaProcesses();
+    return processes
+      .map(({ pid, command }): number | null => {
         if (!Number.isFinite(pid) || pid <= 0) return null;
         if (!/llama-server(?:\s|$)/.test(command) && !/llama-server\b/.test(command)) return null;
-        const mentionsPort = command.includes(`--port ${state.port}`) || command.includes(`:${state.port}`);
+        const mentionsPort = new RegExp(`(?:^|\\s)--port(?:=|\\s+)"?${Number(state.port)}"?(?=\\s|$)`).test(command);
         const mentionsModel = modelPaths.some((candidate) => candidate && command.includes(candidate))
           || /Q4-imatrix-MTP-00001-of-00004/i.test(command)
           || /qwen36-27b-dsv4pro-coding-q4-mtp/i.test(command)
@@ -781,7 +759,7 @@ let _python3CheckResult: Python3CheckResult | null = null;
 async function ensurePython3(): Promise<Python3CheckResult> {
   if (_python3CheckResult !== null) return _python3CheckResult;
   try {
-    await execFileAsync("python3", ["--version"], { timeout: 5_000 });
+    await execFileAsync("python3", ["--version"], { timeout: 5_000, windowsHide: true });
     _python3CheckResult = { ok: true };
   } catch (err: unknown) {
     _python3CheckResult = {
@@ -819,6 +797,7 @@ async function plan(variant = "imatrix"): Promise<JsonRecord> {
   try {
     const { stdout } = await execFileAsync("python3", [bootstrap, "plan", ...commonArgs(state, variant)], {
       cwd: fromRoot(),
+      windowsHide: true,
       timeout: 15_000,
       maxBuffer: 2 * 1024 * 1024,
     });

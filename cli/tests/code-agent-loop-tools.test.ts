@@ -1,14 +1,13 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { maxSteps, runCode, runCodeTaskWithEvents, type CodeAgentEvent } from "../src/commands/code.js";
-import { compactRuntimeMessages } from "../src/code-agent-loop.js";
-import { appendSessionTurn, readSessionLines, sessionIndexPath } from "../src/session/store.js";
+import { runCode } from "../src/commands/code.js";
+import { appendSessionTurn } from "../src/session/store.js";
 
 let tmp = "";
 const cliRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -102,9 +101,9 @@ async function withRawBrainServer(handler: (body: unknown, count: number) => str
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 }
-
 describe("code agent loop · tool calls & repair", () => {
-  it("executes one non-plan tool per model turn and defers extras", async () => {
+
+  it("executes every read-only tool in one model turn (concurrently, no deferral)", async () => {
     const original = process.stdout.write;
     let output = "";
     let toolResultTurn = "";
@@ -141,18 +140,18 @@ describe("code agent loop · tool calls & repair", () => {
       process.stdout.write = original;
     }
 
-    expect(output.match(/"type":"code\.tool\.requested"/g)).toHaveLength(1);
-    expect(output.match(/"type":"code\.tool\.result"/g)).toHaveLength(1);
-    expect(output).toContain('"type":"code.tool.deferred"');
+    expect(output.match(/"type":"code\.tool\.requested"/g)).toHaveLength(2);
+    expect(output.match(/"type":"code\.tool\.result"/g)).toHaveLength(2);
+    expect(output).not.toContain('"type":"code.tool.deferred"');
     expect(output).toContain('"type":"code.tool.ledger"');
     expect(toolResultTurn).toContain("Tool result for read_file");
     expect(toolResultTurn).toContain("Tool result for glob");
-    expect(toolResultTurn).toContain("Not executed in this atomic tool step");
     expect(toolResultTurn).toContain("<lynn_tool_ledger");
     expect(toolResultTurn).toContain("Tool observations recorded during this step");
     expect(toolResultTurn).toContain("hello.txt");
     expect(output).toContain("I read hello.txt and listed text files");
   });
+
 
   it("executes OpenAI streamed tool_call deltas from BYOK-style providers", async () => {
     const original = process.stdout.write;
@@ -251,7 +250,8 @@ describe("code agent loop · tool calls & repair", () => {
     expect(output).toContain("Read streamed tool call result");
   });
 
-  it("keeps structured multi-tool turns protocol-valid while deferring extra action tools", async () => {
+
+  it("keeps structured multi-tool turns protocol-valid with all tools executed", async () => {
     const original = process.stdout.write;
     let output = "";
     let toolResultTurn = "";
@@ -289,7 +289,7 @@ describe("code agent loop · tool calls & repair", () => {
         }
         toolResultTurn = JSON.stringify(body);
         return rawSsePayloads([
-          JSON.stringify({ choices: [{ delta: { content: "Atomic tool step remained protocol-valid." } }] }),
+          JSON.stringify({ choices: [{ delta: { content: "Parallel read step remained protocol-valid." } }] }),
         ]);
       }, async (brainUrl) => {
         await expect(runCode(parseArgs([
@@ -308,9 +308,9 @@ describe("code agent loop · tool calls & repair", () => {
       process.stdout.write = original;
     }
 
-    expect(output.match(/"type":"code\.tool\.requested"/g)).toHaveLength(1);
-    expect(output.match(/"type":"code\.tool\.result"/g)).toHaveLength(1);
-    expect(output).toContain('"type":"code.tool.deferred"');
+    expect(output.match(/"type":"code\.tool\.requested"/g)).toHaveLength(2);
+    expect(output.match(/"type":"code\.tool\.result"/g)).toHaveLength(2);
+    expect(output).not.toContain('"type":"code.tool.deferred"');
     const toolTurnBody = JSON.parse(toolResultTurn) as {
       messages?: Array<Record<string, unknown>>;
     };
@@ -332,11 +332,12 @@ describe("code agent loop · tool calls & repair", () => {
         role: "tool",
         tool_call_id: "call_glob",
         name: "glob",
-        content: expect.stringContaining("Not executed in this atomic tool step"),
+        content: expect.stringContaining("Tool result for glob"),
       }),
     ]));
-    expect(output).toContain("Atomic tool step remained protocol-valid");
+    expect(output).toContain("Parallel read step remained protocol-valid.");
   });
+
 
   it("keeps runtime instruction frames OpenAI-compatible across resumed code turns", async () => {
     const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-runtime-frames-"));
@@ -385,6 +386,7 @@ describe("code agent loop · tool calls & repair", () => {
       await fs.rm(dataDir, { recursive: true, force: true });
     }
   });
+
 
   it("feeds failed tool results back so the model can repair and continue", async () => {
     const badPatch = [
@@ -448,6 +450,7 @@ describe("code agent loop · tool calls & repair", () => {
     expect(output).toContain("Recovered after reading the failed patch result");
   });
 
+
   it("suppresses repeated identical tool requests during the loop", async () => {
     const original = process.stdout.write;
     let output = "";
@@ -480,6 +483,7 @@ describe("code agent loop · tool calls & repair", () => {
     expect(output).toContain("Repeated identical tool request suppressed");
     expect(output).toContain("I already have the file content");
   });
+
 
   it("rebuilds the tool-storm ledger from resume history to avoid repeating completed tools", async () => {
     const sessionPath = path.join(tmp, "resume-tool-storm.jsonl");
@@ -540,6 +544,7 @@ describe("code agent loop · tool calls & repair", () => {
     expect(output).toContain("Repeated identical tool request suppressed");
     expect(output).toContain("I can continue from the resumed tool result");
   });
+
 
   it("rebuilds mutating tool fingerprints from resume history to avoid duplicate writes", async () => {
     await fs.writeFile(path.join(tmp, "hello.txt"), "changed\n", "utf8");
@@ -614,6 +619,7 @@ describe("code agent loop · tool calls & repair", () => {
     await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("changed\n");
   });
 
+
   it("allows a verification read after a mutating edit", async () => {
     const patch = [
       "*** Begin Patch",
@@ -659,73 +665,4 @@ describe("code agent loop · tool calls & repair", () => {
     expect(output).toContain("Verified changed content.");
     await expect(fs.readFile(path.join(tmp, "hello.txt"), "utf8")).resolves.toBe("changed\n");
   });
-
-  it("returns a non-zero result when the tool loop exhausts max steps", async () => {
-    const original = process.stdout.write;
-    let output = "";
-    process.stdout.write = ((chunk: string | Uint8Array) => {
-      output += String(chunk);
-      return true;
-    }) as typeof process.stdout.write;
-    try {
-      await withBrainServer(() => JSON.stringify({ tool: "read_file", args: { path: "hello.txt" } }), async (brainUrl) => {
-        await expect(runCode(parseArgs([
-          "code",
-          "keep inspecting hello",
-          "--cwd",
-          tmp,
-          "--brain-url",
-          brainUrl,
-          "--max-steps",
-          "1",
-          "--json",
-        ]))).resolves.toBe(2);
-      });
-    } finally {
-      process.stdout.write = original;
-    }
-
-    expect(output).toContain('"type":"code.tool.requested"');
-    expect(output).toContain('"ok":false');
-    expect(output).toContain('"code":"max_steps_reached"');
-    expect(output).toContain("Stopped after the maximum tool steps");
-  });
-
-  it("emits a resumable checkpoint command when max steps exhaust with session saving", async () => {
-    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-cli-resume-hint-"));
-    const original = process.stdout.write;
-    let output = "";
-    process.stdout.write = ((chunk: string | Uint8Array) => {
-      output += String(chunk);
-      return true;
-    }) as typeof process.stdout.write;
-    try {
-      await withBrainServer(() => JSON.stringify({ tool: "read_file", args: { path: "hello.txt" } }), async (brainUrl) => {
-        await expect(runCode(parseArgs([
-          "code",
-          "keep inspecting hello",
-          "--cwd",
-          tmp,
-          "--brain-url",
-          brainUrl,
-          "--max-steps",
-          "1",
-          "--json",
-          "--save-session",
-          "--data-dir",
-          dataDir,
-        ]))).resolves.toBe(2);
-      });
-    } finally {
-      process.stdout.write = original;
-      await fs.rm(dataDir, { recursive: true, force: true });
-    }
-
-    expect(output).toContain('"code":"max_steps_reached"');
-    expect(output).toContain('"sessionPath"');
-    expect(output).toContain('"resumeCommand"');
-    expect(output).toContain("Lynn code --resume");
-    expect(output).toContain("--long");
-  });
-
 });

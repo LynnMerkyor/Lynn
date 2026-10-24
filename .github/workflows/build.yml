@@ -38,6 +38,14 @@ jobs:
       - name: Build bundled CLI
         run: npm run build:cli
 
+      - name: Verify Windows local model probes
+        if: runner.os == 'Windows'
+        run: node --import tsx scripts/verify-windows-local-model-probes.mjs
+
+      - name: Verify Windows process and cancellation regressions
+        if: runner.os == 'Windows'
+        run: npx vitest run tests/local-model-processes.test.ts cli/tests/review-safety.test.ts
+
       # Windows: 下载 MinGit 用于打包进安装包
       - name: Download MinGit
         if: runner.os == 'Windows'

@@ -1,7 +1,8 @@
+import path from "node:path";
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Static, Text, render, useApp, useInput } from "ink";
 import { getStringFlag, hasFlag, type ParsedArgs } from "./args.js";
-import { completeSlash, normalizeSlashInput } from "./completion.js";
+import { completeSlash, looksLikeSlashCommand, normalizeSlashInput } from "./completion.js";
 import { completeMentionInput } from "./mentions.js";
 import { parseCodeResumeSlash, withLongRunCodeFlags, type CodeAgentApprovalRequest, type CodeAgentEvent } from "./commands/code.js";
 import { withBestCodeFlags } from "./code-best.js";
@@ -20,10 +21,15 @@ import { editInputBuffer, InkInputLine, stripBracketedPasteMarkers, type InputEd
 import { splitInkStaticHistory } from "./ink-static-history.js";
 import { analyzePastedContext, appendPastedText, summarizePastedContext } from "./pasted-context.js";
 import { modelLabelWithId } from "./provider-presets.js";
+import { middleEllipsis } from "./display-width.js";
 import { handleMemorySlashCommand } from "./session/memory.js";
 import { resolveDataDir } from "./session/store.js";
 import { addCodeInputMediaFlags, prepareCodeTaskInput } from "./code-input.js";
 import { rotatingPlaceholder } from "./ink-placeholders.js";
+import { expandCommand, loadCustomCommands, type CustomCommand } from "./custom-commands.js";
+import { loadSkillCatalog } from "./skills.js";
+import { readClipboardImage } from "./clipboard-image.js";
+import { summarizeImageRefs } from "./pasted-context.js";
 import { createDecodeSpeedTracker, type DecodeSpeedTracker } from "./decode-speed.js";
 import { terminalTuiProfile } from "./terminal-safety.js";
 
@@ -54,7 +60,7 @@ type CodeTaskRunner = (
   task: string,
   onEvent: (event: CodeAgentEvent) => void,
   options?: {
-    requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny">;
+    requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "always" | "deny">;
     signal?: AbortSignal;
   },
 ) => Promise<number>;
@@ -82,6 +88,10 @@ const CODE_SLASH_COMMANDS = [
   "/cwd",
   "/yolo",
   "/ask",
+  "/plan",
+  "/skills",
+  "/image",
+  "/attach",
   "/mode",
   "/mode yolo",
   "/model",
@@ -121,26 +131,51 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   const [cursorIndex, setCursorIndex] = useState(0);
   const [items, setItems] = useState<CodeItem[]>([]);
   const [busy, setBusy] = useState(false);
+  const [busySince, setBusySince] = useState<number | null>(null);
+  const [queue, setQueue] = useState<string[]>([]);
   const [frame, setFrame] = useState(0);
   const [reasoning, setReasoning] = useState(props.initialReasoning);
   const [mode, setMode] = useState(props.initialMode);
+  const [planMode, setPlanMode] = useState(false);
+  const [customCommands, setCustomCommands] = useState<CustomCommand[]>([]);
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [usage, setUsage] = useState<string | null>(null);
   const [decodeTps, setDecodeTps] = useState<string | null>(null);
   const [provider, setProvider] = useState(props.modelLabel);
   const [approval, setApproval] = useState<ApprovalState | null>(null);
-  const approvalResolve = useRef<((value: "approve" | "approve_all" | "deny") => void) | null>(null);
+  const approvalResolve = useRef<((value: "approve" | "approve_all" | "always" | "deny") => void) | null>(null);
   const [history] = useState(() => new HistoryNavigator(loadHistory(historyPath())));
   const assistantId = useRef<number | null>(null);
   const decodeTracker = useRef<DecodeSpeedTracker | null>(null);
   const activeAbortRef = useRef<AbortController | null>(null);
+  const queueRef = useRef<string[]>([]);
+  const queueNextRef = useRef(false);
   const itemIdRef = useRef(1);
   const reasoningIdRef = useRef<number | null>(null);
   const pendingToolIdsRef = useRef<Map<string, number[]>>(new Map());
+  const pendingToolIndexRef = useRef<Map<number, number>>(new Map());
+  const [runningTools, setRunningTools] = useState(0);
   const assistantDeltaRef = useRef("");
   const assistantRenderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dataDir = React.useMemo(() => resolveDataDir(typeof props.args.flags["data-dir"] === "string" ? props.args.flags["data-dir"] : null), [props.args.flags]);
   const effectiveCwd = getStringFlag(props.args.flags, "cwd") || process.cwd();
   const contextInfo = React.useMemo(() => analyzePastedContext(input, effectiveCwd), [input, effectiveCwd]);
+  const pendingImageSummary = pendingImages.length
+    ? summarizeImageRefs(pendingImages.map((file) => ({ raw: file, path: file })))
+    : "";
+  const inputContextSummary = [pendingImageSummary, contextInfo.hasContext ? summarizePastedContext(contextInfo) : ""].filter(Boolean).join(" · ");
+  const slashCommands = React.useMemo(
+    () => [...CODE_SLASH_COMMANDS, ...customCommands.map((command) => `/${command.name}`)],
+    [customCommands],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void loadCustomCommands(effectiveCwd, dataDir).then((commands) => {
+      if (active) setCustomCommands(commands);
+    });
+    return () => { active = false; };
+  }, [effectiveCwd, dataDir]);
 
   useEffect(() => {
     if (!busy || !profile.animation) return;
@@ -174,16 +209,22 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     setCursorIndex(next.cursor);
   };
 
-  const requestApproval = (request: CodeAgentApprovalRequest): Promise<"approve" | "approve_all" | "deny"> => new Promise((resolve) => {
+  const requestApproval = (request: CodeAgentApprovalRequest): Promise<"approve" | "approve_all" | "always" | "deny"> => new Promise((resolve) => {
     approvalResolve.current = resolve;
     setApproval({ request });
   });
 
-  const resolveApproval = (decision: "approve" | "approve_all" | "deny") => {
+  const resolveApproval = (decision: "approve" | "approve_all" | "always" | "deny") => {
     approvalResolve.current?.(decision);
     approvalResolve.current = null;
     setApproval(null);
-    const label = decision === "deny" ? "denied" : decision === "approve_all" ? "approved for this task" : "approved";
+    const label = decision === "deny"
+      ? "denied"
+      : decision === "approve_all"
+        ? "approved for this task"
+        : decision === "always"
+          ? "approved; rule saved for next time"
+          : "approved";
     pushItem({ kind: "system", text: `tool ${label}`, tone: decision === "deny" ? "danger" : "success" });
   };
 
@@ -192,13 +233,69 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     setItems((current) => [...current, { ...item, id } as CodeItem]);
   };
 
+  const attachClipboardImage = async (): Promise<void> => {
+    pushItem({ kind: "system", text: t("code.image.reading") });
+    try {
+      const image = await readClipboardImage({ dataDir });
+      if (!image) {
+        pushItem({ kind: "system", text: t("code.image.none") });
+        return;
+      }
+      setPendingImages((current) => [...current, image.path]);
+      pushItem({
+        kind: "system",
+        text: t("code.image.attached", { name: path.basename(image.path), kb: Math.max(1, Math.round(image.bytes / 1024)) }),
+        tone: "success",
+      });
+    } catch (error) {
+      pushItem({ kind: "system", text: error instanceof Error ? error.message : String(error), tone: "danger" });
+    }
+  };
+
+  const attachClipboardAndSend = async (): Promise<void> => {
+    const image = await readClipboardImage({ dataDir }).catch(() => null);
+    if (!image) return;
+    pushItem({
+      kind: "system",
+      text: t("code.image.attached", { name: path.basename(image.path), kb: Math.max(1, Math.round(image.bytes / 1024)) }),
+      tone: "success",
+    });
+    await runCodeText(t("chat.image.defaultPrompt"), (flags) => flags, [image.path]);
+  };
+
+  const submitOrQueue = (text: string): void => {
+    if (!text.trim()) {
+      if (!busy) void attachClipboardAndSend();
+      return;
+    }
+    if (busy) {
+      const queueOnly = queueNextRef.current;
+      queueNextRef.current = false;
+      if (!text.trim()) return;
+      enqueueMessage(text.trim());
+      replaceInput("");
+      if (!queueOnly && activeAbortRef.current && !activeAbortRef.current.signal.aborted) {
+        activeAbortRef.current.abort(new Error(t("chat.cancelled")));
+        pushItem({ kind: "system", text: t("code.queue.interrupted") });
+      }
+      return;
+    }
+    queueNextRef.current = false;
+    void submitInput(text);
+  };
+
   useInput((value, key) => {
     value = stripBracketedPasteMarkers(value);
     if (approval) {
       const text = value.toLowerCase();
       if (text === "a") resolveApproval("approve_all");
+      else if (text === "d") resolveApproval("always");
       else if (text === "y") resolveApproval("approve");
       else if (text === "n" || key.escape || (key.ctrl && text === "c") || value === "\u0003") resolveApproval("deny");
+      return;
+    }
+    if ((key.ctrl || key.meta) && value === "v") {
+      void attachClipboardImage();
       return;
     }
     if ((key.ctrl && value === "c") || value === "\u0003") {
@@ -210,7 +307,11 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       app.exit();
       return;
     }
-    if (busy) return;
+    if (key.ctrl && value === "x") {
+      queueNextRef.current = true;
+      pushItem({ kind: "system", text: t("code.queue.hint") });
+      return;
+    }
     if ((key.shift && key.tab) || value === "\u001b[Z") {
       const next = { ...mode };
       const message = toggleMode(next);
@@ -222,7 +323,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     if (!key.return && newlineIndex >= 0) {
       const lines = value.replace(/\r\n?/g, "\n").split("\n");
       if (!lines.slice(1).some((line) => line.length > 0)) {
-        void submitInput(`${input}${lines[0] || ""}`);
+        submitOrQueue(`${input}${lines[0] || ""}`);
         return;
       }
       const pasted = cursorIndex === Array.from(input).length
@@ -246,7 +347,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     }
     if (key.return) {
       const prefix = newlineIndex >= 0 ? value.slice(0, newlineIndex) : "";
-      void submitInput(`${input}${prefix}`);
+      submitOrQueue(`${input}${prefix}`);
       return;
     }
     if (key.ctrl && value === "a") {
@@ -274,6 +375,13 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       return;
     }
     if (key.upArrow) {
+      if (busy && !input && queueRef.current.length) {
+        const queued = queueRef.current[queueRef.current.length - 1]!;
+        queueRef.current = queueRef.current.slice(0, -1);
+        setQueue([...queueRef.current]);
+        replaceInput(queued);
+        return;
+      }
       replaceInput(history.prev(input));
       return;
     }
@@ -289,13 +397,28 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
         replaceInput(completion.completed);
         return;
       }
-      const completion = completeSlash(input, CODE_SLASH_COMMANDS);
+      const completion = completeSlash(input, slashCommands);
       if (completion.matches.length > 1) pushItem({ kind: "system", text: completion.matches.join("  ") });
       replaceInput(completion.completed);
       return;
     }
+    queueNextRef.current = false;
     if (value) editInput({ type: "insert", text: value });
   });
+
+  function enqueueMessage(text: string): void {
+    queueRef.current = [...queueRef.current, text];
+    setQueue([...queueRef.current]);
+    pushItem({ kind: "system", text: t("code.queue.added", { n: queueRef.current.length }) });
+  }
+
+  function drainQueue(): void {
+    const next = queueRef.current[0];
+    if (!next) return;
+    queueRef.current = queueRef.current.slice(1);
+    setQueue([...queueRef.current]);
+    setTimeout(() => { void submitInput(next); }, 0);
+  }
 
   const submitInput = async (raw: string) => {
     const text = normalizeSlashInput(raw.trim());
@@ -317,6 +440,37 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     const memoryCommand = await handleMemorySlashCommand(text, dataDir);
     if (memoryCommand?.handled) {
       pushItem({ kind: "system", text: memoryCommand.message, tone: memoryCommand.changed ? "success" : "normal" });
+      return;
+    }
+    if (text === "/plan") {
+      const next = !planMode;
+      setPlanMode(next);
+      pushItem({ kind: "system", text: next ? t("code.plan.on") : t("code.plan.off"), tone: next ? "success" : "normal" });
+      return;
+    }
+    if (text === "/image" || text === "/attach") {
+      await attachClipboardImage();
+      return;
+    }
+    if (text.startsWith("/image ") || text.startsWith("/attach ")) {
+      await runCodeText(text.replace(/^\/(?:image|attach)\s+/i, ""));
+      return;
+    }
+    if (text === "/skills") {
+      const skills = await loadSkillCatalog(effectiveCwd, dataDir);
+      pushItem({
+        kind: "system",
+        text: skills.length
+          ? skills.map((skill) => `${skill.name} [${skill.source}]: ${skill.description || "(no description)"}`).join("\n")
+          : "No skills found. Add .lynn/skills/<name>/SKILL.md or ~/.lynn/skills/<name>/SKILL.md.",
+      });
+      return;
+    }
+    const customCommand = customCommands.find((command) => text === `/${command.name}` || text.startsWith(`/${command.name} `));
+    if (customCommand) {
+      const args = text.slice(customCommand.name.length + 1).trim();
+      pushItem({ kind: "system", text: `custom command /${customCommand.name}`, tone: "success" });
+      await runCodeText(expandCommand(customCommand, args));
       return;
     }
     if (text === "/tools") {
@@ -389,7 +543,8 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       pushItem({ kind: "system", text: providerCommand.message });
       return;
     }
-    if (text.startsWith("/")) {
+    // A dragged absolute path starts with "/" but is not a slash command.
+    if (looksLikeSlashCommand(text)) {
       pushItem({ kind: "system", text: t("slash.unknown") });
       return;
     }
@@ -400,9 +555,18 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   const runCodeText = async (
     text: string,
     transformFlags: (flags: Record<string, string | boolean>) => Record<string, string | boolean> = (flags) => flags,
+    seededImages: readonly string[] = [],
   ) => {
     const prepared = prepareCodeTaskInput(text, effectiveCwd, t("chat.image.defaultPrompt"));
-    pushItem({ kind: "user", text: prepared.contextSummary ? `${prepared.task}\n${prepared.contextSummary}` : prepared.task });
+    const extraImages = [...seededImages, ...pendingImages];
+    const mediaPaths = [...extraImages, ...prepared.mediaPaths];
+    const taskText = prepared.task || (mediaPaths.length ? t("chat.image.defaultPrompt") : text);
+    const attachmentSummary = extraImages.length
+      ? summarizeImageRefs(extraImages.map((file) => ({ raw: file, path: file })))
+      : "";
+    const contextSummary = [attachmentSummary, prepared.contextSummary].filter(Boolean).join(" · ");
+    if (extraImages.length) setPendingImages([]);
+    pushItem({ kind: "user", text: contextSummary ? `${taskText}\n${contextSummary}` : taskText });
     assistantId.current = itemIdRef.current++;
     assistantDeltaRef.current = "";
     decodeTracker.current = createDecodeSpeedTracker(Date.now());
@@ -414,21 +578,23 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       pending: true,
     }]);
     setBusy(true);
+    setBusySince(Date.now());
     const controller = new AbortController();
     activeAbortRef.current = controller;
     try {
       const taskArgs: ParsedArgs = {
         ...props.args,
-        positionals: [prepared.task],
+        positionals: [taskText],
         flags: addCodeInputMediaFlags(transformFlags({
           ...props.args.flags,
           approval: mode.approval,
           sandbox: mode.sandbox,
+          ...(planMode ? { plan: true } : {}),
           reasoning: reasoning.effort,
           "show-reasoning": reasoning.display,
-        }), prepared.mediaPaths),
+        }), mediaPaths),
       };
-      await props.runTask(taskArgs, prepared.task, handleAgentEvent, {
+      await props.runTask(taskArgs, taskText, handleAgentEvent, {
         requestApproval,
         signal: controller.signal,
       });
@@ -439,6 +605,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     } finally {
       flushAssistantDelta();
       setBusy(false);
+      setBusySince(null);
       const activeAssistantId = assistantId.current;
       setItems((current) => current.map((item) => (
         (item.kind === "assistant" && item.id === activeAssistantId) || item.pending
@@ -449,7 +616,10 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       assistantId.current = null;
       reasoningIdRef.current = null;
       pendingToolIdsRef.current.clear();
+      pendingToolIndexRef.current.clear();
+      setRunningTools(0);
       decodeTracker.current = null;
+      drainQueue();
     }
   };
 
@@ -491,6 +661,8 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       const queue = pendingToolIdsRef.current.get(event.tool) || [];
       queue.push(id);
       pendingToolIdsRef.current.set(event.tool, queue);
+      if (typeof event.index === "number") pendingToolIndexRef.current.set(event.index, id);
+      setRunningTools((current) => current + 1);
       setItems((current) => [...current, {
         id,
         kind: "tool",
@@ -500,6 +672,13 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
       }]);
     }
     if (event.type === "tool.loop_guard") pushItem({ kind: "tool", title: `loop guard ${event.tool}`, detail: `${event.repeats} repeats`, ok: false });
+    if (event.type === "permission.rule_saved") pushItem({ kind: "system", text: `permission rule saved: ${event.rule}`, tone: "success" });
+    if (event.type === "permission.rule_invalid") pushItem({ kind: "system", text: `invalid permission rule ignored: ${event.message}`, tone: "danger" });
+    if (event.type === "hook.warning") pushItem({ kind: "system", text: `hook: ${event.message}`, tone: "danger" });
+    if (event.type === "harness.warning") pushItem({ kind: "system", text: event.message, tone: "danger" });
+    if (event.type === "stream.interrupted") pushItem({ kind: "system", text: `stream ended early: ${event.message} — keeping completed tool results`, tone: "danger" });
+    if (event.type === "plan.presented") pushItem({ kind: "system", text: `plan proposed:\n${event.text}`, tone: "success" });
+    if (event.type === "background.job") pushItem({ kind: "system", text: `background ${event.id} completed (${event.exitCode ?? event.signal ?? "unknown"}) · ${event.logPath}`, tone: event.exitCode === 0 ? "success" : "danger" });
     if (event.type === "plan.updated") pushItem({ kind: "plan", items: event.items });
     if (event.type === "session.resumed") {
       pushItem({ kind: "system", text: t("code.session.resumed", { path: event.path, messages: String(event.messages) }), tone: "success" });
@@ -509,10 +688,26 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     }
     if (event.type === "tool.result") {
       if (event.result.tool === "update_plan") return;
-      const queue = pendingToolIdsRef.current.get(event.result.tool) || [];
-      const id = queue.shift();
-      pendingToolIdsRef.current.set(event.result.tool, queue);
-      if (id) {
+      setRunningTools((current) => Math.max(0, current - 1));
+      let id: number | undefined;
+      if (typeof event.index === "number") {
+        id = pendingToolIndexRef.current.get(event.index);
+        pendingToolIndexRef.current.delete(event.index);
+        if (id !== undefined) {
+          const queue = pendingToolIdsRef.current.get(event.result.tool) || [];
+          const position = queue.indexOf(id);
+          if (position >= 0) {
+            queue.splice(position, 1);
+            pendingToolIdsRef.current.set(event.result.tool, queue);
+          }
+        }
+      }
+      if (id === undefined) {
+        const queue = pendingToolIdsRef.current.get(event.result.tool) || [];
+        id = queue.shift();
+        pendingToolIdsRef.current.set(event.result.tool, queue);
+      }
+      if (id !== undefined) {
         setItems((current) => current.map((item) => item.id === id && item.kind === "tool"
           ? {
               ...item,
@@ -544,7 +739,7 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
   return React.createElement(Box, { flexDirection: "column", paddingX: 1 },
     items.length === 0 ? React.createElement(Box, { flexDirection: "column", marginBottom: 1 },
       React.createElement(Text, { bold: true }, `Lynn Code · ${provider}`),
-      React.createElement(Text, { color: "gray" }, `${renderMode(mode)} · ${displayCwd(effectiveCwd)} · Shift+Tab 切换权限`),
+      React.createElement(Text, { color: "gray" }, `${renderMode(mode)} · ${middleEllipsis(displayCwd(effectiveCwd), 56)} · Shift+Tab 切换权限`),
     ) : null,
     danger ? React.createElement(Text, { color: "red", bold: true }, "YOLO: local edits and shell commands are allowed") : null,
     React.createElement(Static, {
@@ -563,20 +758,20 @@ function InkCodeApp(props: InkCodeProps): React.ReactElement {
     ),
     busy ? profile.animation
       ? React.createElement(Box, { flexDirection: "row" },
-        React.createElement(InkShimmerText, { text: t("spinner.coding"), frame }),
+        React.createElement(InkShimmerText, { text: waitingLabel(busySince), frame }),
         React.createElement(Text, null, " "),
         React.createElement(InkSweep, { width: 28, frame }),
       )
-      : React.createElement(Text, { color: "cyan" }, t("spinner.coding"))
+      : React.createElement(Text, { color: "cyan" }, waitingLabel(busySince))
     : null,
-    React.createElement(Text, { color: "gray" }, `${provider} · ${displayCwd(effectiveCwd)} · ${renderMode(mode)} · think ${reasoning.effort}${decodeTps ? ` · decode ${decodeTps}` : ""}${usage ? ` · ${usage}` : ""}`),
+    React.createElement(Text, { color: "gray" }, `${provider} · ${middleEllipsis(displayCwd(effectiveCwd), 48)} · ${renderMode(mode)}${planMode ? " · plan" : ""} · think ${reasoning.effort}${decodeTps ? ` · decode ${decodeTps}` : ""}${usage ? ` · ${usage}` : ""}${runningTools > 0 ? ` · ⚙ ${runningTools}` : ""}${queue.length ? ` · ${t("code.queue.badge", { n: queue.length })}` : ""}`),
     approval ? React.createElement(ApprovalPrompt, { approval }) : React.createElement(InkInputLine, {
       value: input,
       cursorIndex,
       placeholder: profile.dynamicPlaceholders ? rotatingPlaceholder("code", frame) : t("code.placeholder"),
       danger,
-      commands: CODE_SLASH_COMMANDS,
-      contextSummary: contextInfo.hasContext ? summarizePastedContext(contextInfo) : "",
+      commands: slashCommands,
+      contextSummary: inputContextSummary,
     }),
   );
 }
@@ -608,8 +803,18 @@ function ApprovalPrompt({ approval }: { approval: ApprovalState }): React.ReactE
   return React.createElement(Box, { marginTop: 1, borderStyle: "double", borderColor: "red", paddingX: 1, flexDirection: "column" },
     React.createElement(Text, { color: "red", bold: true }, `${approval.request.tool} requires approval`),
     approval.request.preview ? React.createElement(InkDiffText, { text: approval.request.preview }) : null,
-    React.createElement(Text, null, "y approve · a approve all for this task · n deny"),
+    React.createElement(Text, null, "y approve · a approve all · d always allow (save rule) · n deny"),
   );
+}
+
+function waitingLabel(busySince: number | null): string {
+  if (!busySince) return t("spinner.coding");
+  const seconds = (Date.now() - busySince) / 1000;
+  if (seconds < 10) return t("spinner.waiting.1");
+  if (seconds < 45) return t("spinner.waiting.2");
+  if (seconds < 120) return t("spinner.waiting.3");
+  if (seconds < 300) return t("spinner.waiting.4");
+  return t("spinner.waiting.5");
 }
 
 function MarkdownText({ text }: { text: string }): React.ReactElement {

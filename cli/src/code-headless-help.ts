@@ -32,6 +32,8 @@ export function renderCodeHeadlessHelp(): string {
     "  Lynn code --harness auto -p \"修复并验证这个问题\" --cwd /repo",
     "  auto 会先检查 Codex app-server、协议与认证；不满足时在 run 启动前回退原架构",
     "  可用 --harness codex 显式要求 app-server，或 --harness legacy 强制原架构",
+    "  --plan 只读探索：写工具被阻止，用 exit_plan_mode 提交计划",
+    "  hooks: .lynn/hooks.json（项目需 Lynn permissions trust），事件 SessionStart/UserPromptSubmit/PreToolUse/PostToolUse",
     "  显式 codex 仅支持已验证的普通 yolo/on-failure 路径；附件、JSON、ask/never、ultra 会明确报不兼容",
     "  需要本机 codex；模型仍走 Lynn Brain 或 CLI BYOK。auto + --ultra 会安全回退原多 worker 架构。",
     "",

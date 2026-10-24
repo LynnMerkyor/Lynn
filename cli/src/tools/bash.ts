@@ -4,6 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import type { ClientToolResult, ToolRunContext } from "./types.js";
 import { isSafeReadOnlyShellCommand } from "../local-command.js";
+import { adoptBackgroundChild, backgroundLogPath, newBackgroundJobId, startBackgroundJob } from "../background-jobs.js";
+import { wrapBashCommand } from "../os-sandbox.js";
+import { stopProcessTree } from "../process-tree.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_STREAM_BYTES = 1_000_000;
@@ -51,7 +54,7 @@ export function redactBashAuditCommand(command: string): string {
 
 export function auditBash(command: string, cwd: string): void {
   try {
-    const file = path.join(os.homedir(), ".lynn", "bash-audit.log");
+    const file = path.join(process.env.LYNN_DATA_DIR?.trim() || process.env.LYNN_HOME?.trim() || path.join(os.homedir(), ".lynn"), "bash-audit.log");
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.appendFileSync(file, `${new Date().toISOString()}\t${cwd}\t${redactBashAuditCommand(command)}\n`);
   } catch {
@@ -74,39 +77,120 @@ export function assertWorkspaceBashAllowed(command: string, sandbox: ToolRunCont
   }
 }
 
-export async function bashTool(ctx: ToolRunContext, command: string): Promise<ClientToolResult> {
+export async function bashTool(ctx: ToolRunContext, command: string, options: { background?: boolean } = {}): Promise<ClientToolResult> {
   if (!command) throw new Error("--command is required for bash");
+  if (ctx.signal?.aborted) return { ok: false, tool: "bash", output: { command, aborted: true } };
   assertWorkspaceBashAllowed(command, ctx.sandbox || "workspace-write");
   if (ctx.approval !== "yolo" && !isSafeReadOnlyShellCommand(command)) {
     throw new Error("bash requires approval except for safe read-only pwd/ls shortcuts. In interactive ask mode, approve the prompt; for headless/Fleet runs pass --approval yolo.");
   }
   auditBash(command, ctx.cwd);
+  const sandboxed = wrapBashCommand(command, ctx);
+  if (options.background) {
+    const job = startBackgroundJob({ command, cwd: ctx.cwd, runId: ctx.runId, ...(sandboxed ? { argv: sandboxed } : {}) });
+    return {
+      ok: true,
+      tool: "bash",
+      output: {
+        command,
+        backgroundTaskId: job.id,
+        logPath: job.logPath,
+        startedAt: new Date(job.startedAt).toISOString(),
+        note: "Command started in the background. Do not poll it: a <task-notification> with the exit code and log tail will arrive on a later step.",
+      },
+    };
+  }
+  const backgroundOnTimeout = process.env.LYNN_CLI_BACKGROUND_ON_TIMEOUT !== "0";
   return new Promise((resolve) => {
-    const child = spawn(command, {
-      cwd: ctx.cwd,
-      shell: true,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    });
+    const child = sandboxed
+      ? spawn(sandboxed.file, sandboxed.args, {
+        cwd: ctx.cwd,
+        shell: false,
+        detached: process.platform !== "win32",
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      })
+      : spawn(command, {
+        cwd: ctx.cwd,
+        shell: true,
+        detached: process.platform !== "win32",
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      });
     let stdout = "";
     let stderr = "";
     let timedOut = false;
     let aborted = false;
+    let settled = false;
+    let backgrounded: { id: string; logPath: string } | null = null;
+    const appendToLog = (chunk: string): void => {
+      if (!backgrounded) return;
+      try {
+        fs.appendFileSync(backgrounded.logPath, chunk);
+      } catch {
+        // The job keeps running even if the log becomes unwritable.
+      }
+    };
     const onAbort = () => {
       aborted = true;
-      child.kill("SIGTERM");
+      stopProcessTree(child);
     };
     if (ctx.signal?.aborted) onAbort();
     else ctx.signal?.addEventListener("abort", onAbort, { once: true });
     const timeout = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
+      if (!backgroundOnTimeout) {
+        stopProcessTree(child);
+        return;
+      }
+      // Recoverability: a long command keeps running with its own log instead of
+      // being killed. The loop reports it on a later step as a task notification.
+      const id = newBackgroundJobId();
+      const logPath = backgroundLogPath(id, ctx.runId);
+      try {
+        fs.appendFileSync(logPath, stdout + (stderr ? `\n[stderr]\n${stderr}` : ""));
+      } catch {
+        // Best effort: the in-memory prefix is still reported below.
+      }
+      backgrounded = { id, logPath };
+      adoptBackgroundChild({ id, command, cwd: ctx.cwd, logPath, child });
+      settled = true;
+      resolve({
+        ok: true,
+        tool: "bash",
+        output: {
+          command,
+          backgroundTaskId: id,
+          logPath,
+          backgrounded: true,
+          timedOutAfterMs: ctx.timeoutMs || DEFAULT_TIMEOUT_MS,
+          outputSoFar: stdout.slice(-2_000),
+          note: "Command exceeded the foreground timeout and continues in the background. Do not poll it: a <task-notification> with the exit code and log tail will arrive on a later step.",
+        },
+      });
     }, ctx.timeoutMs || DEFAULT_TIMEOUT_MS);
-    child.stdout?.on("data", (chunk) => { stdout = appendLimited(stdout, String(chunk)); });
-    child.stderr?.on("data", (chunk) => { stderr = appendLimited(stderr, String(chunk)); });
+    child.stdout?.on("data", (chunk) => {
+      const text = String(chunk);
+      if (backgrounded) appendToLog(text);
+      else stdout = appendLimited(stdout, text);
+    });
+    child.stderr?.on("data", (chunk) => {
+      const text = String(chunk);
+      if (backgrounded) appendToLog(text);
+      else stderr = appendLimited(stderr, text);
+    });
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      ctx.signal?.removeEventListener("abort", onAbort);
+      resolve({ ok: false, tool: "bash", output: { command, aborted, stdout, stderr, error: error.message } });
+    });
     child.on("close", (code) => {
       clearTimeout(timeout);
       ctx.signal?.removeEventListener("abort", onAbort);
+      if (settled || backgrounded) return;
+      settled = true;
       resolve({
         ok: code === 0 && !timedOut && !aborted,
         tool: "bash",

@@ -29,6 +29,10 @@ export interface CodeHarnessSelectionInput {
   hasMedia?: boolean;
   machineReadable?: boolean;
   approval?: "ask" | "on-failure" | "never" | "yolo";
+  /** The session has hooks configured; only the native loop can run them. */
+  hasHooks?: boolean;
+  /** Plan mode is a safety property; only the native loop can enforce it. */
+  planMode?: boolean;
   reasoning?: ReasoningOptions;
   lynnHome?: string;
   probe?: (options: CodexAppServerClientOptions) => Promise<CodexAppServerProtocol>;
@@ -208,6 +212,22 @@ export async function probeCodeHarnessRoute(input: CodeHarnessRouteProbeInput): 
 }
 
 export async function resolveCodeHarnessSelection(input: CodeHarnessSelectionInput): Promise<CodeHarnessSelection> {
+  // Plan mode is enforced by the native loop's tool gate; handing the turn to
+  // the Codex app-server would silently drop that guarantee.
+  if (input.planMode) {
+    return {
+      requested: input.requested,
+      selected: "legacy",
+      reason: "plan mode can only be enforced by the native loop",
+    };
+  }
+  if (input.requested === "auto" && input.hasHooks) {
+    return {
+      requested: input.requested,
+      selected: "legacy",
+      reason: "hooks are configured; the Codex harness has no per-tool hook surface",
+    };
+  }
   if (input.requested === "legacy") {
     return { requested: input.requested, selected: "legacy", reason: "explicit legacy mode" };
   }

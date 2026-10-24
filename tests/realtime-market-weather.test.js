@@ -177,6 +177,8 @@ describe("realtime market/weather tools", () => {
       }
       if (href.includes("open.er-api.com")) {
         return jsonResponse({
+          result: "success",
+          base_code: "USD",
           rates: { CNY: 6.84 },
           time_last_update_utc: "Fri, 24 Apr 2026 00:00:00 +0000",
         });

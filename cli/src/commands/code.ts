@@ -1,147 +1,138 @@
-import path from "node:path";
-import { persistCodeTask } from '../code-task-persistence.js';
-import { stdin as input, stdout as output, stderr as errorOutput } from "node:process";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
+import { stderr as errorOutput, stdin as input, stdout as output } from "node:process";
 import { getStringFlag, hasFlag, type ParsedArgs } from "../args.js";
-import { formatBrainRecoveryHint, type ChatMessage } from "../brain-client.js";
-import { loadSkills, appendSkill } from "../code-skill-store.js";
-import { skillCrystallizeEnabled, buildDistillPrompt, parseDistilledSkill, recallSkills, formatSkillRecallFrame } from "../code-skill-distill.js";
-import { nowIso, writeJsonLine } from "../jsonl.js";
-import { resolveEffectivePermissions } from "../permissions.js";
-import { parseReasoningOptions, shouldRenderReasoning } from "../reasoning.js";
-import { shouldUseInkTui } from "../terminal-safety.js";
-import { bold, dangerLine, dim, orange, supportsColor } from "../terminal-style.js";
-import { renderMarkdown } from "../markdown.js";
-import { HistoryNavigator, appendHistory, historyPath, loadHistory } from "../history.js";
-import { completeSlash, normalizeSlashInput } from "../completion.js";
-import { readInteractiveLine } from "../interactive-line.js";
-import { t } from "../i18n.js";
-import { resolveCliProviderProfile, type CliProviderProfile } from "../provider-profile.js";
-import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
-import type { ClientToolName, ToolRunContext } from "../tools/types.js";
-import { applyModeCommand, applyReasoningCommand, applyThinkCommand, buildChatProviderArgs, renderMode, shouldRefreshProviderRoute, shouldShowProviderSetUsage, toggleMode, type ChatMode } from "./chat.js";
-import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
-import { readVersionInfo } from "../version.js";
-import { renderCodeHeadlessHelp } from "../code-headless-help.js";
-import { appendSessionLine, appendSessionMetadata, appendSessionTurn, listSessions, readSessionLines, resolveDataDir } from "../session/store.js";
-import { buildMemoryContextFrameSync } from "../session/memory.js";
-import { computeCodeContextLayerDiagnostics } from "../context-layers.js";
-import { prepareCodeTaskInput } from "../code-input.js";
+import { formatBrainRecoveryHint } from "../brain-client.js";
 import { resolveDefaultBrainUrl } from "../brain-url.js";
-import { isLocalRuntimeQuestion, localeForText, renderLocalRuntimeAnswer } from "../runtime-answer.js";
-import { renderPlanCard } from "../terminal-spinner.js";
-import { isLocalExitText, parseLocalReadOnlyCommand, renderLocalReadOnlyBlocked, renderLocalReadOnlyResult, runLocalReadOnlyCommand } from "../local-command.js";
+import { readClipboardImage } from "../clipboard-image.js";
 import {
-  assistantToolCallsForMessages,
-  codeToolDefinitions,
-  createStreamingToolCallAccumulator,
-  toolRequestFingerprint,
-  toolRequestsFromCollectedCalls,
-  type CodeToolRequest,
-  type CollectedToolCall,
-} from "../code-tool-protocol.js";
+runCodeAgentLoop,
+type CodeAgentApprovalDecision,
+type CodeAgentApprovalRequest,
+type CodeAgentEvent,
+type CodeAgentLoopInput,
+} from "../code-agent-loop.js";
+import { bestCodeArgs, bestEnabled, parseBestSlashTask, withBestCodeFlags } from "../code-best.js";
 import {
-  canPromptForDangerousTool,
-  formatDangerousToolPreview,
-  isDangerousClientTool,
-  resolveToolApproval,
-} from "../code-tool-render.js";
-import {
-  buildCodePrompt,
-  codeMediaPaths,
-  collectCodeContext,
-  renderMockCodeTask,
-  type CodeContext,
-} from "../code-context.js";
-import {
-  buildResumableMessageGroups,
-  extractLatestPlan,
-  formatToolResultForLoop,
-  loadResumeMessages,
-  readResumeSessionInfo,
-  resolveCodeResumePath,
-  resumeCommandForSession,
-  shouldSaveCodeSession,
-  summarizeResumeMessages,
-  truncateForResume,
-} from "../code-resume.js";
-import { runCodeRewindCommand, runCodeRewindSlash } from "../code-rewind-command.js";
+codeHarness,
+codeCwd as cwd,
+maxSteps,
+parseCodeResumeSlash,
+timeoutMs,
+withLongRunCodeFlags
+} from "../code-command-options.js";
 import { collectOneCompletion } from "../code-completion.js";
 import {
-  codeRouteLabel,
-  renderAssistantBlock,
-  renderCodeFooter,
-  renderCodeIntro,
-  renderCodeTaskHeader,
-} from "../code-output.js";
-import { runUltraCodeBranch, ultraEnabled } from "../code-ultra-command.js";
-import { bestCodeArgs, bestEnabled, parseBestSlashTask, withBestCodeFlags } from "../code-best.js";
-
-export { renderCodeHeadlessHelp } from "../code-headless-help.js";
-export { renderCodeIntro, renderCodeTaskHeader } from "../code-output.js";
-import { buildCodeRuntimeFrames } from "../code-runtime-frames.js";
+codeMediaPaths,
+collectCodeContext,
+renderMockCodeTask
+} from "../code-context.js";
+import { renderCodeHeadlessHelp } from "../code-headless-help.js";
+import { prepareCodeTaskInput } from "../code-input.js";
 import {
-  runCodeAgentLoop,
-  type CodeAgentApprovalRequest,
-  type CodeAgentEvent,
-  type CodeAgentLoopInput,
-} from "../code-agent-loop.js";
+codeRouteLabel,
+renderAssistantBlock,
+renderCodeFooter,
+renderCodeIntro,
+renderCodeTaskHeader,
+} from "../code-output.js";
+import {
+extractLatestPlan,
+loadResumeMessages,
+readResumeSessionInfo,
+resolveCodeResumePath,
+resumeCommandForSession,
+shouldSaveCodeSession,
+summarizeResumeMessages,
+truncateForResume
+} from "../code-resume.js";
+import { runCodeRewindCommand, runCodeRewindSlash } from "../code-rewind-command.js";
+import { buildCodeRuntimeFrames } from "../code-runtime-frames.js";
+import { buildDistillPrompt, formatSkillRecallFrame, parseDistilledSkill, recallSkills, skillCrystallizeEnabled } from "../code-skill-distill.js";
+import { appendSkill, loadSkills } from "../code-skill-store.js";
+import { persistCodeTask } from "../code-task-persistence.js";
+import {
+formatDangerousToolPreview,
+resolveToolApproval
+} from "../code-tool-render.js";
+import { runUltraCodeBranch, ultraEnabled } from "../code-ultra-command.js";
 import { runCodexHarnessLoop } from "../codex-harness-loop.js";
 import {
-  resolveCodeHarnessSelection,
+resolveCodeHarnessSelection,
 } from "../codex-harness-selection.js";
-import {
-  approval,
-  codeCwd as cwd,
-  codeHarness,
-  isLongRun,
-  maxSteps,
-  parseCodeResumeSlash,
-  sandbox,
-  timeoutMs,
-  withLongRunCodeFlags,
-} from "../code-command-options.js";
+import { looksLikeSlashCommand, normalizeSlashInput } from "../completion.js";
+import { computeCodeContextLayerDiagnostics } from "../context-layers.js";
+import { resolveCustomCommand } from "../custom-commands.js";
+import { HistoryNavigator, appendHistory, historyPath, loadHistory } from "../history.js";
+import { loadHookConfig } from "../hooks.js";
+import { t } from "../i18n.js";
+import { nowIso, writeJsonLine } from "../jsonl.js";
+import { isLocalExitText, parseLocalReadOnlyCommand, renderLocalReadOnlyBlocked, renderLocalReadOnlyResult, runLocalReadOnlyCommand } from "../local-command.js";
+import { renderMarkdown } from "../markdown.js";
+import { parseImagePromptCommand } from "../pasted-context.js";
+import { resolveCliProviderProfile } from "../provider-profile.js";
+import { parseReasoningOptions } from "../reasoning.js";
+import { isLocalRuntimeQuestion } from "../runtime-answer.js";
+import { buildMemoryContextFrameSync } from "../session/memory.js";
+import { appendSessionLine, appendSessionMetadata, appendSessionTurn, listSessions, readSessionLines, resolveDataDir } from "../session/store.js";
+import { shouldUseInkTui } from "../terminal-safety.js";
+import { renderPlanCard } from "../terminal-spinner.js";
+import { dim, supportsColor } from "../terminal-style.js";
+import { CLIENT_TOOL_DEFINITIONS, runClientTool } from "../tools/registry.js";
+import type { ClientToolName, ToolRunContext } from "../tools/types.js";
+import { applyModeCommand, applyReasoningCommand, applyThinkCommand, buildChatProviderArgs, renderMode, shouldRefreshProviderRoute, shouldShowProviderSetUsage } from "./chat.js";
+import { codeTaskPrompt, readCodeLine, renderCodeLocalRuntimeAnswer, renderModeChange, resolveCodeMode, runCodeLocalRuntimeAnswer } from "./code-command-helpers.js";
+import { renderBrainModelChoices, renderProvidersInfo, resolveProvidersInfo, runProviders } from "./providers.js";
+export { codeTaskPrompt, readCodeLine } from "./code-command-helpers.js";
+
+
+export { renderCodeHeadlessHelp } from "../code-headless-help.js";
+
+export { renderCodeIntro, renderCodeTaskHeader } from "../code-output.js";
+
 
 export {
-  codeToolDefinitions,
-  createStreamingToolCallAccumulator,
-  parseCodeToolRequest,
-  parseCodeToolRequests,
-  toolRequestFingerprint,
-  toolRequestsFromCollectedCalls,
-  assistantToolCallsForMessages,
-  type CodeToolRequest,
-  type CollectedToolCall,
+assistantToolCallsForMessages,codeToolDefinitions,
+createStreamingToolCallAccumulator,
+parseCodeToolRequest,
+parseCodeToolRequests,
+toolRequestFingerprint,
+toolRequestsFromCollectedCalls,type CodeToolRequest,
+type CollectedToolCall
 } from "../code-tool-protocol.js";
 
+
 export {
-  canPromptForDangerousTool,
-  isDangerousClientTool,
+canPromptForDangerousTool,
+isDangerousClientTool
 } from "../code-tool-render.js";
 
+
 export {
-  buildResumableMessageGroups,
-  extractLatestPlan,
-  formatToolResultForLoop,
-  loadResumeMessages,
-  readResumeSessionInfo,
-  RESUME_COMPACTION_NOTE,
-  RESUME_REPAIR_NOTE,
-  RESUME_TORN_NOTE,
-  resumeCommandForSession,
-  summarizeResumeMessages,
+RESUME_COMPACTION_NOTE,
+RESUME_REPAIR_NOTE,
+RESUME_TORN_NOTE,buildResumableMessageGroups,
+extractLatestPlan,
+formatToolResultForLoop,
+loadResumeMessages,
+readResumeSessionInfo,resumeCommandForSession,
+summarizeResumeMessages
 } from "../code-resume.js";
 
+
 export { buildCodeRuntimeFrames } from "../code-runtime-frames.js";
-export type { CodeAgentApprovalRequest, CodeAgentEvent } from "../code-agent-loop.js";
+
+export type { CodeAgentApprovalDecision, CodeAgentApprovalRequest, CodeAgentEvent } from "../code-agent-loop.js";
+
 
 export {
-  codeHarness,
-  isLongRun,
-  maxSteps,
-  parseCodeResumeSlash,
-  withLongRunCodeFlags,
+codeHarness,
+isLongRun,
+maxSteps,
+parseCodeResumeSlash,
+withLongRunCodeFlags
 } from "../code-command-options.js";
+
 
 export async function runCode(args: ParsedArgs): Promise<number> {
   const json = hasFlag(args.flags, "json", "jsonl");
@@ -219,50 +210,6 @@ export async function runCode(args: ParsedArgs): Promise<number> {
   return result.ok ? 0 : 1;
 }
 
-export function codeTaskPrompt(args: ParsedArgs): string {
-  return [
-    getStringFlag(args.flags, "p", "print", "prompt", "task"),
-    args.positionals.join(" ").trim(),
-  ].filter((part): part is string => !!part && !!part.trim()).join("\n\n").trim();
-}
-
-async function runCodeLocalRuntimeAnswer(args: ParsedArgs, task: string, json: boolean): Promise<number> {
-  const mode = await resolveCodeMode(args);
-  const reasoning = parseReasoningOptions(args);
-  const cliProvider = await resolveCliProviderProfile(args);
-  const text = await renderCodeLocalRuntimeAnswer(args, task, mode, reasoning, cliProvider?.profile);
-  if (json) {
-    writeJsonLine({ type: "code.task.started", ts: nowIso(), task, local: true });
-    writeJsonLine({ type: "assistant.delta", ts: nowIso(), text });
-    writeJsonLine({ type: "code.task.finished", ts: nowIso(), ok: true, local: true, contentReturned: true });
-  } else {
-    process.stdout.write(renderAssistantBlock(text, renderCodeFooter({
-      context: { cwd: cwd(args), gitStatus: "unknown", gitDiffStat: "", topFiles: [], packageScripts: {} },
-      mode,
-      mockBrain: false,
-      reasoning,
-      fallbackProvider: cliProvider?.profile,
-    })));
-  }
-  return 0;
-}
-
-async function renderCodeLocalRuntimeAnswer(
-  args: ParsedArgs,
-  text: string,
-  mode: ChatMode,
-  reasoning: ReturnType<typeof parseReasoningOptions>,
-  fallbackProvider?: CliProviderProfile,
-): Promise<string> {
-  return renderLocalRuntimeAnswer({
-    routeLabel: codeRouteLabel(false, fallbackProvider),
-    brainUrl: await resolveDefaultBrainUrl(args),
-    cwd: cwd(args),
-    mode: renderMode(mode),
-    reasoning: reasoning.effort,
-    question: text,
-  }, localeForText(text));
-}
 
 async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   const mode = await resolveCodeMode(args);
@@ -315,8 +262,12 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
         completions: slashCommands,
       });
       if (raw === null) break;
-      const text = normalizeSlashInput(raw.trim());
-      if (!text) continue;
+      let text = normalizeSlashInput(raw.trim());
+      if (!text) {
+        const clipboard = await readClipboardImage().catch(() => null);
+        if (!clipboard) continue;
+        text = "/image";
+      }
       if (isLocalExitText(text)) break;
       history.push(text);
       appendHistory(text, histFile);
@@ -477,7 +428,7 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
         output.write(`${renderLocalReadOnlyResult(localReadOnly.command, result, output)}\n\n`);
         continue;
       }
-      if (text.startsWith("/")) {
+      if (looksLikeSlashCommand(text) && !/^\/(?:image|images|attach)\b/i.test(text)) {
         output.write(`${t("slash.unknown")}\n\n`);
         continue;
       }
@@ -506,38 +457,16 @@ async function runCodeInteractive(args: ParsedArgs): Promise<number> {
   return 0;
 }
 
-export async function readCodeLine(prompt: string, mode: ChatMode, options: { placeholder?: string; history?: HistoryNavigator; completions?: string[] } = {}): Promise<string | null> {
-  return readInteractiveLine(prompt, mode, {
-    ...options,
-    onShiftTab: () => renderModeChange(toggleMode(mode), mode, supportsColor(output)),
-  });
-}
-
-function renderModeChange(message: string, mode: ChatMode, color: boolean): string {
-  const dangerous = mode.approval === "yolo" || mode.sandbox === "danger-full-access";
-  const modeLabel = dangerous ? orange(renderMode(mode), color) : renderMode(mode);
-  const warning = dangerous
-    ? `\n${dangerLine(t("mode.danger.warning"), color)}`
-    : "";
-  return `✓ ${message}\nmode: ${modeLabel}${warning}\n\n`;
-}
-
-async function resolveCodeMode(args: ParsedArgs): Promise<ChatMode> {
-  const permissions = await resolveEffectivePermissions(args);
-  return {
-    approval: permissions.approval,
-    sandbox: permissions.sandbox,
-  };
-}
 
 export async function runCodeTaskWithEvents(
   args: ParsedArgs,
   task: string,
   onEvent: (event: CodeAgentEvent) => void,
-  options: { requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny">; signal?: AbortSignal } = {},
+  options: { requestApproval?: (request: CodeAgentApprovalRequest) => Promise<CodeAgentApprovalDecision>; signal?: AbortSignal } = {},
 ): Promise<number> {
   return runCodeTask(args, task, false, { compact: true, onEvent, requestApproval: options.requestApproval, signal: options.signal });
 }
+
 
 async function runCodeTask(
   args: ParsedArgs,
@@ -546,17 +475,41 @@ async function runCodeTask(
   options: {
     compact?: boolean;
     onEvent?: (event: CodeAgentEvent) => void;
-    requestApproval?: (request: CodeAgentApprovalRequest) => Promise<"approve" | "approve_all" | "deny">;
+    requestApproval?: (request: CodeAgentApprovalRequest) => Promise<CodeAgentApprovalDecision>;
     signal?: AbortSignal;
   } = {},
 ): Promise<number> {
+  const runStartedAt = Date.now();
   if (bestEnabled(args)) {
     args = { ...args, flags: withBestCodeFlags(args.flags) };
   }
   const context = await collectCodeContext(cwd(args));
-  const preparedInput = prepareCodeTaskInput(task, context.cwd, t("chat.image.defaultPrompt"));
-  const taskText = preparedInput.task;
-  const mediaPaths = codeMediaPaths(args, preparedInput.mediaPaths);
+  // Resolve /image before generic path extraction: the generic extractor would
+  // otherwise split "screen shots/screen shot.png" at the space.
+  const imageCommand = parseImagePromptCommand(task, context.cwd);
+  let seedImages: string[] = [];
+  let baseTask = task;
+  if (imageCommand) {
+    seedImages = imageCommand.imageRefs.map((ref) => ref.path);
+    if (!seedImages.length) {
+      const clipboard = await readClipboardImage().catch(() => null);
+      if (clipboard) seedImages = [clipboard.path];
+    }
+    if (seedImages.length) {
+      baseTask = imageCommand.prompt;
+      if (json) writeJsonLine({ type: "code.image.attached", ts: nowIso(), images: seedImages });
+    }
+  }
+  const preparedInput = prepareCodeTaskInput(baseTask, context.cwd, t("chat.image.defaultPrompt"));
+  const mediaPaths = codeMediaPaths(args, [...seedImages, ...preparedInput.mediaPaths]);
+  let taskText = preparedInput.task || (mediaPaths.length ? t("chat.image.defaultPrompt") : baseTask);
+  const customCommand = await resolveCustomCommand(taskText, context.cwd);
+  if (customCommand) {
+    const original = taskText;
+    taskText = customCommand.prompt;
+    if (json) writeJsonLine({ type: "code.custom_command", ts: nowIso(), name: customCommand.command.name, source: customCommand.command.source, original });
+    options.onEvent?.({ type: "custom.command", name: customCommand.command.name, prompt: taskText });
+  }
   const reasoning = parseReasoningOptions(args);
   const stepBudget = maxSteps(args);
   const requestedHarness = codeHarness(args);
@@ -564,6 +517,8 @@ async function runCodeTask(
   const mockBrain = hasFlag(args.flags, "mock-brain", "mock");
   const mode = await resolveCodeMode(args);
   const cliProvider = await resolveCliProviderProfile(args);
+  const hookConfig = await loadHookConfig(context.cwd);
+  const hasHooks = Object.values(hookConfig.hooks).some((list) => !!list?.length);
   const harnessSelection = mockBrain
     ? { requested: requestedHarness, selected: "legacy" as const, reason: "mock brain uses the deterministic legacy loop" }
     : await resolveCodeHarnessSelection({
@@ -575,9 +530,17 @@ async function runCodeTask(
         hasMedia: mediaPaths.length > 0,
         machineReadable: json,
         approval: mode.approval,
+        hasHooks,
+        planMode: hasFlag(args.flags, "plan"),
         reasoning,
       });
   const harness = harnessSelection.selected;
+  if (harness === "codex" && hasHooks) {
+    const message = "Codex harness selected: hooks, permission rules and plan mode are not applied on this path. Use --harness legacy to run them.";
+    if (json) writeJsonLine({ type: "code.harness.warning", ts: nowIso(), message });
+    options.onEvent?.({ type: "harness.warning", message });
+    if (!json && !options.onEvent) errorOutput.write(`${dim(message, supportsColor(errorOutput))}\n`);
+  }
   const dataDir = resolveDataDir(getStringFlag(args.flags, "data-dir"));
   let memoryFrame = buildMemoryContextFrameSync(dataDir, taskText);
   // ① Recall: inject SOPs crystallized from past similar tasks (opt-in).
@@ -675,6 +638,7 @@ async function runCodeTask(
     sandbox: mode.sandbox,
     timeoutMs: timeoutMs(args),
     signal: options.signal,
+    planMode: hasFlag(args.flags, "plan"),
   };
   if (ultraEnabled(args)) {
     return runUltraCodeBranch({
@@ -788,6 +752,8 @@ async function runCodeTask(
   const resumeCommand = final.maxStepsReached && savedSessionPath
     ? resumeCommandForSession(savedSessionPath)
     : null;
+  const durationMs = Date.now() - runStartedAt;
+  const stopReason = final.maxStepsReached ? "max_steps" : final.terminal.code;
   options.onEvent?.({
     type: "task.finished",
     ok: final.terminal.ok,
@@ -800,6 +766,9 @@ async function runCodeTask(
     maxStepsReached: final.maxStepsReached,
     resumeCommand: resumeCommand || undefined,
     sessionPath: savedSessionPath,
+    permissionDenials: final.permissionDenials,
+    stopReason,
+    durationMs,
   });
   // ② Crystallize: on a clean success, distill the trace into a reusable SOP (opt-in, best-effort).
   if (skillCrystallizeEnabled() && !final.maxStepsReached && final.text.trim()) {
@@ -826,6 +795,10 @@ async function runCodeTask(
       resumable: final.terminal.resumable,
       partial: final.terminal.partial,
       contentReturned: !!final.text.trim(),
+      stop_reason: stopReason,
+      duration_ms: durationMs,
+      api_calls: final.usageRecords.length,
+      permission_denials: final.permissionDenials,
       ...(final.usageSummary ? { usageSummary: final.usageSummary } : {}),
       ...(savedSessionPath ? { sessionPath: savedSessionPath } : {}),
       ...(resumeCommand ? { resumeCommand } : {}),

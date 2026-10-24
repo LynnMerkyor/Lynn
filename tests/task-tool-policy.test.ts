@@ -22,7 +22,7 @@ describe("model-decided tool necessity", () => {
     expect(prompts).toContain(TASK_TOOL_POLICY);
     expect(buildCliRuntimeSystemMessage("test route").content).toContain(TASK_TOOL_POLICY);
     const frames = buildCodeRuntimeFrames({ context: { cwd: "/tmp/policy-test" } as never, toolCtx: { approval: "ask", cwd: "/tmp/policy-test" } });
-    expect(frames[0].text).toContain(TASK_TOOL_POLICY);
+    expect(frames.filter(frame => frame.kind === "base_system").map(frame => frame.text).join("\n")).toContain(TASK_TOOL_POLICY);
   });
   it("preserves supplied content while explicitly retaining research and file execution", () => {
     expect(TASK_TOOL_POLICY).toContain("Preserve relative dates, names and values as written");

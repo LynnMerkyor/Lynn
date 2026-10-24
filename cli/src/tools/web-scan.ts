@@ -1,4 +1,5 @@
 import type { ClientToolResult, ToolRunContext } from "./types.js";
+import { isIP } from "node:net";
 
 // Read-only web fetch + zero-dependency HTML simplification. Native, in-process,
 // SSRF-guarded, size/time bounded. The CLI counterpart of GA's optHTML — for the
@@ -15,7 +16,7 @@ export function webScanEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 
 /** Block loopback / private / link-local / cloud-metadata hosts (SSRF guard). */
 export function isBlockedHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
   if (h === "localhost" || h.endsWith(".localhost") || h === "0.0.0.0" || h === "::1" || h === "::") return true;
   if (h === "169.254.169.254" || h === "metadata.google.internal") return true;
   const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -26,8 +27,20 @@ export function isBlockedHost(hostname: string): boolean {
     if (a === 169 && b === 254) return true;
     if (a === 192 && b === 168) return true;
     if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    if (a === 198 && (b === 18 || b === 19)) return true;
+    if (a >= 224) return true;
   }
-  if (h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80") || h.startsWith("::ffff:127") || h.startsWith("::ffff:10")) return true;
+  if (isIP(h) === 6) {
+    if (/^(fc|fd|fe[89ab]|ff)/.test(h)) return true;
+    if (h.startsWith("::ffff:")) {
+      const mapped = h.slice(7);
+      if (isIP(mapped) === 4) return isBlockedHost(mapped);
+      const parts = mapped.split(":").map(part => Number.parseInt(part, 16));
+      if (parts.length === 2 && parts.every(Number.isFinite)) return isBlockedHost(`${parts[0]! >> 8}.${parts[0]! & 255}.${parts[1]! >> 8}.${parts[1]! & 255}`);
+      return true;
+    }
+  }
   return false;
 }
 
@@ -41,6 +54,7 @@ export function validateWebUrl(raw: string): URL {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error(`web_scan: only http/https allowed (got ${url.protocol})`);
   }
+  if (url.username || url.password) throw new Error("web_scan: URL credentials are not allowed");
   if (isBlockedHost(url.hostname)) {
     throw new Error(`web_scan: blocked host (loopback/private/metadata): ${url.hostname}`);
   }
@@ -80,17 +94,31 @@ export function simplifyHtml(html: string, maxChars = DEFAULT_MAX_CHARS): Simpli
 
 export async function webScanTool(ctx: ToolRunContext, rawUrl: string): Promise<ClientToolResult> {
   const controller = new AbortController();
+  const onAbort = () => controller.abort(ctx.signal?.reason);
+  if (ctx.signal?.aborted) onAbort();
+  else ctx.signal?.addEventListener("abort", onAbort, { once: true });
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     if (!rawUrl) throw new Error("url is required for web_scan");
-    const url = validateWebUrl(rawUrl);
+    let url = validateWebUrl(rawUrl);
+    controller.signal.throwIfAborted();
     const timeoutMs = ctx.timeoutMs && ctx.timeoutMs > 0 ? Math.min(ctx.timeoutMs, 60000) : DEFAULT_TIMEOUT_MS;
     timer = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: { "user-agent": "Lynn-CLI-web_scan/1.0", accept: "text/html,text/plain,*/*" },
-    });
+    let res: Response | undefined;
+    for (let hop = 0; hop <= 5; hop++) {
+      controller.signal.throwIfAborted();
+      res = await fetch(url, {
+        signal: controller.signal,
+        redirect: "manual",
+        headers: { "user-agent": "Lynn-CLI-web_scan/1.0", accept: "text/html,text/plain,*/*" },
+      });
+      if (![301, 302, 303, 307, 308].includes(res.status)) break;
+      const location = res.headers.get("location");
+      await res.body?.cancel();
+      if (!location || hop === 5) throw new Error("web_scan: invalid or excessive redirects");
+      url = validateWebUrl(new URL(location, url).href);
+    }
+    if (!res) throw new Error("web_scan: no response");
     const contentType = res.headers.get("content-type") || "";
     const raw = await readCapped(res, MAX_BODY_BYTES);
     const isHtml = /html/i.test(contentType) || /^\s*</.test(raw);
@@ -106,6 +134,7 @@ export async function webScanTool(ctx: ToolRunContext, rawUrl: string): Promise<
     return { ok: false, tool: "web_scan", error: error instanceof Error ? error.message : String(error) };
   } finally {
     clearTimeout(timer);
+    ctx.signal?.removeEventListener("abort", onAbort);
   }
 }
 

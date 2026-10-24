@@ -2,7 +2,7 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { brightCyan, bold, dim, orange, supportsColor, yellow } from "./terminal-style.js";
 import { visibleLength } from "./startup.js";
-import { completeSlash, normalizeSlashInput } from "./completion.js";
+import { completeSlash, looksLikeSlashCommand, normalizeSlashInput } from "./completion.js";
 import { HistoryNavigator } from "./history.js";
 import { analyzePastedContext, normalizePastedText, summarizePastedContext } from "./pasted-context.js";
 import { t } from "./i18n.js";
@@ -104,7 +104,7 @@ function visibleCompletions(commands: string[]): string[] {
 function renderSlashPalette(input: string, commands: string[] | undefined, maxWidth: number, color: boolean): string[] {
   const normalized = normalizeSlashInput(input);
   const visible = commands?.length ? visibleCompletions(commands) : [];
-  if (!visible.length || !normalized.startsWith("/") || normalized.includes("\n")) return [];
+  if (!visible.length || !looksLikeSlashCommand(normalized) || normalized.includes("\n")) return [];
   const completion = completeSlash(normalized, visible);
   if (!completion.matches.length) return [yellow(t("slash.unknown"), color)];
 

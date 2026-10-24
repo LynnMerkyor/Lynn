@@ -45,7 +45,7 @@ function makeGlobalFetchStub() {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ rates: { CNY: 7.20, EUR: 0.92, JPY: 156.0 } }),
+        json: async () => ({ result: "success", base_code: "USD", time_last_update_utc: "Fri, 23 Oct 2026 15:00:00 GMT", rates: { CNY: 7.20, EUR: 0.92, JPY: 156.0 } }),
         text: async () => "",
       };
     }
@@ -323,6 +323,17 @@ describe("stock market tool", () => {
     expect(text).toContain("USD/CNY");
     expect(text).toContain("1 USD = 7.2 CNY");
     expect(text).not.toContain("���");
+  });
+  it("attributes fallback FX rates as daily reference data", async () => {
+    vi.stubGlobal("fetch", vi.fn(async url => String(url).includes("allratestoday.com")
+      ? { ok: true, json: async () => ({ result: "success", base_code: "USD", time_last_update_utc: "Fri, 23 Oct 2026 15:00:00 GMT", rates: { CNY: 6.67 } }) }
+      : { ok: false, status: 503 }));
+    const result = await createStockMarketTool().execute("fallback", { query: "USD/CNY", base: "USD", quote: "CNY" });
+    const text = result.content?.[0]?.text || "";
+    expect(result.details?.provider).toBe("allratestoday.com");
+    expect(text).toContain("AllRatesToday");
+    expect(text).toContain("非实时成交价");
+    expect(text).toContain("6.67");
   });
 
   it("keeps search-result URLs out of gold snapshots while preserving snippets", async () => {

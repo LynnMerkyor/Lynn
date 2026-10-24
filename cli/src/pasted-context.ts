@@ -1,4 +1,7 @@
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { mediaKindFor } from "./media.js";
 import { currentLang, t, type Lang } from "./i18n.js";
 
 const MEDIA_EXT = "png|jpe?g|webp|gif|mp3|wav|m4a|aac|ogg|flac|mp4|mov|avi|wmv|webm|mkv";
@@ -39,7 +42,15 @@ export function appendPastedText(current: string, pasted: string): string {
 export function analyzePastedContext(value: string, cwd = process.cwd()): PastedContextInfo {
   const normalized = normalizePastedText(value);
   const imageRefs: PastedImageRef[] = [];
-  let text = normalized.replace(IMAGE_PATH_RE, (match, doubleQuoted: string | undefined, singleQuoted: string | undefined, bare: string | undefined) => {
+  // Drag-and-drop often pastes a bare path with spaces ("Screen Shot.png"),
+  // which the token regex below cannot see. Accept a whole line or a trailing
+  // absolute path when the file actually exists.
+  const lines = normalized.split("\n").map((line) => {
+    const extracted = extractInlineMedia(line, cwd);
+    for (const ref of extracted.paths) imageRefs.push(ref);
+    return extracted.text;
+  });
+  let text = lines.join("\n").replace(IMAGE_PATH_RE, (match, doubleQuoted: string | undefined, singleQuoted: string | undefined, bare: string | undefined) => {
     const raw = doubleQuoted || singleQuoted || bare || match;
     const cleaned = cleanImagePath(raw);
     imageRefs.push({ raw, path: path.resolve(cwd, cleaned) });
@@ -133,11 +144,67 @@ function summarizeContextParts(options: {
   return parts.join(" · ");
 }
 
+
+/**
+ * Pull a media path out of one line. Handles the three shapes drag-and-drop
+ * produces: the path alone, a path with spaces followed by a prompt, and a
+ * prompt followed by a path with spaces. Existence is checked so a sentence
+ * containing "screenshot.png" is not mistaken for an attachment.
+ */
+function extractInlineMedia(line: string, cwd: string): { paths: PastedImageRef[]; text: string } {
+  const direct = stripQuotes(line.trim());
+  if (direct && isExistingMedia(direct, cwd)) {
+    return { paths: [{ raw: line.trim(), path: resolveMediaPath(direct, cwd) }], text: "" };
+  }
+  const extension = new RegExp(`\\.(?:${MEDIA_EXT})\\b`, "gi");
+  let match: RegExpExecArray | null;
+  while ((match = extension.exec(line))) {
+    const end = match.index + match[0].length;
+    const starts = new Set<number>([0]);
+    for (let index = 0; index < end; index += 1) {
+      const char = line[index];
+      if (char === '"' || char === "'") starts.add(index + 1);
+      else if (char === "/") starts.add(index);
+    }
+    for (const start of [...starts].sort((a, b) => a - b)) {
+      const candidate = stripQuotes(line.slice(start, end).trim());
+      if (!candidate || !isExistingMedia(candidate, cwd)) continue;
+      const prefix = line.slice(0, start).replace(/["']+\s*$/, "").trim();
+      const rest = line.slice(end).replace(/^['"\s]+/, "").trim();
+      return {
+        paths: [{ raw: candidate, path: resolveMediaPath(candidate, cwd) }],
+        text: [prefix, rest].filter(Boolean).join(" ").trim(),
+      };
+    }
+  }
+  return { paths: [], text: line };
+}
+
 function cleanImagePath(value: string): string {
   const withoutFileScheme = value.startsWith("file://") ? value.slice("file://".length) : value;
+  const expanded = withoutFileScheme.startsWith("~/") ? path.join(os.homedir(), withoutFileScheme.slice(2)) : withoutFileScheme;
   try {
-    return decodeURIComponent(withoutFileScheme).replace(/\\ /g, " ");
+    return decodeURIComponent(expanded).replace(/\\ /g, " ");
   } catch {
-    return withoutFileScheme.replace(/\\ /g, " ");
+    return expanded.replace(/\\ /g, " ");
+  }
+}
+
+function stripQuotes(value: string): string {
+  const match = value.match(/^"(.*)"$/) || value.match(/^'(.*)'$/);
+  return match?.[1] ?? value;
+}
+
+function resolveMediaPath(value: string, cwd: string): string {
+  return path.resolve(cwd, cleanImagePath(value));
+}
+
+function isExistingMedia(value: string, cwd: string): boolean {
+  const cleaned = cleanImagePath(value);
+  if (!mediaKindFor(cleaned)) return false;
+  try {
+    return fs.existsSync(path.resolve(cwd, cleaned));
+  } catch {
+    return false;
   }
 }

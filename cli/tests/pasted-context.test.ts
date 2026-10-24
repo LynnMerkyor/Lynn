@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { afterEach, beforeEach } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import { looksLikeSlashCommand } from "../src/completion.js";
 import { setLang } from "../src/i18n.js";
 import {
   analyzePastedContext,
@@ -68,5 +71,49 @@ describe("pasted context helpers", () => {
     const info = analyzePastedContext("第一段\n第二行\n/tmp/a.png");
 
     expect(summarizePastedContext(info)).toBe("1 个附件: a.png · 2 行");
+  });
+
+  it("extracts a dragged path that contains spaces", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-drag-"));
+    try {
+      const file = path.join(tmp, "screen shot.png");
+      await fs.writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      const alone = analyzePastedContext(file, tmp);
+      expect(alone.imageRefs).toHaveLength(1);
+      expect(alone.imageRefs[0]!.path).toBe(file);
+      expect(alone.text).toBe("");
+
+      const withPrompt = analyzePastedContext(`看这个 ${file}`, tmp);
+      expect(withPrompt.imageRefs).toHaveLength(1);
+      expect(withPrompt.imageRefs[0]!.path).toBe(file);
+      expect(withPrompt.text).toBe("看这个");
+
+      const withTrailingPrompt = analyzePastedContext(`${file} describe it`, tmp);
+      expect(withTrailingPrompt.imageRefs).toHaveLength(1);
+      expect(withTrailingPrompt.imageRefs[0]!.path).toBe(file);
+      expect(withTrailingPrompt.text).toBe("describe it");
+
+      const command = parseImagePromptCommand(`/image ${file} describe it`, tmp);
+      expect(command?.imageRefs).toHaveLength(1);
+      expect(command?.imageRefs[0]!.path).toBe(file);
+      expect(command?.prompt).toBe("describe it");
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("treats a dragged absolute image path as pasted context, not a slash command", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-drag-"));
+    try {
+      const file = path.join(dir, "screen shot.png");
+      await fs.writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      const info = analyzePastedContext(`看这个 ${file}`, dir);
+      expect(info.imageRefs).toHaveLength(1);
+      expect(info.imageRefs[0]!.path).toBe(file);
+      expect(info.text).toBe("看这个");
+      expect(looksLikeSlashCommand(file)).toBe(false);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 });

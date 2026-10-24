@@ -1,6 +1,6 @@
 {
   "name": "@lynn/cli",
-  "version": "0.87.3",
+  "version": "0.87.4",
   "private": false,
   "type": "module",
   "description": "Lynn command line interface and worker runner",
@@ -9,10 +9,11 @@
     "Lynn": "./bin/lynn.mjs"
   },
   "files": [
+    "README.md",
     "bin/",
-    "scripts/preinstall.mjs",
     "package.json",
-    "README.md"
+    "scripts/postinstall.mjs",
+    "scripts/preinstall.mjs"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -22,7 +23,8 @@
     "test": "vitest run tests --reporter=dot",
     "test:fleet": "vitest run tests/code-tools.test.ts tests/code-agent-loop*.test.ts tests/worker-run*.test.ts tests/providers.test.ts tests/brain-render.test.ts tests/status-bar.test.ts tests/vision*.test.ts --reporter=dot",
     "test:voice": "vitest run tests/voice.test.ts --reporter=dot",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/postinstall.mjs"
   },
   "engines": {
     "node": ">=20"

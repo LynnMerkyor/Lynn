@@ -460,6 +460,9 @@ export async function runCodexHarnessLoop(input: CodeAgentLoopInput, options: Co
       maxStepsReached: false,
       usageSummary: null,
       usageRecords: [],
+      // The Codex harness applies its own approval policy; Lynn's rule engine and
+      // hooks are not consulted on this path (commands/code.ts warns when they exist).
+      permissionDenials: [],
       runId: finished.snapshot.runId,
       terminal,
     };

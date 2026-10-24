@@ -1,3 +1,4 @@
+import path from "node:path";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Static, Text, render, useApp, useInput } from "ink";
 import { detectImageProtocol, renderImageThumbnail } from "./terminal-image.js";
@@ -6,8 +7,7 @@ import { streamBrainChat, type BrainStreamEvent, type ChatMessage } from "./brai
 import { formatBrainErrorForHuman, summarizeUsage } from "./brain-render.js";
 import { HistoryNavigator, appendHistory, historyPath, loadHistory } from "./history.js";
 import { t } from "./i18n.js";
-import { completeSlash } from "./completion.js";
-import { normalizeSlashInput } from "./completion.js";
+import { completeSlash, looksLikeSlashCommand, normalizeSlashInput } from "./completion.js";
 import { completeMentionInput } from "./mentions.js";
 import { applyFastReasoning, parseReasoningOptions, shouldRenderReasoning, type ReasoningOptions } from "./reasoning.js";
 import { resolveCliProviderProfile, type CliProviderProfile } from "./provider-profile.js";
@@ -27,6 +27,7 @@ import { resolveDataDir } from "./session/store.js";
 import { rotatingPlaceholder } from "./ink-placeholders.js";
 import { resolveDefaultBrainUrl } from "./brain-url.js";
 import { runRealtimeVoice } from "./voice-realtime.js";
+import { readClipboardImage } from "./clipboard-image.js";
 import { argsForChatVoiceLaunch, parseChatVoiceLaunchCommand, type ChatVoiceLaunch } from "./voice-command.js";
 import { createDecodeSpeedTracker } from "./decode-speed.js";
 import { terminalTuiProfile } from "./terminal-safety.js";
@@ -164,6 +165,57 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
     setCursorIndex(next.cursor);
   };
 
+  const attachClipboardImage = async (): Promise<void> => {
+    try {
+      const image = await readClipboardImage({ dataDir });
+      if (!image) {
+        setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("code.image.none") }]);
+        return;
+      }
+      editInput({ type: "insert", text: `${image.path} ` });
+      setTurns((current) => [...current, {
+        id: Date.now(),
+        role: "system",
+        text: t("code.image.attached", { name: path.basename(image.path), kb: Math.max(1, Math.round(image.bytes / 1024)) }),
+      }]);
+    } catch (error) {
+      setTurns((current) => [...current, { id: Date.now(), role: "system", text: String(error), error: true }]);
+    }
+  };
+
+  const submitClipboardImage = async (): Promise<void> => {
+    const image = await readClipboardImage({ dataDir }).catch(() => null);
+    if (!image) return;
+    setTurns((current) => [...current, {
+      id: Date.now(),
+      role: "system",
+      text: t("code.image.attached", { name: path.basename(image.path), kb: Math.max(1, Math.round(image.bytes / 1024)) }),
+    }]);
+    void submitInput({
+      text: `${image.path} `,
+      setInput: replaceInput,
+      setTurns,
+      setBusy,
+      setProvider,
+      setUsage,
+      setDecodeTps,
+      setReasoning,
+      setMode,
+      fallbackProvider,
+      setFallbackProvider,
+      appExit: app.exit,
+      messages,
+      props,
+      reasoning,
+      mode,
+      dataDir,
+      memoryFrame,
+      setMemoryFrame,
+      cwd: effectiveCwd,
+      activeAbortRef,
+    });
+  };
+
   useInput((value, key) => {
     value = stripBracketedPasteMarkers(value);
     if ((key.ctrl && value === "c") || value === "\u0003") {
@@ -175,6 +227,10 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
       return;
     }
     if (busy) return;
+    if ((key.ctrl || key.meta) && value === "v") {
+      void attachClipboardImage();
+      return;
+    }
     const newlineIndex = value.search(/[\r\n]/);
     if (!key.return && newlineIndex >= 0) {
       const lines = value.replace(/\r\n?/g, "\n").split("\n");
@@ -226,6 +282,10 @@ function InkChatApp(props: InkChatProps): React.ReactElement {
     if (key.return) {
       const prefix = newlineIndex >= 0 ? value.slice(0, newlineIndex) : "";
       const submitted = `${input}${prefix}`;
+      if (!submitted.trim()) {
+        void submitClipboardImage();
+        return;
+      }
       void emitThumbnails(submitted, effectiveCwd, setThumbs, profile.inlineImages);
       void submitInput({
         text: submitted,
@@ -635,7 +695,27 @@ async function submitInput(inputData: {
   const imageCommand = parseImagePromptCommand(text, inputData.cwd);
   if (imageCommand) {
     if (!imageCommand.imageRefs.length) {
-      inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("chat.image.usage") }]);
+      const clipboard = await readClipboardImage().catch(() => null);
+      if (!clipboard) {
+        inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("chat.image.usage") }]);
+        return;
+      }
+      try {
+        const userContent = await buildImagesContentParts([clipboard.path], imageCommand.prompt);
+        await submitChatTurn({
+          ...inputData,
+          promptText: imageCommand.prompt,
+          userContent,
+          contextSummary: summarizeImageRefs([{ raw: clipboard.path, path: clipboard.path }]),
+        });
+      } catch (error) {
+        inputData.setTurns((current) => [...current, {
+          id: Date.now(),
+          role: "system",
+          text: t("chat.image.readError", { error: error instanceof Error ? error.message : String(error) }),
+          error: true,
+        }]);
+      }
       return;
     }
     let userContent: ChatMessage["content"];
@@ -658,7 +738,7 @@ async function submitInput(inputData: {
     });
     return;
   }
-  if (text.startsWith("/")) {
+  if (looksLikeSlashCommand(text)) {
     inputData.setTurns((current) => [...current, { id: Date.now(), role: "system", text: t("slash.unknown") }]);
     return;
   }

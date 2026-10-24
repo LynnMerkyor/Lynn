@@ -25,6 +25,16 @@ export function completeSlash(input: string, commands: string[]): { completed: s
   return { completed: prefix.length > input.length ? prefix : input, matches };
 }
 
+/**
+ * True for `/help`, `/mode yolo`; false for an absolute path such as
+ * `/Users/lynn/Desktop/shot.png`. A path is not a slash command even though it
+ * starts with a slash.
+ */
+export function looksLikeSlashCommand(input: string): boolean {
+  const normalized = normalizeSlashInput(input);
+  return normalized === "/" || /^\/[A-Za-z][A-Za-z0-9_-]*(?:\s|$)/.test(normalized);
+}
+
 export function normalizeSlashInput(input: string): string {
   const trimmed = input.trimStart();
   return trimmed.startsWith("／") ? `/${trimmed.slice(1)}` : trimmed;

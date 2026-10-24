@@ -2,6 +2,7 @@ import type { RuntimeInstructionFrame } from "../../shared/runtime-instruction-f
 import type { CodeContext } from "./code-context.js";
 import type { ToolRunContext } from "./tools/types.js";
 import { TASK_TOOL_POLICY } from "../../shared/task-tool-policy.js";
+import { LYNN_CODE_STATIC_PROMPT, LYNN_CODE_TASK_GUIDANCE } from "./code-system-prompt.js";
 
 export interface CodeRuntimeFrameInput {
   context: CodeContext;
@@ -11,24 +12,26 @@ export interface CodeRuntimeFrameInput {
 
 export function buildCodeRuntimeFrames(input: CodeRuntimeFrameInput): RuntimeInstructionFrame[] {
   return [
+    ...LYNN_CODE_STATIC_PROMPT.slice(0, 1).map((text) => ({
+      kind: "base_system" as const,
+      source: "cli",
+      text,
+    })),
     {
       kind: "base_system",
       source: "cli",
-      text: [
-        "You are Lynn CLI code mode.",
-        "The default online route is Step 5 Preview (256K context; high reasoning with a 48K reasoning/generation budget) through the local Lynn Brain router. Local manager routing is explicit and experimental, not the default code execution path.",
-        "Step 5 Preview is the text/coding head route; image/audio/video are routed by the local Brain to its vision/voice backends. Keep responses in the user's language.",
-        "You help with repository-level coding tasks from the terminal.",
-        TASK_TOOL_POLICY,
-        "You may request local tools using exactly one JSON object and no prose:",
-        '{"tool":"update_plan|read_file|grep|glob|apply_patch|bash|write_file","args":{...}}',
-        "For non-trivial tasks, first call update_plan/TodoWrite with items and statuses pending/in_progress/completed, then update it as work progresses.",
-        "Prefer read_file, grep, and glob before editing. Use apply_patch for edits when possible.",
-        "When you are done, answer normally with a concise summary and tests run.",
-        "Do not claim you edited files unless a tool actually changed them.",
-        "Never download models, datasets, training packs, BF16, or GGUF files to the local Mac.",
-      ].join("\n"),
+      text: `${LYNN_CODE_TASK_GUIDANCE}\n\n${TASK_TOOL_POLICY}\n\n# Text-form tool calls\nIf this provider expects tool calls in the message body, emit exactly one JSON object and no prose:\n{"tool":"update_plan|exit_plan_mode|load_skill|read_file|grep|glob|edit|apply_patch|write_file|bash","args":{...}}`,
     },
+    {
+      kind: "base_system",
+      source: "cli",
+      text: "# Plan mode\nWhen the session is in plan mode, every mutating tool and every non-read-only shell command is blocked. Explore with read, search and read-only shell commands, then call exit_plan_mode with a concrete plan (files, changes, verification). Writes stay blocked until the user switches modes.",
+    },
+    ...LYNN_CODE_STATIC_PROMPT.slice(2).map((text) => ({
+      kind: "base_system" as const,
+      source: "cli",
+      text,
+    })),
     {
       kind: "cacheable_context",
       source: "cli",

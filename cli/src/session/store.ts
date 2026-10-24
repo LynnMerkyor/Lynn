@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import callbackFs from "node:fs";
 import lockfile from "proper-lockfile";
 import os from "node:os";
@@ -22,6 +23,52 @@ export interface CliSessionLine {
   content?: string;
   ts: string;
   data?: Record<string, unknown>;
+  /** Stable message id; new lines always get one. */
+  uuid?: string;
+  /** Previous line in this conversation; null starts a new chain (e.g. after /clear). */
+  parentUuid?: string | null;
+  /** Kept across a compaction boundary so forks/rewinds can find the pre-compaction leaf. */
+  logicalParentUuid?: string;
+  /** True for subagent/sidechain transcripts. */
+  isSidechain?: boolean;
+}
+
+const lastUuidByPath = new Map<string, string | null>();
+
+async function readLastUuid(sessionPath: string): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(sessionPath, "utf8");
+    const lines = raw.split(/\r?\n/).filter(Boolean);
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      try {
+        const parsed = JSON.parse(lines[index]!) as { uuid?: unknown };
+        if (typeof parsed.uuid === "string" && parsed.uuid) return parsed.uuid;
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function resolveChain(
+  target: string,
+  line: Omit<CliSessionLine, "ts"> & { ts?: string },
+): Promise<{ uuid: string; parentUuid: string | null }> {
+  const explicitParent = Object.prototype.hasOwnProperty.call(line, "parentUuid");
+  const uuid = typeof line.uuid === "string" && line.uuid ? line.uuid : randomUUID();
+  let parentUuid: string | null;
+  if (explicitParent) {
+    parentUuid = line.parentUuid ?? null;
+  } else if (lastUuidByPath.has(target)) {
+    parentUuid = lastUuidByPath.get(target) ?? null;
+  } else {
+    parentUuid = await readLastUuid(target);
+  }
+  lastUuidByPath.set(target, uuid);
+  return { uuid, parentUuid };
 }
 
 export interface CliSessionMetadataInput {
@@ -175,10 +222,14 @@ export async function appendSessionTurn(input: {
   const target = input.sessionPath ? path.resolve(input.sessionPath) : newSessionPath(input.dataDir);
   await fs.mkdir(path.dirname(target), { recursive: true });
   const ts = new Date().toISOString();
+  const userUuid = randomUUID();
+  const assistantUuid = randomUUID();
+  const parent = await readLastUuid(target);
   const lines: CliSessionLine[] = [
-    { type: "user", content: input.prompt, ts },
-    { type: "assistant", content: input.assistant, ts: new Date().toISOString() },
+    { type: "user", content: input.prompt, ts, uuid: userUuid, parentUuid: parent },
+    { type: "assistant", content: input.assistant, ts: new Date().toISOString(), uuid: assistantUuid, parentUuid: userUuid },
   ];
+  lastUuidByPath.set(target, assistantUuid);
   await fs.appendFile(target, lines.map((line) => JSON.stringify(line)).join("\n") + "\n", "utf8");
 
   await withIndexLock(input.dataDir, async () => {
@@ -220,8 +271,11 @@ export async function appendSessionLine(input: {
 }): Promise<string> {
   const target = input.sessionPath ? path.resolve(input.sessionPath) : newSessionPath(input.dataDir);
   await fs.mkdir(path.dirname(target), { recursive: true });
+  const chain = await resolveChain(target, input.line);
   const line: CliSessionLine = {
     ...input.line,
+    uuid: chain.uuid,
+    parentUuid: chain.parentUuid,
     ts: input.line.ts || new Date().toISOString(),
   };
   await fs.appendFile(target, `${JSON.stringify(line)}\n`, "utf8");
@@ -269,4 +323,56 @@ export async function listSessions(dataDir: string): Promise<CliSessionIndexEntr
 export async function latestSessionPath(dataDir: string): Promise<string | null> {
   const latest = (await listSessions(dataDir))[0];
   return latest?.path || null;
+}
+
+export interface ForkSessionResult {
+  path: string;
+  lines: number;
+  forkedFrom: string;
+}
+
+/**
+ * Copy a session into a new file with a fresh uuid chain. Used by
+ * `Lynn sessions fork` and by future branching UI: the original transcript is
+ * never modified, so an experiment can always be traced back.
+ */
+export async function forkSession(input: {
+  dataDir: string;
+  sourcePath: string;
+  title?: string | null;
+}): Promise<ForkSessionResult> {
+  const source = path.resolve(input.sourcePath);
+  const { lines } = await readSessionLinesResult(source);
+  const idMap = new Map<string, string>();
+  for (const line of lines) {
+    if (typeof line.uuid === "string" && line.uuid) idMap.set(line.uuid, randomUUID());
+  }
+  const target = newSessionPath(input.dataDir);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  const forked: CliSessionLine[] = lines.map((line) => {
+    const oldUuid = typeof line.uuid === "string" ? line.uuid : "";
+    const uuid = idMap.get(oldUuid) || randomUUID();
+    const oldParent = typeof line.parentUuid === "string" ? line.parentUuid : null;
+    return {
+      ...line,
+      uuid,
+      parentUuid: oldParent ? idMap.get(oldParent) ?? null : null,
+      ...(typeof line.logicalParentUuid === "string" && line.logicalParentUuid
+        ? { logicalParentUuid: idMap.get(line.logicalParentUuid) ?? undefined }
+        : {}),
+    };
+  });
+  await fs.writeFile(target, forked.map((line) => JSON.stringify(line)).join("\n") + (forked.length ? "\n" : ""), "utf8");
+  lastUuidByPath.set(target, forked.at(-1)?.uuid || null);
+  // Register the fork in the index and record its origin.
+  await appendSessionLine({
+    dataDir: input.dataDir,
+    sessionPath: target,
+    cwd: typeof lines.find((line) => line.data?.cwd)?.data?.cwd === "string"
+      ? String(lines.find((line) => line.data?.cwd)?.data?.cwd)
+      : process.cwd(),
+    title: input.title || `fork of ${path.basename(source)}`,
+    line: { type: "metadata", data: { kind: "session_fork", forkedFrom: source, forkedAt: new Date().toISOString() } },
+  });
+  return { path: target, lines: forked.length, forkedFrom: source };
 }

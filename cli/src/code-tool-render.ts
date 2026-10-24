@@ -5,7 +5,7 @@ import { CLIENT_TOOL_DEFINITIONS } from "./tools/registry.js";
 import type { ClientToolName, ClientToolResult } from "./tools/types.js";
 import type { CodeToolRequest } from "./code-tool-protocol.js";
 import { isSafeReadOnlyShellCommand } from "./local-command.js";
-import { bold, dim, green, orange, red, supportsColor, yellow } from "./terminal-style.js";
+import { bold, cyan, dim, green, orange, red, supportsColor, yellow } from "./terminal-style.js";
 import { renderCard } from "./terminal-spinner.js";
 
 export interface ToolApprovalRequest {
@@ -17,7 +17,7 @@ export interface ToolApprovalRequest {
   output: NodeJS.WriteStream;
   preview?: string;
   args?: CodeToolRequest["args"];
-  session?: { approveAll: boolean };
+  session?: { approveAll: boolean; alwaysAllow?: boolean };
 }
 
 export class ToolApprovalRequiredError extends Error {
@@ -53,8 +53,12 @@ export async function resolveToolApproval(request: ToolApprovalRequest): Promise
       preview: request.preview,
     }, supportsColor(request.output))}\n`);
     const answer = (await rl.question(t("approval.prompt"))).trim().toLowerCase();
-    if (answer === "a" || answer === "always") {
+    if (answer === "a") {
       if (request.session) request.session.approveAll = true;
+      return "yolo";
+    }
+    if (answer === "d" || answer === "dontask" || answer === "don't ask again") {
+      if (request.session) request.session.alwaysAllow = true;
       return "yolo";
     }
     if (/^(y|yes)$/.test(answer)) return "yolo";
@@ -85,13 +89,13 @@ export function renderToolApprovalCard(input: ToolApprovalCardInput, color: bool
     const omitted = preview.split("\n").length - 18;
     if (omitted > 0) lines.push(`${gutter}     ${dim(t("approval.card.omitted", { n: omitted }), color)}`);
   }
-  lines.push(`${gutter}   ${green("y", color)} ${t("approval.card.once")} · ${yellow("a", color)} ${t("approval.card.session")} · ${red("n", color)} ${t("approval.card.deny")}`);
+  lines.push(`${gutter}   ${green("y", color)} ${t("approval.card.once")} · ${yellow("a", color)} ${t("approval.card.session")} · ${cyan("d", color)} ${t("approval.card.always")} · ${red("n", color)} ${t("approval.card.deny")}`);
   return lines.join("\n");
 }
 
 export function redactToolArgs(request: CodeToolRequest): Record<string, unknown> {
   const args = { ...request.args } as Record<string, unknown>;
-  for (const key of ["text", "command"]) {
+  for (const key of ["text", "command", "old_string", "new_string"]) {
     if (typeof args[key] === "string" && args[key].length > 500) {
       args[key] = `${args[key].slice(0, 500)}...`;
     }
@@ -136,7 +140,7 @@ export function renderClientToolResult(result: ClientToolResult, stream: NodeJS.
   }, color)}\n`);
 }
 
-export function formatDangerousToolPreview(tool: ClientToolName, args: { path?: string; text?: string; command?: string }, color: boolean): string {
+export function formatDangerousToolPreview(tool: ClientToolName, args: { path?: string; text?: string; command?: string; old_string?: string; new_string?: string }, color: boolean): string {
   if (!isDangerousClientTool(tool)) return "";
   if (tool === "apply_patch") {
     const patch = args.text || "";
@@ -145,6 +149,15 @@ export function formatDangerousToolPreview(tool: ClientToolName, args: { path?: 
   }
   if (tool === "write_file") {
     return `${bold("write preview", color)} ${args.path || "(unknown path)"}\n${green(oneLine(args.text || "", 500), color)}`;
+  }
+  if (tool === "edit") {
+    const removed = (args.old_string || "").split("\n").slice(0, 12).map((line) => red(`- ${line}`, color));
+    const added = (args.new_string || "").split("\n").slice(0, 12).map((line) => green(`+ ${line}`, color));
+    return [
+      `${bold("edit preview", color)} ${args.path || "(unknown path)"}`,
+      ...removed,
+      ...added,
+    ].join("\n");
   }
   if (tool === "bash") {
     return `${bold("command", color)} ${args.command || "(empty command)"}`;
@@ -165,6 +178,12 @@ interface EditActivity {
 }
 
 function editActivityForRequest(request: CodeToolRequest): EditActivity | null {
+  if (request.tool === "edit") {
+    const file = oneLine(String(request.args.path || "(unknown file)"), 80);
+    const oldText = typeof request.args.old_string === "string" ? request.args.old_string : "";
+    const newText = typeof request.args.new_string === "string" ? request.args.new_string : "";
+    return { file, additions: countLogicalLines(newText), deletions: countLogicalLines(oldText) };
+  }
   if (request.tool === "write_file") {
     const file = oneLine(String(request.args.path || "(unknown file)"), 80);
     const text = typeof request.args.text === "string" ? request.args.text : "";
@@ -235,7 +254,7 @@ function countLogicalLines(text: string): number {
 function clientToolIcon(tool: ClientToolName): string {
   if (tool === "read_file") return "📄";
   if (tool === "grep" || tool === "glob") return "🔎";
-  if (tool === "apply_patch" || tool === "write_file") return "✎";
+  if (tool === "apply_patch" || tool === "write_file" || tool === "edit") return "✎";
   if (tool === "bash") return "⌘";
   if (tool === "update_plan") return "☑";
   return "◇";

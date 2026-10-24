@@ -25,7 +25,7 @@ describe("isBlockedHost (SSRF guard)", () => {
     }
   });
   it("allows public hosts", () => {
-    for (const h of ["example.com", "platform.stepfun.com", "8.8.8.8", "172.32.0.1", "github.com"]) {
+    for (const h of ["example.com", "platform.stepfun.com", "8.8.8.8", "172.32.0.1", "github.com", "fc.example.com", "fd.example.com"]) {
       expect(isBlockedHost(h), h).toBe(false);
     }
   });
@@ -43,9 +43,14 @@ describe("validateWebUrl", () => {
   it("rejects blocked hosts", () => {
     expect(() => validateWebUrl("http://127.0.0.1:8080")).toThrow(/blocked host/);
     expect(() => validateWebUrl("http://169.254.169.254/latest/meta-data")).toThrow(/blocked host/);
+    expect(() => validateWebUrl("http://[::ffff:c0a8:1]/")).toThrow(/blocked host/);
+    expect(() => validateWebUrl("http://localhost./")).toThrow(/blocked host/);
   });
   it("rejects garbage", () => {
     expect(() => validateWebUrl("not a url")).toThrow(/invalid URL/);
+  });
+  it("rejects embedded URL credentials", () => {
+    expect(() => validateWebUrl("https://user:password@example.com")).toThrow(/credentials/);
   });
 });
 
@@ -75,6 +80,35 @@ describe("simplifyHtml", () => {
 });
 
 describe("webScanTool (mocked fetch)", () => {
+  it("rejects redirects to private hosts before a second request", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 302, headers: { location: "http://127.0.0.1/secret" } }));
+    vi.stubGlobal("fetch", fetcher);
+    const result = await webScanTool(CTX, "https://example.com");
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("blocked host");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][1].redirect).toBe("manual");
+  });
+  it("follows relative public redirects within a fixed limit", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(new Response(null, { status: 301, headers: { location: "/next" } }))
+      .mockResolvedValueOnce(new Response("page", { status: 200 }));
+    vi.stubGlobal("fetch", fetcher);
+    expect(await webScanTool(CTX, "https://example.com")).toMatchObject({ ok: true, output: { url: "https://example.com/next" } });
+  });
+  it("does not fetch after cancellation", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    expect((await webScanTool({ ...CTX, signal: AbortSignal.abort() }, "https://example.com")).ok).toBe(false);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("propagates cancellation to an active fetch", async () => {
+    const controller = new AbortController();
+    vi.stubGlobal("fetch", vi.fn((_url, options: RequestInit) => new Promise((_resolve, reject) => {
+      options.signal!.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
+      controller.abort();
+    })));
+    expect(await webScanTool({ ...CTX, signal: controller.signal }, "https://example.com")).toMatchObject({ ok: false, error: "cancelled" });
+  });
   afterEach(() => vi.unstubAllGlobals());
 
   it("fetches, simplifies, and returns structured output", async () => {

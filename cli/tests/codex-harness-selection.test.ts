@@ -205,4 +205,30 @@ describe("Codex harness auto selection", () => {
       requestTimeoutMs: 2_000,
     })).resolves.toMatch(/^(v2-camel|hybrid-kebab-thread|legacy-kebab)$/);
   });
+
+  it("forces the native loop for plan mode even when Codex was requested", async () => {
+    const probe = vi.fn(async () => "v2-camel" as const);
+    const result = await resolveCodeHarnessSelection({
+      requested: "codex",
+      cwd: ".",
+      brainUrl: "http://brain",
+      ultra: false,
+      planMode: true,
+      probe,
+    });
+    expect(result.selected).toBe("legacy");
+    expect(result.reason).toContain("plan mode");
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it("keeps auto on the native loop when hooks are configured", async () => {
+    const result = await resolveCodeHarnessSelection({
+      requested: "auto",
+      cwd: ".",
+      brainUrl: "http://brain",
+      ultra: false,
+      hasHooks: true,
+    });
+    expect(result).toMatchObject({ selected: "legacy", reason: expect.stringContaining("hooks") });
+  });
 });

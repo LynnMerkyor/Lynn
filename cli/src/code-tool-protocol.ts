@@ -19,6 +19,11 @@ export interface CodeToolRequest {
     plan?: unknown;
     content?: string;
     url?: string;
+    skill?: string;
+    old_string?: string;
+    new_string?: string;
+    replace_all?: boolean;
+    run_in_background?: boolean;
   };
   /** Loop iteration (step) this request belongs to; used for fallback tool-call ids and step events. */
   step?: number;
@@ -64,6 +69,26 @@ export function codeToolDefinitions(): ChatToolDefinition[] {
     {
       type: "function",
       function: {
+        name: "load_skill",
+        description: "Load the full instructions for one skill listed in the system prompt. Only call this with a name from the available-skills list; do not guess.",
+        parameters: objectSchema({
+          name: stringSchema("Skill name exactly as listed in the available-skills section."),
+        }, ["name"]),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "exit_plan_mode",
+        description: "Present a concrete plan for the user to approve before any change. In plan mode all mutating tools and non-read-only shell commands are blocked; calling this records the plan and asks the user to approve. Do not call it before you have read enough to be specific.",
+        parameters: objectSchema({
+          plan: stringSchema("The plan: what you will change, which files, and how you will verify it."),
+        }, ["plan"]),
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "read_file",
         description: "Read a UTF-8 text file inside the current workspace.",
         parameters: objectSchema({
@@ -98,6 +123,19 @@ export function codeToolDefinitions(): ChatToolDefinition[] {
     {
       type: "function",
       function: {
+        name: "edit",
+        description: "Replace an exact string in one workspace file. Use this for targeted changes: pass a unique old_string copied verbatim from the file (include surrounding lines when it is ambiguous) and the replacement new_string. Read the file with read_file first — edit refuses files the model has not read. For several files or structural rewrites use apply_patch; for a brand-new file use write_file.",
+        parameters: objectSchema({
+          path: stringSchema("Workspace-relative file path to edit."),
+          old_string: stringSchema("Exact text to replace, copied from the file. Must be unique unless replace_all is true."),
+          new_string: stringSchema("Replacement text. Must differ from old_string."),
+          replace_all: { type: "boolean", description: "Replace every occurrence of old_string. Defaults to false." },
+        }, ["path", "old_string", "new_string"]),
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "apply_patch",
         description: "Apply a patch inside the workspace. Prefer this for edits.",
         parameters: objectSchema({
@@ -120,9 +158,10 @@ export function codeToolDefinitions(): ChatToolDefinition[] {
       type: "function",
       function: {
         name: "bash",
-        description: "Run a shell command in the workspace, usually for tests or inspection.",
+        description: "Run a shell command in the workspace, usually for tests or inspection. For long builds, test suites or servers, set run_in_background=true and continue working; the result arrives later as a task notification.",
         parameters: objectSchema({
           command: stringSchema("Shell command to run."),
+          run_in_background: { type: "boolean", description: "Start the command in the background and return a task id immediately. A <task-notification> with the exit code and log tail arrives on a later step. Use for builds, test suites or servers that outlive one tool call." },
         }, ["command"]),
       },
     },
@@ -186,6 +225,10 @@ export function parseCodeToolRequests(text: string): CodeToolRequest[] {
 
 export interface StreamingToolCallAccumulator {
   append(event: Extract<BrainStreamEvent, { type: "tool_call.delta" }>): void;
+  /** Snapshot of one call by stream index (undefined until the first delta). */
+  get(index: number): CollectedToolCall | undefined;
+  /** Indexes seen so far, ascending. */
+  indexes(): number[];
   toJsonText(): string;
   toToolCalls(): CollectedToolCall[];
   hasCalls(): boolean;
@@ -201,6 +244,13 @@ export function createStreamingToolCallAccumulator(): StreamingToolCallAccumulat
         name: event.name || current.name,
         arguments: current.arguments + (event.arguments || ""),
       });
+    },
+    get(index) {
+      const call = calls.get(index);
+      return call ? { ...call } : undefined;
+    },
+    indexes() {
+      return [...calls.keys()].sort((a, b) => a - b);
     },
     hasCalls() {
       return calls.size > 0;
@@ -227,7 +277,11 @@ export function createStreamingToolCallAccumulator(): StreamingToolCallAccumulat
   };
 }
 
-export function toolRequestsFromCollectedCalls(calls: readonly CollectedToolCall[], step: number): CodeToolRequest[] {
+export function toolRequestsFromCollectedCalls(
+  calls: readonly CollectedToolCall[],
+  step: number,
+  offset = 0,
+): CodeToolRequest[] {
   const requests: CodeToolRequest[] = [];
   for (let i = 0; i < calls.length; i += 1) {
     const call = calls[i];
@@ -235,7 +289,7 @@ export function toolRequestsFromCollectedCalls(calls: readonly CollectedToolCall
     if (!request) continue;
     requests.push({
       ...request,
-      toolCallId: call.id || `lynn_call_${step}_${i}`,
+      toolCallId: call.id || `lynn_call_${step}_${offset + i}`,
       toolCallName: call.name || request.tool,
       toolCallArguments: call.arguments,
     });
@@ -302,11 +356,16 @@ function normalizeToolPayload(payload: Record<string, unknown>): CodeToolRequest
       query: stringArg(args.query),
       pattern: stringArg(args.pattern),
       command: stringArg(args.command),
+      run_in_background: typeof args.run_in_background === "boolean" ? args.run_in_background : undefined,
       maxBytes: numberArg(args.maxBytes ?? args.max_bytes),
       offset: numberArg(args.offset ?? args.start_offset ?? args.startOffset),
       plan: args.plan,
       content: stringArg(args.content),
       url: stringArg(args.url),
+      skill: stringArg(args.name ?? args.skill),
+      old_string: stringArg(args.old_string ?? args.oldString ?? args.old_text),
+      new_string: stringArg(args.new_string ?? args.newString ?? args.new_text),
+      replace_all: typeof args.replace_all === "boolean" ? args.replace_all : undefined,
     },
   };
 }
@@ -323,7 +382,8 @@ const TOOL_NAME_ALIASES: Record<string, ClientToolName> = {
   create_file: "write_file",
   save_file: "write_file",
   edit_file: "apply_patch",
-  edit: "apply_patch",
+  edit: "edit",
+  replace: "edit",
   patch: "apply_patch",
   apply_patch: "apply_patch",
   apply_diff: "apply_patch",
@@ -349,6 +409,13 @@ const TOOL_NAME_ALIASES: Record<string, ClientToolName> = {
   update_todos: "update_plan",
   todo: "update_plan",
   plan: "update_plan",
+  load_skill: "load_skill",
+  loadskill: "load_skill",
+  read_skill: "load_skill",
+  exit_plan_mode: "exit_plan_mode",
+  exitplanmode: "exit_plan_mode",
+  present_plan: "exit_plan_mode",
+  finish_plan: "exit_plan_mode",
   update_working_checkpoint: "update_working_checkpoint",
   working_checkpoint: "update_working_checkpoint",
   checkpoint: "update_working_checkpoint",
@@ -419,12 +486,28 @@ function normalizeToolArgAliases(tool: ClientToolName, args: Record<string, unkn
   const pattern = firstArg(args.pattern, args.glob, args.query);
   const dir = firstArg(args.path, args.dir, args.directory, args.cwd, args.folder);
 
-  if ((tool === "read_file" || tool === "write_file") && path !== undefined) normalized.path = path;
+  if ((tool === "read_file" || tool === "write_file" || tool === "edit") && path !== undefined) normalized.path = path;
+  if (tool === "edit") {
+    if (oldText !== undefined) normalized.old_string = oldText;
+    if (newText !== undefined) normalized.new_string = newText;
+    const replaceAll = firstArg(args.replace_all, args.replaceAll, args.all);
+    if (typeof replaceAll === "boolean") normalized.replace_all = replaceAll;
+  }
   if (tool === "write_file" && text !== undefined) normalized.text = text;
   if (tool === "apply_patch" && text !== undefined) normalized.text = text;
   if (tool === "bash" && command !== undefined) normalized.command = command;
+  if (tool === "bash") {
+    const background = firstArg(args.run_in_background, args.runInBackground, args.background);
+    if (typeof background === "boolean") normalized.run_in_background = background;
+  }
   if (tool === "update_plan") {
     normalized.plan = firstArg(args.plan, args.items, args.todos, args.tasks, args.steps, args);
+  }
+  if (tool === "exit_plan_mode") {
+    normalized.plan = firstArg(args.plan, args.text, args.content, args.summary);
+  }
+  if (tool === "load_skill") {
+    normalized.name = firstArg(args.name, args.skill, args.id);
   }
   if (tool === "grep") {
     if (query !== undefined) normalized.query = query;

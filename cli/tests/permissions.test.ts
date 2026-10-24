@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import { setLang } from "../src/i18n.js";
 import { renderPermissions, resolveEffectivePermissions, savePermissionProfile } from "../src/permissions.js";
+import { runPermissions } from "../src/commands/permissions.js";
 
 let tmp = "";
 
@@ -150,5 +151,22 @@ describe("CLI permission profile", () => {
     const permissions = await resolveEffectivePermissions(parseArgs(["permissions", "--data-dir", tmp]));
     expect(permissions.approval).toBe("ask");
     expect(permissions.sandbox).toBe("read-only");
+  });
+
+  it("records explicit trust for a repository", async () => {
+    const repo = path.join(tmp, "repo");
+    await fs.mkdir(path.join(repo, ".lynn"), { recursive: true });
+    const original = process.stdout.write;
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => { output += String(chunk); return true; }) as typeof process.stdout.write;
+    try {
+      await expect(runPermissions(parseArgs(["permissions", "trust", "--data-dir", path.join(tmp, "data"), "--cwd", repo]))).resolves.toBe(0);
+    } finally {
+      process.stdout.write = original;
+    }
+    expect(output).toContain("已信任");
+    const registry = JSON.parse(await fs.readFile(path.join(tmp, "data", "permissions", "trusted-projects.json"), "utf8"));
+    expect(registry.trusted).toHaveLength(1);
+    expect(registry.trusted[0]).toContain("repo");
   });
 });
