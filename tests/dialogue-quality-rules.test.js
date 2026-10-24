@@ -208,6 +208,7 @@ describe("dialogue quality rules", () => {
       expect(overridesVerifiedEmptySportsWindow({ ...result, assistantText })).toBe(true);
     }
     expect(hasVerifiedEmptySportsResult({ ...result, assistantText: '该日期 0 场。历史赛果 2-1 不属于昨晚，不能确认昨晚有比赛。' })).toBe(true);
+    expect(hasVerifiedEmptySportsResult({ ...result, assistantText: '已查询的赛事昨晚没有比赛，共 0 场。\n另外一项赛事的已核实赛果：\n| Alpha vs Beta | 3–1 |' })).toBe(true);
     for (const assistantText of ["昨晚没有世界杯足球赛。", "昨晚未查询到任何世界杯足球比赛。", "昨晚未查到该联赛赛事。", "昨晚未检索到该联赛比赛。"]) {
       expect(hasVerifiedEmptySportsResult({ ...result, assistantText })).toBe(true);
       expect(overridesVerifiedEmptySportsWindow({ ...result, assistantText })).toBe(false);

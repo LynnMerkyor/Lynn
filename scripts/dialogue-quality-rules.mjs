@@ -79,9 +79,14 @@ export function hasVerifiedEmptySportsWindow({ toolEvents = [], prompt = "", cur
 }
 
 export function hasVerifiedEmptySportsResult(result) {
-  const lines = String(result.assistantText || "").replace(/\*\*/g, "").split(/\n|[。；]/u);
+  const text = String(result.assistantText || "").replace(/\*\*/g, "");
+  const emptyConclusion = /(?:0\s*场|(?:没有|无|未(?:查[询找]?到|检索到))[^。！？；\n]{0,12}(?:比赛|赛事|球赛))/u.exec(text);
+  if (!emptyConclusion) return false;
+  const lines = text.slice(0, emptyConclusion.index).split(/\n|[。；]/u);
   // A footnote quoting "0 matches" must not excuse positive results elsewhere.
-  // These are answer-quality assertions, not runtime entity/date extraction.
+  // Require the scoped empty conclusion first; later background or separately
+  // identified competitions need not share this source's empty window.
+  // This checks answer structure, not runtime entity/date extraction.
   const contradictoryResults = lines.some((line) => {
     if (/历史|旧闻|往年|过去的|未核实|无法核实|不(?:予)?采信|不能确认|未能确认|historical|unverified/iu.test(line)) return false;
     return /(?:共|有|当晚|昨晚|今晚|今天|昨日|今日)\s*[1-9]\d*\s*场/u.test(line)
@@ -89,8 +94,7 @@ export function hasVerifiedEmptySportsResult(result) {
       || /(?:比分|赛果)\s*[:：为是]?\s*\d{1,2}\s*[-–—:：]\s*\d{1,2}/u.test(line);
   });
   if (contradictoryResults) return false;
-  return /(?:0\s*场|(?:没有|无|未(?:查[询找]?到|检索到))[^。！？；\n]{0,12}(?:比赛|赛事|球赛))/u.test(String(result.assistantText || "").replace(/\*\*/g, ""))
-    && hasVerifiedEmptySportsWindow(result);
+  return hasVerifiedEmptySportsWindow(result);
 }
 
 export function hasVerifiedNoFixturePredictionAnswer(result) {
