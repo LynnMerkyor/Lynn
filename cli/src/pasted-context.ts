@@ -165,6 +165,8 @@ function extractInlineMedia(line: string, cwd: string): { paths: PastedImageRef[
       const char = line[index];
       if (char === '"' || char === "'") starts.add(index + 1);
       else if (char === "/") starts.add(index);
+      else if ((index === 0 || /\s/.test(line[index - 1] || ""))
+        && (/^[A-Za-z]:[\\/]/.test(line.slice(index)) || line.slice(index, index + 2) === "\\\\")) starts.add(index);
     }
     for (const start of [...starts].sort((a, b) => a - b)) {
       const candidate = stripQuotes(line.slice(start, end).trim());

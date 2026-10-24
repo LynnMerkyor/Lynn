@@ -194,6 +194,7 @@ async function runOneHook(hook: HookCommand, payload: HookPayload): Promise<OneH
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let timedOut = false;
     const append = (current: string, chunk: Buffer): string =>
       current.length >= MAX_OUTPUT_BYTES ? current : (current + chunk.toString("utf8")).slice(0, MAX_OUTPUT_BYTES);
     child.stdout?.on("data", (chunk: Buffer) => { stdout = append(stdout, chunk); });
@@ -201,18 +202,18 @@ async function runOneHook(hook: HookCommand, payload: HookPayload): Promise<OneH
 
     const timer = setTimeout(() => {
       if (settled) return;
-      settled = true;
+      timedOut = true;
       stopProcessTree(child);
-      resolve({
-        blocked: true,
-        reason: `hook timed out after ${hook.timeoutMs || DEFAULT_TIMEOUT_MS}ms`,
-      });
     }, hook.timeoutMs || DEFAULT_TIMEOUT_MS);
 
     const finish = (code: number | null, signal: NodeJS.Signals | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (timedOut) {
+        resolve({ blocked: true, reason: `hook timed out after ${hook.timeoutMs || DEFAULT_TIMEOUT_MS}ms` });
+        return;
+      }
       if (signal) {
         resolve({ blocked: true, reason: `hook terminated by ${signal}` });
         return;

@@ -36,6 +36,9 @@ function isLynnOwned(linkTarget) {
 for (const target of candidates) {
   const dir = path.dirname(target);
   if (!fs.existsSync(dir)) continue;
+  // On case-insensitive volumes lstat("lynn") also finds npm's "Lynn".
+  // Only repair an actual lowercase directory entry, never rename the official bin.
+  if (!fs.readdirSync(dir).includes("lynn")) continue;
   let stat;
   try {
     stat = fs.lstatSync(target);
@@ -52,7 +55,7 @@ for (const target of candidates) {
   }
   const resolved = path.resolve(dir, linkTarget);
   if (!isLynnOwned(linkTarget)) continue;
-  if (fs.existsSync(resolved) && path.resolve(resolved) === path.resolve(installedBin)) continue;
+  if (fs.existsSync(resolved) && fs.realpathSync(resolved) === fs.realpathSync(installedBin)) continue;
   try {
     fs.unlinkSync(target);
     fs.symlinkSync(installedBin, target);

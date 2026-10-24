@@ -1,6 +1,8 @@
 # Lynn v0.87.4 · Windows 稳定性与增强 CLI
 
-## 下载 / Downloads
+## 国内镜像站下载（推荐） / Downloads
+
+国内用户请优先使用以下镜像下载；GitHub Assets 作为备用下载。
 
 - [macOS Apple Silicon](https://download.merkyorlynn.com/downloads/Lynn-0.87.4-macOS-arm64.dmg)
 - [macOS Intel](https://download.merkyorlynn.com/downloads/Lynn-0.87.4-macOS-x64.dmg)

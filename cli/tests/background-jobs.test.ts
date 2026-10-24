@@ -86,7 +86,7 @@ describe("background jobs", () => {
   it("moves a timed-out command to the background instead of killing it", async () => {
     const result = await runClientTool(
       { cwd: tmp, approval: "yolo", sandbox: "danger-full-access", timeoutMs: 150 },
-      { name: "bash", command: "sleep 0.5; echo after-timeout" },
+      { name: "bash", command: 'node -e "setTimeout(() => console.log(\'after-timeout\'), 500)"' },
     );
     expect(result.ok).toBe(true);
     const output = result.output as { backgrounded: boolean; backgroundTaskId: string; logPath: string };
@@ -102,7 +102,7 @@ describe("background jobs", () => {
     process.env.LYNN_CLI_BACKGROUND_ON_TIMEOUT = "0";
     const result = await runClientTool(
       { cwd: tmp, approval: "yolo", sandbox: "danger-full-access", timeoutMs: 150 },
-      { name: "bash", command: "sleep 0.5; echo never" },
+      { name: "bash", command: 'node -e "setTimeout(() => console.log(\'never\'), 500)"' },
     );
     expect(result.ok).toBe(false);
     expect((result.output as { timedOut: boolean }).timedOut).toBe(true);

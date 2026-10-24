@@ -31,6 +31,12 @@ it("does not touch user shims during local or isolated global installation", asy
   });
   run("false"); run("true"); run("true", { LYNN_REPAIR_USER_SHIM: "1" });
   expect(await fs.readlink(userLink)).toBe("/missing/unrelated-tool");
+  const officialLink = path.join(prefix, "bin/Lynn");
+  await fs.symlink(path.join(packageRoot, "bin/lynn.mjs"), officialLink);
+  run("true");
+  expect(await fs.readdir(path.join(prefix, "bin"))).toEqual(["Lynn"]);
+  expect(await fs.realpath(officialLink)).toBe(await fs.realpath(path.join(packageRoot, "bin/lynn.mjs")));
+  await fs.unlink(officialLink);
   const ownedLink = path.join(prefix, "bin/lynn");
   await fs.symlink("/missing/@lynn/cli/bin/lynn.mjs", ownedLink);
   run("true");
