@@ -52,6 +52,7 @@ async function waitForClientEvent(client, predicate, label) {
 }
 
 describe("chat route event forwarding", () => {
+  let testRoot;
   let subscribed;
   let hub;
   let engine;
@@ -71,9 +72,14 @@ describe("chat route event forwarding", () => {
     app.route("", chatRoute.wsRoute);
   }
 
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(async () => {
+    chatRoute.closeSessionStream(engine.currentSessionPath);
+    vi.unstubAllEnvs();
+    await fsPromises.rm(testRoot, { recursive: true, force: true });
+  });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    testRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), "lynn-chat-events-"));
     vi.stubEnv("LYNN_TURN_HARD_ABORT_MS", "0");
     subscribed = null;
     hub = {
@@ -83,9 +89,9 @@ describe("chat route event forwarding", () => {
       }),
     };
     engine = {
-      currentSessionPath: "/sessions/current.jsonl",
+      currentSessionPath: path.join(testRoot, 'current.jsonl'),
       createSession: vi.fn(async () => ({
-        sessionManager: { getSessionFile: () => "/sessions/current.jsonl" },
+        sessionManager: { getSessionFile: () => path.join(testRoot, 'current.jsonl') },
       })),
       resolveModelOverrides: vi.fn((model) => model),
       abortAllStreaming: vi.fn(async () => 0),
@@ -114,10 +120,10 @@ describe("chat route event forwarding", () => {
     }, connections[0].client);
     await waitForAsyncHandlers();
 
-    expect(engine.truncateSessionBeforeVisibleMessage).toHaveBeenCalledWith("/sessions/current.jsonl", "2");
+    expect(engine.truncateSessionBeforeVisibleMessage).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'), "2");
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "prompt_accepted",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
     expect(hub.send).toHaveBeenCalled();
   });
@@ -159,8 +165,8 @@ describe("chat route event forwarding", () => {
     }, client);
     await waitForAsyncHandlers();
 
-    expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
-    expect(engine.truncateSessionBeforeVisibleMessage).toHaveBeenCalledWith("/sessions/current.jsonl", "2");
+    expect(engine.abortSessionByPath).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'));
+    expect(engine.truncateSessionBeforeVisibleMessage).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'), "2");
     expect(hub.send).toHaveBeenCalled();
     expect(order.indexOf("abort")).toBeGreaterThanOrEqual(0);
     expect(order.indexOf("truncate")).toBeGreaterThan(order.indexOf("abort"));
@@ -185,7 +191,7 @@ describe("chat route event forwarding", () => {
 
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "error",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
     expect(clients[0].sent.some((event) => event.type === "prompt_accepted")).toBe(false);
     expect(hub.send).not.toHaveBeenCalled();
@@ -209,12 +215,12 @@ describe("chat route event forwarding", () => {
       description: "needs confirmation",
       category: "elevated_command",
       identifier: "sudo",
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
 
     expect(clients).toHaveLength(1);
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "tool_authorization",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
       confirmId: "confirm-1",
       command: "sudo rm -rf /tmp/test",
       category: "elevated_command",
@@ -244,7 +250,7 @@ describe("chat route event forwarding", () => {
         toolCallId: "call_123",
         toolName: "edit",
         args: { path: "sample.txt" },
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
 
       await fsPromises.writeFile(filePath, "after\n", "utf8");
 
@@ -255,7 +261,7 @@ describe("chat route event forwarding", () => {
         args: { path: "sample.txt" },
         result: { details: { diff: "@@ -1 +1 @@\n-before\n+after" } },
         isError: false,
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
 
       expect(clients[0].sent).toContainEqual(expect.objectContaining({
         type: "file_diff",
@@ -277,7 +283,7 @@ describe("chat route event forwarding", () => {
     const res = await app.request("/ws");
     expect(res.status).toBe(200);
 
-    subscribed({ type: "security_mode", mode: "safe" }, "/sessions/current.jsonl");
+    subscribed({ type: "security_mode", mode: "safe" }, path.join(testRoot, 'current.jsonl'));
 
     expect(clients[0].sent).toContainEqual({ type: "security_mode", mode: "safe" });
   });
@@ -301,8 +307,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: '<web_search>\n深圳 2026年4月28日 天气预报\n</web_search>',
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     expect(engine.steerSession).not.toHaveBeenCalled();
     expect(clients[0].sent
@@ -330,8 +336,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: 'web_search(query="深圳天气")',
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     expect(engine.steerSession).not.toHaveBeenCalled();
     const visibleText = clients[0].sent
@@ -359,7 +365,7 @@ describe("chat route event forwarding", () => {
       toolCallId: "call_ls",
       toolName: "bash",
       args: { command: "ls -la /Users/licheng/Downloads | head" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolCallId: "call_ls",
@@ -367,7 +373,7 @@ describe("chat route event forwarding", () => {
       args: { command: "ls -la /Users/licheng/Downloads | head" },
       result: { output: "a.pdf\nb.pdf\n" },
       isError: false,
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
 
     subscribed({
       type: "message_update",
@@ -382,7 +388,7 @@ describe("chat route event forwarding", () => {
           "</bash>",
         ].join("\n"),
       },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
 
     expect(engine.steerSession).not.toHaveBeenCalled();
     const visibleText = clients[0].sent
@@ -410,16 +416,16 @@ describe("chat route event forwarding", () => {
     subscribed({
       type: "message_update",
       assistantMessageEvent: { type: "text_delta", delta: "<web_search>" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "message_update",
       assistantMessageEvent: { type: "text_delta", delta: "\n深圳 2026年4月28日 天气预报\n" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "message_update",
       assistantMessageEvent: { type: "text_delta", delta: "</web_search>" },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     expect(engine.steerSession).not.toHaveBeenCalled();
     const visibleText = clients[0].sent
@@ -446,15 +452,15 @@ describe("chat route event forwarding", () => {
     subscribed({
       type: "thinking_delta",
       delta: "我需要使用工具检查下载文件夹。",
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "message_update",
       assistantMessageEvent: {
         type: "text_delta",
         delta: "<bash>\nfind ~/Downloads -maxdepth 1 -type f -iname '*.zip'\n</bash>",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(1), { timeout: 1000 });
     const visibleText = clients[0].sent
@@ -487,8 +493,8 @@ describe("chat route event forwarding", () => {
         type: "thinking_delta",
         delta: "我需要先思考一下。",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     const visibleText = clients[0].sent
       .filter((evt) => evt.type === "text_delta")
@@ -497,7 +503,7 @@ describe("chat route event forwarding", () => {
     expect(visibleText).toContain("模型这次只返回了思考过程");
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "turn_end",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
   });
 
@@ -517,16 +523,16 @@ describe("chat route event forwarding", () => {
     subscribed({
       type: "message_update",
       assistantMessageEvent: { type: "text_delta", delta: "<t" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "message_update",
       assistantMessageEvent: { type: "text_delta", delta: "avily>\n深圳天气\n</tavily>\n" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "message_update",
       assistantMessageEvent: { type: "text_delta", delta: "_calls></inv> </_calls>\n最终答案：建议带伞。" },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     expect(engine.steerSession).not.toHaveBeenCalled();
     const visibleText = clients[0].sent
@@ -555,8 +561,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: "## 宋朝科举制度\n\n| 阶段 | 特点 |\n|------|------|",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
 
@@ -582,12 +588,12 @@ describe("chat route event forwarding", () => {
     subscribed({
       type: "message_update",
       assistantMessageEvent: { type: "thinking_delta", delta: "隐".repeat(820) },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "message_update",
       assistantMessageEvent: { type: "text_delta", delta: "It is safe" },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
 
@@ -617,7 +623,7 @@ describe("chat route event forwarding", () => {
       toolCallId: "call_ls",
       toolName: "bash",
       args: { command: "ls -la /tmp/lynn-pdf-move-test" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolCallId: "call_ls",
@@ -625,8 +631,8 @@ describe("chat route event forwarding", () => {
       args: { command: "ls -la /tmp/lynn-pdf-move-test" },
       result: { output: "a.pdf\nb.PDF\nnote.txt\n" },
       isError: false,
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     subscribed({
       type: "message_update",
@@ -634,8 +640,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: "找到 2 个 PDF 文件（`a.pdf` 和 `b.PDF`），开始创建文件夹并移动。",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
 
@@ -668,7 +674,7 @@ describe("chat route event forwarding", () => {
       toolCallId: "call_find_excel",
       toolName: "bash",
       args: { command: scanCommand },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolCallId: "call_find_excel",
@@ -676,8 +682,8 @@ describe("chat route event forwarding", () => {
       args: { command: scanCommand },
       result: { output: Array.from({ length: 33 }, (_, idx) => `/Users/lynn/Downloads/file-${idx + 1}.xlsx`).join("\n") },
       isError: false,
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     subscribed({
       type: "message_update",
@@ -685,8 +691,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: "找到33个Excel文件，现在全部移动到“表格”文件夹。",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
 
@@ -715,7 +721,7 @@ describe("chat route event forwarding", () => {
       toolCallId: "call_find_zip",
       toolName: "bash",
       args: { command: scanCommand },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolCallId: "call_find_zip",
@@ -723,8 +729,8 @@ describe("chat route event forwarding", () => {
       args: { command: scanCommand },
       result: { output: "/Users/lynn/Downloads/a.zip\n/Users/lynn/Downloads/b.zip\n" },
       isError: false,
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     subscribed({
       type: "message_update",
@@ -732,8 +738,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: "找到2个 zip 文件，现在删除。",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
 
@@ -762,8 +768,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: "我来帮你把当前目录下的 Excel 和 CSV 文件移动到新建的“表格”文件夹中。",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
 
@@ -793,7 +799,7 @@ describe("chat route event forwarding", () => {
       toolCallId: "call_news",
       toolName: "live_news",
       args: { query: "今日科技 AI 新闻" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolCallId: "call_news",
@@ -801,8 +807,8 @@ describe("chat route event forwarding", () => {
       args: { query: "今日科技 AI 新闻" },
       result: { error: "fetch failed" },
       isError: true,
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     subscribed({
       type: "message_update",
@@ -810,8 +816,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: "两个任务一起处理。",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
 
@@ -840,7 +846,7 @@ describe("chat route event forwarding", () => {
       toolCallId: "call_stock",
       toolName: "stock_market",
       args: { query: "今日金价" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolCallId: "call_stock",
@@ -848,8 +854,8 @@ describe("chat route event forwarding", () => {
       args: { query: "今日金价" },
       result: { error: "rate limit" },
       isError: true,
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     subscribed({
       type: "message_update",
@@ -857,8 +863,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: "好的。",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
 
@@ -886,7 +892,7 @@ describe("chat route event forwarding", () => {
       toolCallId: "call_news",
       toolName: "live_news",
       args: { query: "今日科技 AI" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolCallId: "call_news",
@@ -894,10 +900,10 @@ describe("chat route event forwarding", () => {
       args: { query: "今日科技 AI" },
       result: { error: "fetch failed" },
       isError: true,
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
     // 模型产 0 文本 → 直接 turn_end 第二次(deferred 后)
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
 
@@ -925,7 +931,7 @@ describe("chat route event forwarding", () => {
       toolCallId: "call_w",
       toolName: "weather",
       args: { city: "shanghai" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolCallId: "call_w",
@@ -933,8 +939,8 @@ describe("chat route event forwarding", () => {
       args: { city: "shanghai" },
       result: { output: "晴 22°C" },
       isError: false,
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     subscribed({
       type: "message_update",
@@ -942,8 +948,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: "上海今天晴 22°C。",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
 
@@ -974,7 +980,7 @@ describe("chat route event forwarding", () => {
         toolCallId: "call_move",
         toolName: "bash",
         args: { command: "mkdir -p 表格 && mv *.xlsx 表格/" },
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
       subscribed({
         type: "tool_execution_end",
         toolCallId: "call_move",
@@ -982,7 +988,7 @@ describe("chat route event forwarding", () => {
         args: { command: "mkdir -p 表格 && mv *.xlsx 表格/" },
         result: { content: [{ type: "text", text: "moved\n" }] },
         isError: false,
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
 
       await vi.advanceTimersByTimeAsync(8000);
 
@@ -1022,7 +1028,7 @@ describe("chat route event forwarding", () => {
         toolCallId: "call_search_worldcup",
         toolName: "web_search",
         args: { query: "2026 世界杯 6月12日 比赛结果" },
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
       subscribed({
         type: "tool_execution_end",
         toolCallId: "call_search_worldcup",
@@ -1038,13 +1044,13 @@ describe("chat route event forwarding", () => {
           },
         },
         isError: false,
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
       subscribed({
         type: "tool_execution_start",
         toolCallId: "call_fetch_worldcup",
         toolName: "web_fetch",
         args: { url: "https://example.test/world-cup-results" },
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
       subscribed({
         type: "tool_execution_end",
         toolCallId: "call_fetch_worldcup",
@@ -1056,15 +1062,15 @@ describe("chat route event forwarding", () => {
           ],
         },
         isError: false,
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
       subscribed({
         type: "message_update",
         assistantMessageEvent: {
           type: "thinking_delta",
           delta: "我已经查到 ESPN 页面,还要再核对赛事网站。",
         },
-      }, "/sessions/current.jsonl");
-      subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
+      subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
       expect(clients[0].sent.filter((evt) => evt.type === "turn_end")).toHaveLength(0);
       await vi.advanceTimersByTimeAsync(8000);
@@ -1082,7 +1088,7 @@ describe("chat route event forwarding", () => {
       expect(visibleText).not.toContain("模型这次只返回了思考过程");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({
         type: "turn_end",
-        sessionPath: "/sessions/current.jsonl",
+        sessionPath: path.join(testRoot, 'current.jsonl'),
       }));
     } finally {
       vi.useRealTimers();
@@ -1105,9 +1111,9 @@ describe("chat route event forwarding", () => {
     connections[0].handlers.onMessage({ data: JSON.stringify({ type: "prompt", text: "继续" }) }, connections[0].client);
     await waitForAsyncHandlers();
     if (source === "event") {
-      if (partial) subscribed({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: partial } }, "/sessions/current.jsonl");
-      subscribed({ type: "message_update", assistantMessageEvent: { type: "error", error: message } }, "/sessions/current.jsonl");
-      subscribed({ type: "agent_end", messages: [] }, "/sessions/current.jsonl");
+      if (partial) subscribed({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: partial } }, path.join(testRoot, 'current.jsonl'));
+      subscribed({ type: "message_update", assistantMessageEvent: { type: "error", error: message } }, path.join(testRoot, 'current.jsonl'));
+      subscribed({ type: "agent_end", messages: [] }, path.join(testRoot, 'current.jsonl'));
     }
     await waitForAsyncHandlers();
     const visible = clients[0].sent.filter(event => event.type === "text_delta").map(event => event.delta).join("");
@@ -1139,7 +1145,7 @@ describe("chat route event forwarding", () => {
       toolCallId: "call_policy_search",
       toolName: "web_search",
       args: { query: "南京 2026 社保缴费基数 最新政策" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolCallId: "call_policy_search",
@@ -1151,14 +1157,14 @@ describe("chat route event forwarding", () => {
         ],
       },
       isError: false,
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "message_update",
       assistantMessageEvent: {
         type: "error",
         error: "LLM request timed out after 45000ms",
       },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
 
     const visibleText = clients[0].sent
       .filter((evt) => evt.type === "text_delta")
@@ -1171,12 +1177,12 @@ describe("chat route event forwarding", () => {
     expect(visibleText).toContain("不会继续猜");
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "turn_end",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "status",
       isStreaming: false,
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
   });
 
@@ -1208,7 +1214,7 @@ describe("chat route event forwarding", () => {
         description: "删除文件或目录",
         category: "delete_files",
         identifier: "rm",
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({
         type: "tool_authorization",
         confirmId: "confirm-delete",
@@ -1262,7 +1268,7 @@ describe("chat route event forwarding", () => {
         description: "删除文件或目录",
         category: "delete_files",
         identifier: "rm",
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
 
       await vi.advanceTimersByTimeAsync(1000);
 
@@ -1306,7 +1312,7 @@ describe("chat route event forwarding", () => {
       toolCallId: "call_bad_find",
       toolName: "bash",
       args: { command: "find" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolCallId: "call_bad_find",
@@ -1314,7 +1320,7 @@ describe("chat route event forwarding", () => {
       args: { command: "find" },
       result: { content: [{ type: "text", text: "usage: find [-H | -L | -P] path-list predicate-list" }] },
       isError: true,
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
     await Promise.resolve();
@@ -1378,8 +1384,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta,
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
 
@@ -1478,7 +1484,7 @@ describe("chat route event forwarding", () => {
         toolCallId: "call_move",
         toolName: "bash",
         args: { command: "mkdir -p 表格 && mv *.xlsx 表格/" },
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
       subscribed({
         type: "tool_execution_end",
         toolCallId: "call_move",
@@ -1486,11 +1492,11 @@ describe("chat route event forwarding", () => {
         args: { command: "mkdir -p 表格 && mv *.xlsx 表格/" },
         result: { content: [{ type: "text", text: "moved\n" }] },
         isError: false,
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
       subscribed({
         type: "message_update",
         assistantMessageEvent: { type: "text_delta", delta: "已完成，" },
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
 
       await vi.advanceTimersByTimeAsync(7999);
       expect(clients[0].sent.filter((evt) => evt.type === "turn_end")).toHaveLength(0);
@@ -1523,12 +1529,12 @@ describe("chat route event forwarding", () => {
         toolCallId: "search-1",
         toolName: "web_search",
         args: { query: "first source" },
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
       subscribed({
         type: "message_update",
         assistantMessageEvent: { type: "text_delta", delta: "我先整理已拿到的信息。" },
-      }, "/sessions/current.jsonl");
-      subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
+      subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
       await vi.advanceTimersByTimeAsync(4000);
       subscribed({
@@ -1536,14 +1542,14 @@ describe("chat route event forwarding", () => {
         toolCallId: "fetch-2",
         toolName: "web_fetch",
         args: { url: "https://example.com/slow" },
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
 
       await vi.advanceTimersByTimeAsync(4001);
       expect(engine.abortSessionByPath).not.toHaveBeenCalled();
       expect(clients[0].sent.filter((evt) => evt.type === "turn_end")).toHaveLength(0);
 
       await vi.advanceTimersByTimeAsync(8000);
-      expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+      expect(engine.abortSessionByPath).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
     } finally {
@@ -1571,18 +1577,18 @@ describe("chat route event forwarding", () => {
         toolCallId: "weather-1",
         toolName: "weather",
         args: { location: "深圳" },
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
       subscribed({
         type: "message_update",
         assistantMessageEvent: { type: "text_delta", delta: "明天深圳有零星小雨。" },
-      }, "/sessions/current.jsonl");
-      subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
+      subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
       await vi.advanceTimersByTimeAsync(7999);
       expect(clients[0].sent.filter((evt) => evt.type === "turn_end")).toHaveLength(0);
 
       await vi.advanceTimersByTimeAsync(2);
-      expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+      expect(engine.abortSessionByPath).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "turn_end" }));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "status", isStreaming: false }));
       const visibleText = clients[0].sent
@@ -1625,7 +1631,7 @@ describe("chat route event forwarding", () => {
         toolCallId: "edit-1",
         toolName: "edit",
         args: { file_path: filePath },
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
 
       expect(editRollbackStore.pendingCount()).toBe(1);
       await vi.advanceTimersByTimeAsync(120_000);
@@ -1654,7 +1660,7 @@ describe("chat route event forwarding", () => {
     await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(1));
 
     // T05 模型给 turn_end 但没有任何文本 → 不触发内部重试
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
     await Promise.resolve();
     await Promise.resolve();
 
@@ -1706,15 +1712,15 @@ describe("chat route event forwarding", () => {
     }, connections[0].client);
     await vi.waitFor(() => expect(hub.send).toHaveBeenCalledTimes(2));
 
-    expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+    expect(engine.abortSessionByPath).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'));
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "turn_end",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "status",
       isStreaming: false,
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
     expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "error",
@@ -1746,10 +1752,10 @@ describe("chat route event forwarding", () => {
     expect(clients[0].sent.filter((event) => event.type === "prompt_accepted")).toHaveLength(2);
     expect(hub.send.mock.calls[0]?.[0]).toContain("第一条消息");
     expect(hub.send.mock.calls[1]?.[0]).toContain("第二条消息");
-    expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+    expect(engine.abortSessionByPath).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'));
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "turn_end",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
   });
 
@@ -1806,7 +1812,7 @@ describe("chat route event forwarding", () => {
         type: "thinking_delta",
         delta: "我先检索赛程，然后组织答案。",
       },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
 
     rejectSend?.(new Error("aborted"));
     await waitForAsyncHandlers();
@@ -1818,12 +1824,12 @@ describe("chat route event forwarding", () => {
     expect(visibleText).toContain("模型请求中断前只返回了思考过程");
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "turn_end",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "status",
       isStreaming: false,
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
   });
 
@@ -1849,13 +1855,13 @@ describe("chat route event forwarding", () => {
         type: "thinking_delta",
         delta: "我先检索赛程，然后组织答案。",
       },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_start",
       toolCallId: "call_sports",
       toolName: "sports_score",
       args: { query: "今晚世界杯有几场比赛？" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolCallId: "call_sports",
@@ -1863,7 +1869,7 @@ describe("chat route event forwarding", () => {
       args: { query: "今晚世界杯有几场比赛？" },
       result: { content: [{ type: "text", text: "2026-06-21 20:00 Brazil vs Japan; 2026-06-22 02:00 USA vs Spain." }] },
       isError: false,
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
 
     rejectSend?.(new Error("aborted"));
     await waitForAsyncHandlers();
@@ -1877,7 +1883,7 @@ describe("chat route event forwarding", () => {
     expect(visibleText).not.toContain("模型请求中断前只返回了思考过程");
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "turn_end",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
   });
 
@@ -1885,6 +1891,8 @@ describe("chat route event forwarding", () => {
     vi.useFakeTimers();
     try {
       engine.abortSessionByPath = vi.fn();
+      let activeState;
+      chatRoute.lifecycleHooks.tap("prompt_start", event => { activeState = event.ss; });
       let finishSend;
       hub.send = vi.fn(() => new Promise(resolve => { finishSend = resolve; }));
       await app.request("/ws");
@@ -1895,6 +1903,9 @@ describe("chat route event forwarding", () => {
       subscribed({ type: "tool_execution_start", toolCallId: "synthesis-tool", toolName: "weather", args: { location: "Shenzhen" } }, engine.currentSessionPath);
       subscribed({ type: "tool_execution_end", toolCallId: "synthesis-tool", toolName: "weather", result: { content: [{ type: "text", text: "No forecast available." }] }, isError: false }, engine.currentSessionPath);
       subscribed({ type: "message_update", assistantMessageEvent: { type: "thinking_delta", delta: "Checking evidence." } }, engine.currentSessionPath);
+      expect(activeState.hasThinking).toBe(true);
+      expect(activeState.successfulToolCount).toBe(1);
+      expect(activeState.activeToolCallCount).toBe(0);
       await vi.advanceTimersByTimeAsync(45_000);
       expect(engine.abortSessionByPath).not.toHaveBeenCalled();
       expect(clients[0].sent.some(event => event.type === "turn_end")).toBe(false);
@@ -1926,7 +1937,7 @@ describe("chat route event forwarding", () => {
       }
       expect(engine.abortSessionByPath).not.toHaveBeenCalled();
       expect(clients[0].sent.some(event => event.type === "turn_end")).toBe(false);
-      connections[0].handlers.onMessage({ data: JSON.stringify({ type: "resume_stream", sessionPath: engine.currentSessionPath }) }, clients[0]);
+      connections[0].handlers.onMessage({ data: JSON.stringify({ type: "resume_stream", sessionPath: engine.currentSessionPath, sinceSeq: 0 }) }, clients[0]);
       await Promise.resolve();
       expect(clients[0].sent.at(-1)).toMatchObject({ type: "stream_resume", isStreaming: true });
       chatRoute.closeSessionStream(engine.currentSessionPath);
@@ -1992,14 +2003,14 @@ describe("chat route event forwarding", () => {
           type: "thinking_delta",
           delta: "我需要仔细推理，但一直没有形成可见答案。",
         },
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
 
       await vi.advanceTimersByTimeAsync(119_999);
       expect(engine.abortSessionByPath).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1);
 
-      expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+      expect(engine.abortSessionByPath).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'));
       const visibleText = clients[0].sent
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
@@ -2008,12 +2019,12 @@ describe("chat route event forwarding", () => {
       expect(visibleText).not.toContain("空转");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({
         type: "turn_end",
-        sessionPath: "/sessions/current.jsonl",
+        sessionPath: path.join(testRoot, 'current.jsonl'),
       }));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({
         type: "status",
         isStreaming: false,
-        sessionPath: "/sessions/current.jsonl",
+        sessionPath: path.join(testRoot, 'current.jsonl'),
       }));
     } finally {
       vi.useRealTimers();
@@ -2044,7 +2055,7 @@ describe("chat route event forwarding", () => {
         toolCallId: "call_move_images",
         toolName: "bash",
         args: { command: "mkdir -p /Users/lynn/Desktop/图片 && mv /Users/lynn/Desktop/*.png /Users/lynn/Desktop/图片/" },
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
       subscribed({
         type: "tool_execution_end",
         toolCallId: "call_move_images",
@@ -2056,9 +2067,9 @@ describe("chat route event forwarding", () => {
           ],
         },
         isError: false,
-      }, "/sessions/current.jsonl");
+      }, path.join(testRoot, 'current.jsonl'));
 
-      subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+      subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
       expect(clients[0].sent.filter((evt) => evt.type === "turn_end")).toHaveLength(0);
 
@@ -2067,7 +2078,7 @@ describe("chat route event forwarding", () => {
 
       await vi.advanceTimersByTimeAsync(1);
 
-      expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+      expect(engine.abortSessionByPath).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'));
       const visibleText = clients[0].sent
         .filter((evt) => evt.type === "text_delta")
         .map((evt) => evt.delta)
@@ -2078,12 +2089,12 @@ describe("chat route event forwarding", () => {
       expect(visibleText).toContain("moved 3 image files");
       expect(clients[0].sent).toContainEqual(expect.objectContaining({
         type: "turn_end",
-        sessionPath: "/sessions/current.jsonl",
+        sessionPath: path.join(testRoot, 'current.jsonl'),
       }));
       expect(clients[0].sent).toContainEqual(expect.objectContaining({
         type: "status",
         isStreaming: false,
-        sessionPath: "/sessions/current.jsonl",
+        sessionPath: path.join(testRoot, 'current.jsonl'),
       }));
     } finally {
       vi.useRealTimers();
@@ -2142,7 +2153,7 @@ describe("chat route event forwarding", () => {
     expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "tool_start",
       name: "stock_market",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
   });
 
@@ -2167,7 +2178,7 @@ describe("chat route event forwarding", () => {
     expect(clients[0].sent).toContainEqual(expect.objectContaining({
       type: "tool_start",
       name: "web_search",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
     const visibleText = clients[0].sent
       .filter((evt) => evt.type === "text_delta")
@@ -2255,7 +2266,7 @@ describe("chat route event forwarding", () => {
       type: "tool_execution_start",
       toolName: "sportsscore",
       args: { query: "今晚世界杯几场比赛帮我查一下" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolName: "sportsscore",
@@ -2284,11 +2295,11 @@ describe("chat route event forwarding", () => {
         }],
         details: { provider: "espn_scoreboard" },
       },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
 
     await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
 
-    expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+    expect(engine.abortSessionByPath).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'));
     const visibleText = clients[0].sent
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
@@ -2319,7 +2330,7 @@ describe("chat route event forwarding", () => {
       type: "tool_execution_start",
       toolName: "sports_score",
       args: { query: "今晚世界杯有比赛吗" },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
       toolName: "sports_score",
@@ -2341,10 +2352,10 @@ describe("chat route event forwarding", () => {
         }],
         details: { provider: "espn_scoreboard" },
       },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
 
     await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
-    expect(engine.abortSessionByPath).toHaveBeenCalledWith("/sessions/current.jsonl");
+    expect(engine.abortSessionByPath).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'));
     const visibleText = clients[0].sent
       .filter((evt) => evt.type === "text_delta")
       .map((evt) => evt.delta)
@@ -2415,7 +2426,7 @@ describe("chat route event forwarding", () => {
         "09:00 海地 vs 苏格兰 E组",
       ].join("\n"));
       hub.send = vi.fn(async () => {
-        subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+        subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
       });
 
       const res = await app.request("/ws");
@@ -2463,7 +2474,7 @@ describe("chat route event forwarding", () => {
     expect(effectivePrompt).not.toContain("不要读取或写入文件");
     expect(effectivePrompt).toContain("只回复“已记住”");
     expect(opts).toEqual(expect.objectContaining({
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
       disableTools: true,
       turnInstruction: expect.stringContaining("不要读取或写入文件"),
     }));
@@ -2522,8 +2533,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: "<web_search>\n深圳天气\n</web_search>",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     const visibleText = clients[0].sent
       .filter((evt) => evt.type === "text_delta")
@@ -2563,8 +2574,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: "<tool_call>\n<function=read>\n<parameter=file_path>/Users/lynn/.lynn/skills/weather/SKILL.md</parameter>\n</function>\n</tool_call>",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
     expect(weatherExecute).not.toHaveBeenCalled();
@@ -2607,8 +2618,8 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: "<tool_call>\n<function=web_search>\n<parameter=query>AAPL stock price today</parameter>\n</function>\n</tool_call>",
       },
-    }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     await Promise.resolve();
     expect(stockExecute).not.toHaveBeenCalled();
@@ -2619,7 +2630,7 @@ describe("chat route event forwarding", () => {
     expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "tool_start",
       name: "stock_market",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
     expect(visibleText).not.toContain("<tool_call>");
   });
@@ -2676,7 +2687,7 @@ describe("chat route event forwarding", () => {
   it("creates a session on the first prompt when currentSessionPath is empty", async () => {
     engine.currentSessionPath = "";
     engine.createSession = vi.fn(async () => ({
-      sessionManager: { getSessionFile: () => "/sessions/new.jsonl" },
+      sessionManager: { getSessionFile: () => path.join(testRoot, 'new.jsonl') },
     }));
     reportResearchMock.inferReportResearchKind.mockReturnValue("market_weather_brief");
     reportResearchMock.buildReportResearchContext.mockResolvedValue("【系统已完成综合工具预取】");
@@ -2695,7 +2706,7 @@ describe("chat route event forwarding", () => {
     expect(hub.send).toHaveBeenCalled();
     expect(clients[0].sent.some((evt) => evt.type === "tool_start" && evt.name === "market_weather_brief")).toBe(false);
     expect(clients[0].sent.some((evt) => evt.type === "text_delta"
-      && evt.sessionPath === "/sessions/new.jsonl"
+      && evt.sessionPath === path.join(testRoot, 'new.jsonl')
       && String(evt.delta || "").includes("AAPL"))).toBe(false);
   });
 
@@ -2704,7 +2715,7 @@ describe("chat route event forwarding", () => {
     await app.request("/ws");
     connections[0].handlers.onMessage({ data: JSON.stringify({ type: "prompt", text: "顺德大良明晚天气" }) }, connections[0].client);
     const progress = { type: "tool_progress", source: "brain", name: "weather", event: "end", ok: true, ms: 120, argsSummary: "顺德大良", summary: "已获取预报", details: ["provider: cma", "请求地点: 顺德大良"] };
-    subscribed(progress, "/sessions/current.jsonl");
+    subscribed(progress, path.join(testRoot, 'current.jsonl'));
     expect(clients[0].sent).toContainEqual(expect.objectContaining(progress));
   });
 
@@ -2712,7 +2723,7 @@ describe("chat route event forwarding", () => {
     hub.send = vi.fn(() => new Promise(() => {}));
     await app.request("/ws");
     connections[0].handlers.onMessage({ data: JSON.stringify({ type: "prompt", text: "查询天气" }) }, connections[0].client);
-    subscribed({ type: "tool_progress", source: "brain", name: "weather", event: "end", ok: false, summary: "上游不可用" }, "/sessions/current.jsonl");
+    subscribed({ type: "tool_progress", source: "brain", name: "weather", event: "end", ok: false, summary: "上游不可用" }, path.join(testRoot, 'current.jsonl'));
     expect(clients[0].sent).toContainEqual(expect.objectContaining({ type: "tool_progress", name: "weather", ok: false }));
     expect(clients[0].sent.some((event) => event.type === "tool_progress" && event.ok === true)).toBe(false);
   });
@@ -2721,10 +2732,10 @@ describe("chat route event forwarding", () => {
     hub.send = vi.fn(() => new Promise(() => {}));
     await app.request("/ws");
     connections[0].handlers.onMessage({ data: JSON.stringify({ type: "prompt", text: "查询天气" }) }, connections[0].client);
-    subscribed({ type: "tool_progress", name: "weather", event: "end", ok: true }, "/sessions/current.jsonl");
-    subscribed({ type: "tool_progress", source: "brain", name: "weather", event: "end", ok: true, _hubContext: { streamToken: "expired" } }, "/sessions/current.jsonl");
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
-    subscribed({ type: "tool_progress", source: "brain", name: "weather", event: "end", ok: true }, "/sessions/current.jsonl");
+    subscribed({ type: "tool_progress", name: "weather", event: "end", ok: true }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "tool_progress", source: "brain", name: "weather", event: "end", ok: true, _hubContext: { streamToken: "expired" } }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
+    subscribed({ type: "tool_progress", source: "brain", name: "weather", event: "end", ok: true }, path.join(testRoot, 'current.jsonl'));
     expect(clients[0].sent.some((event) => event.type === "tool_progress")).toBe(false);
   });
 
@@ -2746,9 +2757,9 @@ describe("chat route event forwarding", () => {
         type: "text_delta",
         delta: "正在核对资料。<lynn_tool_progress event=\"start\" name=\"web_search\"></lynn_tool_progress>今天金价偏强。",
       },
-    }, "/sessions/current.jsonl");
+    }, path.join(testRoot, 'current.jsonl'));
 
-    subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+    subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
 
     expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "tool_progress",
@@ -2805,8 +2816,8 @@ describe("chat route event forwarding", () => {
             type: "text_delta",
             delta: "我来搜索一下天气资料。",
           },
-        }, "/sessions/current.jsonl");
-        subscribed({ type: "turn_end" }, "/sessions/current.jsonl");
+        }, path.join(testRoot, 'current.jsonl'));
+        subscribed({ type: "turn_end" }, path.join(testRoot, 'current.jsonl'));
       }
     });
     reportResearchMock.inferReportResearchKind.mockReturnValue("weather");
@@ -2823,7 +2834,7 @@ describe("chat route event forwarding", () => {
 
     expect(clients[0].sent).not.toContainEqual(expect.objectContaining({
       type: "turn_retry",
-      sessionPath: "/sessions/current.jsonl",
+      sessionPath: path.join(testRoot, 'current.jsonl'),
     }));
   });
 });
