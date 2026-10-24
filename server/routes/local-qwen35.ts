@@ -330,50 +330,176 @@ function isPidAlive(pid: number | null | undefined): boolean {
   }
 }
 
+type HiddenExecOptions = {
+  timeout: number;
+  maxBuffer: number;
+  windowsHide: true;
+  encoding: "utf8";
+  stdio: ["ignore", "pipe", "pipe"];
+};
+
+type ProcessListInvocation = {
+  file: string;
+  args: string[];
+  options: HiddenExecOptions;
+};
+
+function hiddenExecOptions(timeout: number, maxBuffer: number): HiddenExecOptions {
+  return {
+    timeout,
+    maxBuffer,
+    windowsHide: true,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  };
+}
+
+function commandOutput(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Buffer.isBuffer(value)) return value.toString("utf8");
+  return "";
+}
+
+function windowsSystemBinary(...segments: string[]): string {
+  const root = process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
+  return path.win32.join(root, "System32", ...segments);
+}
+
+function addressPort(address: string): string | null {
+  const match = /:(\d+)$/.exec(address);
+  return match ? match[1] : null;
+}
+
+function isWildcardRemote(address: string): boolean {
+  return address === "0.0.0.0:0"
+    || address === "[::]:0"
+    || address === "*:*"
+    || address === "[::]:*"
+    || address === "0.0.0.0:*";
+}
+
+// netstat's state column is localized ("LISTENING" / "侦听"), so match the wildcard
+// remote address that Windows prints for listeners instead of the state word.
+export function parseWindowsListenerPids(stdout: string, port: string): number[] {
+  const wanted = String(port);
+  const pids: number[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 4 || parts[0].toUpperCase() !== "TCP") continue;
+    if (addressPort(parts[1]) !== wanted) continue;
+    if (!isWildcardRemote(parts[2])) continue;
+    const pid = Number(parts[parts.length - 1]);
+    if (Number.isFinite(pid) && pid > 0 && !pids.includes(pid)) pids.push(pid);
+  }
+  return pids;
+}
+
+export function parseProcessCommandLines(stdout: string): Array<{ pid: number; command: string }> {
+  const processes: Array<{ pid: number; command: string }> = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const match = line.trim().match(/^(\d+)\s+(.+)$/);
+    if (!match) continue;
+    const pid = Number(match[1]);
+    if (!Number.isFinite(pid) || pid <= 0) continue;
+    processes.push({ pid, command: match[2] || "" });
+  }
+  return processes;
+}
+
+export function selectQwen35ProcessPids(
+  processes: Array<{ pid: number; command: string }>,
+  port: string,
+  modelPaths: readonly string[],
+): number[] {
+  return processes
+    .map(({ pid, command }): number | null => {
+      if (!Number.isFinite(pid) || pid <= 0) return null;
+      if (!/llama-server(?:\s|$)/.test(command) && !/llama-server\b/.test(command)) return null;
+      const mentionsPort = command.includes(`--port ${port}`) || command.includes(`:${port}`);
+      const mentionsModel = modelPaths.some((candidate) => candidate && command.includes(candidate))
+        || /Q4-imatrix-MTP-00001-of-00004/i.test(command)
+        || /qwen36-27b-dsv4pro-coding-q4-mtp/i.test(command)
+        || /Qwen3\.6-27B-DSV4Pro-Distill-MTP-Q5_K_M/i.test(command)
+        || /qwen36-27b-dsv4pro-distill-q5km/i.test(command);
+      return mentionsPort || mentionsModel ? pid : null;
+    })
+    .filter(isPositiveFiniteNumber);
+}
+
+const WINDOWS_LLAMA_PROCESS_SCRIPT = [
+  "$ProgressPreference = 'SilentlyContinue'",
+  "$OutputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false",
+  "Get-CimInstance -ClassName Win32_Process -Filter \"Name LIKE '%llama-server%'\" | ForEach-Object {",
+  "  if ($null -ne $_.ProcessId) {",
+  "    $cmd = $_.CommandLine",
+  "    if ([string]::IsNullOrEmpty($cmd)) { $cmd = $_.Name }",
+  "    Write-Output ($_.ProcessId.ToString() + \"`t\" + $cmd)",
+  "  }",
+  "}",
+].join("\n");
+
+export function localQwenListenerInvocation(port: string, platform: NodeJS.Platform = process.platform): ProcessListInvocation {
+  if (platform === "win32") {
+    return {
+      file: windowsSystemBinary("netstat.exe"),
+      args: ["-ano", "-p", "TCP"],
+      options: hiddenExecOptions(2_000, 1024 * 1024),
+    };
+  }
+  return {
+    file: "lsof",
+    args: ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"],
+    options: hiddenExecOptions(2_000, 32 * 1024),
+  };
+}
+
+export function localQwenProcessListInvocation(platform: NodeJS.Platform = process.platform): ProcessListInvocation {
+  if (platform === "win32") {
+    const encoded = Buffer.from(WINDOWS_LLAMA_PROCESS_SCRIPT, "utf16le").toString("base64");
+    return {
+      file: windowsSystemBinary("WindowsPowerShell", "v1.0", "powershell.exe"),
+      args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded],
+      options: hiddenExecOptions(2_000, 512 * 1024),
+    };
+  }
+  return {
+    file: "ps",
+    args: ["-axo", "pid=,command="],
+    options: hiddenExecOptions(2_000, 512 * 1024),
+  };
+}
+
+function parseWhitespacePids(stdout: string): number[] {
+  return stdout
+    .split(/\s+/)
+    .map((value) => Number(value))
+    .filter(isPositiveFiniteNumber);
+}
+
 async function listenerPids(port: string): Promise<number[]> {
+  const invocation = localQwenListenerInvocation(port);
+  if (process.platform === "win32") {
+    try {
+      const { stdout } = await execFileAsync(invocation.file, invocation.args, invocation.options);
+      return parseWindowsListenerPids(commandOutput(stdout), port);
+    } catch {
+      return [];
+    }
+  }
   try {
-    const { stdout } = await execFileAsync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], {
-      timeout: 2_000,
-      maxBuffer: 32 * 1024,
-    });
-    return stdout
-      .split(/\s+/)
-      .map((value) => Number(value))
-      .filter(isPositiveFiniteNumber);
+    const { stdout } = await execFileAsync(invocation.file, invocation.args, invocation.options);
+    return parseWhitespacePids(commandOutput(stdout));
   } catch (err: unknown) {
-    const stdout = errorOutput(err, "stdout");
-    return stdout
-      .split(/\s+/)
-      .map((value) => Number(value))
-      .filter(isPositiveFiniteNumber);
+    return parseWhitespacePids(errorOutput(err, "stdout"));
   }
 }
 
 async function qwen35ProcessPids(state: LocalQwen35State = defaultState()): Promise<number[]> {
   const modelPaths = candidateModelPaths(state);
+  const invocation = localQwenProcessListInvocation();
   try {
-    const { stdout } = await execFileAsync("ps", ["-axo", "pid=,command="], {
-      timeout: 2_000,
-      maxBuffer: 512 * 1024,
-    });
-    return stdout
-      .split("\n")
-      .map((line): number | null => {
-        const match = line.trim().match(/^(\d+)\s+(.+)$/);
-        if (!match) return null;
-        const pid = Number(match[1]);
-        const command = match[2] || "";
-        if (!Number.isFinite(pid) || pid <= 0) return null;
-        if (!/llama-server(?:\s|$)/.test(command) && !/llama-server\b/.test(command)) return null;
-        const mentionsPort = command.includes(`--port ${state.port}`) || command.includes(`:${state.port}`);
-        const mentionsModel = modelPaths.some((candidate) => candidate && command.includes(candidate))
-          || /Q4-imatrix-MTP-00001-of-00004/i.test(command)
-          || /qwen36-27b-dsv4pro-coding-q4-mtp/i.test(command)
-          || /Qwen3\.6-27B-DSV4Pro-Distill-MTP-Q5_K_M/i.test(command)
-          || /qwen36-27b-dsv4pro-distill-q5km/i.test(command);
-        return mentionsPort || mentionsModel ? pid : null;
-      })
-      .filter(isPositiveFiniteNumber);
+    const { stdout } = await execFileAsync(invocation.file, invocation.args, invocation.options);
+    return selectQwen35ProcessPids(parseProcessCommandLines(commandOutput(stdout)), state.port, modelPaths);
   } catch {
     return [];
   }
@@ -479,6 +605,8 @@ function parseMetrics(text: string | null): MetricSummary | null {
 // 2026-05-24 A2 fix: runtimeDetails 一次开销 ~600-800ms (4 fetch + 2 execFile lsof+ps);
 // 多组件 polling (StatusBar 15s / ProviderStatusBadge 12s / InputArea 15s / LocalModelDownloadStep 1.5s)
 // 同时 hit 这条 route。加 1500ms 内存 cache + inflight dedup,避免 N 个并发 caller 各自 spawn lsof/ps。
+// Windows 不走 `ps`：PATH 里的 Anaconda/MSYS ps.exe 不认识 -axo，且每次都会闪控制台。
+// 监听端口用 System32 netstat；命令行用 System32 powershell 的 Win32_Process，并带 windowsHide。
 const _RUNTIME_CACHE_TTL_MS = 1500;
 let _runtimeCache: RuntimeCache = { at: 0, value: null, inflight: null };
 let _metricRateSample: {
