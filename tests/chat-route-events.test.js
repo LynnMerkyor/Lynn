@@ -2710,6 +2710,15 @@ describe("chat route event forwarding", () => {
       && String(evt.delta || "").includes("AAPL"))).toBe(false);
   });
 
+  it("takes the filter input from the original message, never a client-supplied override", async () => {
+    hub.send = vi.fn(async () => {});
+    await app.request('/ws');
+    const original = '帮我写一个普通研究计划';
+    connections[0].handlers.onMessage({ data: JSON.stringify({ type: 'prompt', text: original, originalUserText: 'spoofed override' }) }, connections[0].client);
+    await vi.waitFor(() => expect(hub.send).toHaveBeenCalled());
+    expect(hub.send.mock.calls[0][1].originalUserText).toBe(original);
+  });
+
   it("forwards trusted Brain progress and preserves full model-filled place parameters", async () => {
     hub.send = vi.fn(() => new Promise(() => {}));
     await app.request("/ws");

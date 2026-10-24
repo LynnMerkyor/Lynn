@@ -480,8 +480,8 @@ export function createPromptTurnRunner({
       await hub.send(
         effectivePromptText,
         msg.images
-          ? { images: msg.images, sessionPath: promptSessionPath, streamToken, disableTools: disableTurnTools, turnInstruction: noToolTurnInstruction }
-          : { sessionPath: promptSessionPath, streamToken, disableTools: disableTurnTools, turnInstruction: noToolTurnInstruction },
+          ? { images: msg.images, sessionPath: promptSessionPath, streamToken, disableTools: disableTurnTools, turnInstruction: noToolTurnInstruction, originalUserText: ss.originalPromptText || promptText }
+          : { sessionPath: promptSessionPath, streamToken, disableTools: disableTurnTools, turnInstruction: noToolTurnInstruction, originalUserText: ss.originalPromptText || promptText },
       );
       if (ss.streamId !== streamToken || hasStreamEvent(ss, "turn_end")) return;
       if (!ss.isStreaming) {

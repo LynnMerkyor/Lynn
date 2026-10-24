@@ -1101,6 +1101,19 @@ describe("SessionCoordinator", () => {
       provider: "brain",
       categories: ["02-national-security"],
     }), "/tmp/session.jsonl");
+    coordinator._contentFilter.check.mockImplementation(text => text.includes('blocked input')
+      ? { blocked: true, level: 'block', matches: [{ category: '02-national-security', level: 'block' }] }
+      : { blocked: false, level: 'pass', matches: [] });
+    const originalUserText = '访问 example.com 并概括内容';
+    const augmented = `${originalUserText}\n检索资料：blocked input`;
+    await coordinator.prompt(augmented, { originalUserText });
+    expect(coordinator._contentFilter.check).toHaveBeenLastCalledWith(originalUserText);
+    expect(session.prompt).toHaveBeenLastCalledWith(augmented, undefined);
+    await coordinator.promptSession('/tmp/session.jsonl', augmented, { originalUserText });
+    expect(coordinator._contentFilter.check).toHaveBeenLastCalledWith(originalUserText);
+    await expect(coordinator.prompt(augmented, { originalUserText: '' })).rejects.toThrow(/02-national-security/);
+    await expect(coordinator.prompt(augmented, { originalUserText: 123 })).rejects.toThrow(/02-national-security/);
+    await expect(coordinator.promptSession('/tmp/session.jsonl', 'model context', { originalUserText: 'blocked input' })).rejects.toThrow(/02-national-security/);
   });
 
   it("applies content filtering to steer messages too", () => {

@@ -51,6 +51,8 @@ export interface HubSendOptions {
   systemAppend?: string;
   disableTools?: boolean;
   turnInstruction?: string;
+  /** Original owner request before trusted server-side context augmentation. */
+  originalUserText?: string;
   maxRounds?: number;
   signal?: AbortSignal;
 }
@@ -193,8 +195,8 @@ export class Hub {
       { // 桌面端 owner
         match: o => !o.sessionKey && !o.ephemeral && o.role === "owner",
         handle: () => o.sessionPath
-          ? this._engine.promptSession(o.sessionPath, text, { images: o.images, disableTools: o.disableTools, turnInstruction: o.turnInstruction, modelOverride })
-          : this._engine.prompt(text, { images: o.images, disableTools: o.disableTools, turnInstruction: o.turnInstruction, modelOverride }),
+          ? this._engine.promptSession(o.sessionPath, text, { images: o.images, disableTools: o.disableTools, turnInstruction: o.turnInstruction, modelOverride, ...(opts.originalUserText === undefined ? {} : { originalUserText: opts.originalUserText }) })
+          : this._engine.prompt(text, { images: o.images, disableTools: o.disableTools, turnInstruction: o.turnInstruction, modelOverride, ...(opts.originalUserText === undefined ? {} : { originalUserText: opts.originalUserText }) }),
       },
       { // Bridge guest
         match: o => o.sessionKey && o.role === "guest",

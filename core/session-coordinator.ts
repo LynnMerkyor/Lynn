@@ -107,6 +107,8 @@ type ModelLike = ResolvedModel | AnyRecord | null;
 type PromptImage = { data: string; mimeType?: string };
 type PromptOptions = AnyRecord & {
   images?: PromptImage[];
+  /** Set by trusted prompt assembly; never copy this from a client payload. */
+  originalUserText?: string;
   turnInstruction?: string;
   disableTools?: boolean;
   modelOverride?: ResolvedModel;
@@ -497,7 +499,7 @@ export class SessionCoordinator {
       if (entry) entry.lastTouchedAt = Date.now();
     }
 
-    this._applyContentFilter(text, sp);
+    this._applyContentFilter(typeof opts.originalUserText === "string" && opts.originalUserText.trim() ? opts.originalUserText : text, sp);
 
     // Phase 1: 主动记忆召回 — 在发给 LLM 前提取关键词并搜索相关记忆
     const agent = this._d.getAgent();
@@ -589,7 +591,7 @@ export class SessionCoordinator {
     entry = await this._refreshBrainSessionSignatureIfNeeded(sessionPath, entry, "pre-prompt-session") || entry;
     entry.lastTouchedAt = Date.now();
 
-    this._applyContentFilter(text, sessionPath);
+    this._applyContentFilter(typeof opts.originalUserText === "string" && opts.originalUserText.trim() ? opts.originalUserText : text, sessionPath);
 
     // Phase 1: 主动记忆召回
     const agent = this._d.getAgentById(entry.agentId) || this._d.getAgent();
