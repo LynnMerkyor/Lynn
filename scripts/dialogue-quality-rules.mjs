@@ -127,6 +127,10 @@ export function containsMislabeledRelativeDate(prompt, text, currentDate) {
   }
   for (const match of normalized.matchAll(dateBeforeLabel)) {
     if (/[（(](?:含|包含|包括|涵盖|覆盖)\s*$/u.test(match[7])) continue;
+    // A date inside a closed parenthetical schedule does not label the next
+    // clause. An explicit equivalence after the close still binds the date.
+    const closedContext = /[）)]([^）)]*)$/u.exec(match[7]);
+    if (closedContext && !/^(?:\s|[*_`：:—–-])*(?:即|也即|也就是|就是|也?是|对应)(?:\s|[*_`：:—–-])*$/u.test(closedContext[1])) continue;
     if (!relativeLabel.test(match[7]) && isDisallowed(match[8], match[1] || match[4], match[2] || match[5], match[3] || match[6])) return true;
   }
   return false;

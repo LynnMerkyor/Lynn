@@ -4,6 +4,23 @@ import { deniesAvailableToolCapability, additionalDialogueQualityReason, claimsF
 
 describe("dialogue quality rules", () => {
   it.each([
+    '世界杯（10月17日–11月7日）——今晚有两场比赛。',
+    '展览（2026-10-01至2026-11-02）今天开放。',
+    '活动（10月17日）结束，今晚（10月24日）休息。',
+  ])('does not bind dates inside a closed schedule parenthesis to the next clause: %s', (text) => {
+    expect(containsMislabeledRelativeDate('今天晚上安排', text, '2026-10-24')).toBe(false);
+  });
+
+  it.each([
+    '世界杯（10月17日–11月7日）——今晚（10月22日）有两场比赛。',
+    '活动（10月17日）——也就是今晚，没有比赛。',
+    '展览（2026-10-01）即今天开放。',
+    '今晚是10月17日至11月7日。',
+  ])('still rejects explicit incorrect relative dates around parentheses: %s', (text) => {
+    expect(containsMislabeledRelativeDate('今天晚上安排', text, '2026-10-24')).toBe(true);
+  });
+
+  it.each([
     '1 美元 = **6.6925** 人民币',
     '1 USD = `6.692129` CNY',
     'USD/CNY：6.6925',
