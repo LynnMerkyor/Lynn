@@ -10,6 +10,16 @@ import {
 const MODEL_PATH = "C:\\Users\\me\\.lynn\\models\\Q4_LynnStyle\\Q4-imatrix-MTP-00001-of-00004.gguf";
 
 describe("local qwen35 process listing", () => {
+  it("matches complete numeric port arguments, not prefixes or unrelated URLs", () => {
+    const rows = [
+      { pid: 11, command: "llama-server --port 18099 -m other.gguf" },
+      { pid: 12, command: "llama-server --port=1809 -m other.gguf" },
+      { pid: 13, command: 'llama-server --port "1809" -m other.gguf' },
+      { pid: 14, command: "llama-server --url http://localhost:1809" },
+    ];
+    expect(selectQwen35ProcessPids(rows, "1809", [])).toEqual([12, 13]);
+    expect(selectQwen35ProcessPids(rows, "1809.*", [])).toEqual([]);
+  });
   it("keeps the Unix ps command and does not use it on Windows", () => {
     expect(localQwenProcessListInvocation("linux")).toMatchObject({
       file: "ps",

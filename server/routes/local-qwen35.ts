@@ -362,7 +362,7 @@ function commandOutput(value: unknown): string {
 
 function windowsSystemBinary(...segments: string[]): string {
   const root = process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
-  return path.win32.join(root, "System32", ...segments);
+  return path.win32.join(path.win32.isAbsolute(root) ? root : "C:\\Windows", "System32", ...segments);
 }
 
 function addressPort(address: string): string | null {
@@ -415,7 +415,8 @@ export function selectQwen35ProcessPids(
     .map(({ pid, command }): number | null => {
       if (!Number.isFinite(pid) || pid <= 0) return null;
       if (!/llama-server(?:\s|$)/.test(command) && !/llama-server\b/.test(command)) return null;
-      const mentionsPort = command.includes(`--port ${port}`) || command.includes(`:${port}`);
+      const numericPort = /^\d+$/.test(port) && Number(port) >= 1 && Number(port) <= 65535 ? String(Number(port)) : null;
+      const mentionsPort = numericPort !== null && new RegExp(`(?:^|\\s)--port(?:=|\\s+)["']?${numericPort}(?:["']?(?:\\s|$))`).test(command);
       const mentionsModel = modelPaths.some((candidate) => candidate && command.includes(candidate))
         || /Q4-imatrix-MTP-00001-of-00004/i.test(command)
         || /qwen36-27b-dsv4pro-coding-q4-mtp/i.test(command)
