@@ -16,7 +16,7 @@ vi.mock("../lib/tools/web-fetch.js", () => ({
   fetchWebContent: webFetchMock.fetchWebContent,
 }));
 
-import { createStockMarketTool } from "../lib/tools/stock-market.js";
+let createStockMarketTool;
 import { detectKind } from "../lib/tools/stock-market-core.js";
 
 // [v0.76.7] stock-market.js 加了 gold-api.com / open.er-api.com 兜底网络请求,
@@ -45,7 +45,7 @@ function makeGlobalFetchStub() {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ rates: { CNY: 7.20, EUR: 0.92, JPY: 156.0 } }),
+        json: async () => ({ result: "success", base_code: "USD", time_last_update_utc: "Fri, 23 Oct 2026 15:00:00 GMT", rates: { CNY: 7.20, EUR: 0.92, JPY: 156.0 } }),
         text: async () => "",
       };
     }
@@ -68,7 +68,9 @@ function makeGlobalFetchStub() {
 }
 
 describe("stock market tool", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ createStockMarketTool } = await import("../lib/tools/stock-market.js"));
     vi.restoreAllMocks();
     webSearchMock.runSearchQuery.mockReset();
     webFetchMock.fetchWebContent.mockReset();
@@ -320,9 +322,82 @@ describe("stock market tool", () => {
     expect(webFetchMock.fetchWebContent).not.toHaveBeenCalled();
     expect(res.details?.kind).toBe("fx");
     expect(res.details?.provider).toBe("open.er-api.com");
+    expect(res.details?.sources?.[0]?.url).toBe("https://open.er-api.com/v6/latest/USD");
     expect(text).toContain("USD/CNY");
     expect(text).toContain("1 USD = 7.2 CNY");
     expect(text).not.toContain("���");
+    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes("open.er-api.com/v6/latest/USD"))).toBe(true);
+    expect(urls.some((url) => url.includes("allratestoday.com"))).toBe(false);
+  });
+
+  it("falls back to allratestoday when open.er-api.com fails", async () => {
+    const fetchMock = vi.fn(async (url) => {
+      const href = String(url);
+      if (href.includes("open.er-api.com")) {
+        return { ok: false, status: 503, json: async () => ({}), text: async () => "" };
+      }
+      if (href === "https://allratestoday.com/api/open/latest/USD") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            result: "success",
+            base_code: "USD",
+            rates: { CNY: 7.11 },
+            time_last_update_utc: "Fri, 24 Oct 2026 00:00:00 +0000",
+          }),
+          text: async () => "",
+        };
+      }
+      return { ok: false, status: 503, json: async () => ({}), text: async () => "" };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tool = createStockMarketTool();
+    const res = await tool.execute("test", { query: "美元人民币汇率", base: "USD", quote: "CNY" });
+    const text = res.content?.[0]?.text || "";
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+
+    expect(urls[0]).toBe("https://open.er-api.com/v6/latest/USD");
+    expect(urls).toContain("https://allratestoday.com/api/open/latest/USD");
+    expect(webSearchMock.runSearchQuery).not.toHaveBeenCalled();
+    expect(res.details?.kind).toBe("fx");
+    expect(res.details?.provider).toBe("allratestoday.com");
+    expect(res.details?.sources?.[0]?.source).toBe("allratestoday.com");
+    expect(res.details?.sources?.[0]?.url).toBe("https://allratestoday.com/api/open/latest/USD");
+    expect(text).toContain("1 USD = 7.11 CNY");
+    expect(text).toContain("[AllRatesToday](https://allratestoday.com)");
+    expect(text).toContain("非实时成交价");
+    expect(text).toContain("Fri, 24 Oct 2026 00:00:00 +0000");
+  });
+
+  it("does not invent an FX rate when both sources fail", async () => {
+    const fetchMock = vi.fn(async (url) => {
+      const href = String(url);
+      if (href.includes("open.er-api.com")) throw new Error("primary timeout");
+      if (href.includes("allratestoday.com/api/open/latest/USD")) {
+        return { ok: false, status: 404, json: async () => ({}), text: async () => "" };
+      }
+      throw new Error(`unexpected fetch: ${href}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    webSearchMock.runSearchQuery.mockResolvedValue({
+      provider: "mock",
+      plan: { scene: "finance" },
+      results: [],
+    });
+
+    const tool = createStockMarketTool();
+    const res = await tool.execute("test", { query: "美元人民币汇率", base: "USD", quote: "CNY" });
+    const text = res.content?.[0]?.text || "";
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+
+    expect(urls[0]).toBe("https://open.er-api.com/v6/latest/USD");
+    expect(urls).toContain("https://allratestoday.com/api/open/latest/USD");
+    expect(text).toContain("没有拿到可用的财经结果");
+    expect(text).not.toMatch(/1 USD = /);
+    expect(res.details?.provider).not.toBe("allratestoday.com");
   });
 
   it("keeps search-result URLs out of gold snapshots while preserving snippets", async () => {

@@ -9,6 +9,7 @@ import { Type } from "@sinclair/typebox";
 import { t } from "../../shared/i18n-runtime.js";
 import { runSearchQuery, type SearchResultItem } from "./web-search.js";
 import { fetchWebContent } from "./web-fetch.js";
+import { fetchFxRate, fxSourceNote } from "./fx-rates.js";
 import type {
   ConceptQuotes,
   ConceptResolution,
@@ -85,30 +86,6 @@ async function fetchJsonWithTimeout(url: string, ms: number, headers: Record<str
   }
 }
 
-async function fetchUsdCnyRate(): Promise<{ rate: number; updatedAt: string; source: string }> {
-  const fx = await fetchFxRate("USD", "CNY");
-  return {
-    rate: fx.rate,
-    updatedAt: fx.updatedAt,
-    source: fx.source,
-  };
-}
-
-async function fetchFxRate(base = "USD", quote = "CNY"): Promise<{ base: string; quote: string; rate: number; updatedAt: string; source: string }> {
-  const normalizedBase = String(base || "USD").trim().toUpperCase();
-  const normalizedQuote = String(quote || "CNY").trim().toUpperCase();
-  const json = await fetchJsonWithTimeout(`https://open.er-api.com/v6/latest/${encodeURIComponent(normalizedBase)}`, 4500);
-  const rate = Number(json?.rates?.[normalizedQuote]);
-  if (!Number.isFinite(rate)) throw new Error("USD/CNY unavailable");
-  return {
-    base: normalizedBase,
-    quote: normalizedQuote,
-    rate,
-    updatedAt: json.time_last_update_utc || "",
-    source: "open.er-api.com",
-  };
-}
-
 function inferFxPair(query: unknown, explicit: { base?: unknown; quote?: unknown } = {}): { base: string; quote: string } {
   const base = String(explicit.base || "").trim().toUpperCase();
   const quote = String(explicit.quote || "").trim().toUpperCase();
@@ -129,15 +106,16 @@ async function fetchFxMarketSource(query: unknown, explicit: { base?: unknown; q
       ? `${fx.quote}/${fx.base}：1 ${fx.quote} = ${formatPrice(inverse, 6)} ${fx.base}`
       : "",
     fx.updatedAt ? `更新时间：${fx.updatedAt}` : "",
+    fxSourceNote(fx),
   ].filter(Boolean);
   return {
     title: `${fx.base}/${fx.quote} 汇率`,
-    url: `https://open.er-api.com/v6/latest/${encodeURIComponent(fx.base)}`,
+    url: fx.url,
     snippet: lines.join("；"),
     lines,
     goldSignals: null,
     source: fx.source,
-    host: "open.er-api.com",
+    host: fx.source,
     timestamp: fx.updatedAt,
   };
 }
@@ -174,7 +152,7 @@ async function fetchGoldApiMarketSource(): Promise<MarketSource | null> {
   const [gold, silver, fx] = await Promise.all([
     fetchJsonWithTimeout("https://api.gold-api.com/price/XAU", 4500),
     fetchJsonWithTimeout("https://api.gold-api.com/price/XAG", 4500).catch(() => null),
-    fetchUsdCnyRate(),
+    fetchFxRate("USD", "CNY"),
   ]);
   const goldUsdOz = Number(gold?.price);
   if (!Number.isFinite(goldUsdOz)) return null;
@@ -182,6 +160,7 @@ async function fetchGoldApiMarketSource(): Promise<MarketSource | null> {
   const lines = [
     `国际现货黄金（XAU/USD） ${formatPrice(goldCnyGram)} 元/克（约 ${formatPrice(goldUsdOz)} 美元/盎司，USD/CNY ${fx.rate.toFixed(4)}）`,
     gold?.updatedAt ? `更新时间：${gold.updatedAt}` : "",
+    fxSourceNote(fx),
   ].filter(Boolean);
   if (silver?.price) {
     const silverCnyGram = Number(silver.price) * fx.rate / 31.1034768;
