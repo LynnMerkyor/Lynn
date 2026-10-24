@@ -94,10 +94,37 @@ async function fetchUsdCnyRate(): Promise<{ rate: number; updatedAt: string; sou
   };
 }
 
+const FX_PRIMARY_SOURCE = "open.er-api.com";
+const FX_FALLBACK_SOURCE = "allratestoday.com";
+
+function fxLatestUrl(source: string, base: string): string {
+  const encodedBase = encodeURIComponent(base);
+  if (source === FX_FALLBACK_SOURCE) {
+    return `https://allratestoday.com/api/open/latest/${encodedBase}`;
+  }
+  return `https://open.er-api.com/v6/latest/${encodedBase}`;
+}
+
 async function fetchFxRate(base = "USD", quote = "CNY"): Promise<{ base: string; quote: string; rate: number; updatedAt: string; source: string }> {
   const normalizedBase = String(base || "USD").trim().toUpperCase();
   const normalizedQuote = String(quote || "CNY").trim().toUpperCase();
-  const json = await fetchJsonWithTimeout(`https://open.er-api.com/v6/latest/${encodeURIComponent(normalizedBase)}`, 4500);
+  // Primary stays open.er-api.com. AllRatesToday is only used when that request
+  // fails: no key, ECB reference rates updated daily, about 30 currencies, IP rate limit.
+  // Response shape matches open.er-api.com (rates, time_last_update_utc). Non-200 is a failure.
+  let json: LooseRecord;
+  let source = FX_PRIMARY_SOURCE;
+  try {
+    json = await fetchJsonWithTimeout(fxLatestUrl(source, normalizedBase), 4500);
+  } catch (primaryError) {
+    source = FX_FALLBACK_SOURCE;
+    try {
+      json = await fetchJsonWithTimeout(fxLatestUrl(source, normalizedBase), 4500);
+    } catch (fallbackError) {
+      throw new Error(
+        `FX rate unavailable from ${FX_PRIMARY_SOURCE} (${errorMessage(primaryError)}); ${FX_FALLBACK_SOURCE} (${errorMessage(fallbackError)})`,
+      );
+    }
+  }
   const rate = Number(json?.rates?.[normalizedQuote]);
   if (!Number.isFinite(rate)) throw new Error("USD/CNY unavailable");
   return {
@@ -105,7 +132,7 @@ async function fetchFxRate(base = "USD", quote = "CNY"): Promise<{ base: string;
     quote: normalizedQuote,
     rate,
     updatedAt: json.time_last_update_utc || "",
-    source: "open.er-api.com",
+    source,
   };
 }
 
@@ -132,12 +159,12 @@ async function fetchFxMarketSource(query: unknown, explicit: { base?: unknown; q
   ].filter(Boolean);
   return {
     title: `${fx.base}/${fx.quote} 汇率`,
-    url: `https://open.er-api.com/v6/latest/${encodeURIComponent(fx.base)}`,
+    url: fxLatestUrl(fx.source, fx.base),
     snippet: lines.join("；"),
     lines,
     goldSignals: null,
     source: fx.source,
-    host: "open.er-api.com",
+    host: fx.source,
     timestamp: fx.updatedAt,
   };
 }
