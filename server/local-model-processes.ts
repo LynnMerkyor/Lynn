@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 const execute = promisify(execFile);
-const isPositiveFiniteNumber = (value: number): boolean => Number.isSafeInteger(value) && value > 0;
+const isPositiveFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
 type HiddenExecOptions = {
   timeout: number;

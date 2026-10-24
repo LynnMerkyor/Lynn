@@ -34,3 +34,7 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Verify native Windows process polling
+        if: runner.os == 'Windows'
+        run: node --import tsx scripts/verify-windows-local-model-probes.mjs
