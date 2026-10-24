@@ -892,8 +892,8 @@ export function createWebSearchTool() {
               ? (isZhLocale() ? `   来源：${source}\n` : `   Source: ${source}\n`)
               : "";
             const urlLine = hideSearchPage ? "" : `   ${r.url}\n`;
-            const published = typeof r.date === 'string' ? `   Published: ${r.date}\n` : '';
-            const retrieved = typeof r.retrievedAt === 'string' ? `   Retrieved: ${r.retrievedAt}\n` : '';
+            const published = `   Published: ${typeof r.date === 'string' && r.date.trim() ? r.date : 'unknown'}\n`;
+            const retrieved = typeof r.retrievedAt === 'string' ? `   Retrieved: ${r.retrievedAt} (retrieval time only; not publication or event time)\n` : '';
             return `${i + 1}. **${r.title}**\n${sourceLine}${urlLine}${published}${retrieved}   ${r.snippet}`;
           })
           .join("\n\n");

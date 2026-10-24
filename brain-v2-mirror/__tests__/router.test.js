@@ -1194,6 +1194,9 @@ describe('Router', () => {
       expect(message.content).toContain('明确这是样本而非全市场完整统计');
       expect(message.content).toContain('不得推断缩量、放量、资金流入或流出');
       expect(message.content).toContain('网页发布时间只能说明来源发布时间');
+      expect(message.content).toContain('Retrieved/retrievedAt 是本次抓取时间');
+      expect(message.content).toContain('不是接口故障');
+      expect(message.content).toContain('不能推翻空结果');
       expect(message.content).toContain('The user wants');
     }
   });

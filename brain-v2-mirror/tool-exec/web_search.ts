@@ -973,8 +973,8 @@ function formatStructuredSearchForTool(result, query) {
       lines.push(index + 1 + ". " + String(item.title || item.url || "source").trim());
       lines.push("   " + String(item.url || "").trim());
       const snippet = String(item.snippet || item.summary || "").replace(/\s+/g, " ").trim();
-      if (item.date) lines.push("   Published: " + String(item.date));
-      if (item.retrievedAt) lines.push("   Retrieved: " + String(item.retrievedAt));
+      lines.push("   Published: " + (item.date ? String(item.date) : "unknown"));
+      if (item.retrievedAt) lines.push("   Retrieved: " + String(item.retrievedAt) + " (retrieval time only; not publication or event time)");
       if (snippet) lines.push("   " + (extractive ? snippet : snippet.slice(0, 240)));
     });
     if (isProductReleaseOrVersionQuery(query || result.query || "")) {

@@ -22,6 +22,7 @@ Lynn --version
 - CLI 权限规则支持 allow/ask/deny；仓库中的允许规则和 hook 需要明确建立信任。拒绝规则优先，配置损坏或守门 hook 失败时不继续执行，明确的 ask 规则不会被 yolo 模式跳过。
 - 修复增强 CLI 的读取/写入竞态、断流后的残留工具调用、跨任务阅读缓存污染和仅停止父进程的问题。后台日志只读取有界尾部，安装脚本不改动其他程序的命令链接。
 - CLI 网页抓取逐跳检查重定向，支持主动取消，并修正部分 IPv6 内网地址与普通域名的误判。
+- 搜索结果明确区分发布时间与抓取时间；遇到实时数据和搜索新闻冲突时要求核验事件日期，避免把历史内容当作当日结果。
 - GUI / CLI 同步升级。默认模型仍为 Step 5 Preview，实时语音仍为 StepAudio 2.5 Realtime；保留 Coder390 llama.cpp Q2 / Q3、长推理超时设置和会话删除功能。
 
 ## English
@@ -31,6 +32,7 @@ Lynn --version
 - Integrate the enhanced CLI: streaming tool execution, concurrent reads with write barriers, exact-string edits, task-scoped read tracking, background jobs, plan mode, skills/project commands, session forks, compaction, result spilling and queued input.
 - Enforce explicit permission rules and trusted hooks; fail closed on invalid policy or failed guards. Fix tool ordering, interrupted-stream dispatch, read-cache isolation, process-tree cancellation and installer shim ownership.
 - Validate web redirects at each hop and propagate cancellation. GUI and CLI retain Step 5, realtime voice, Coder390 Q2/Q3, long-reasoning controls and conversation deletion.
+- Distinguish publication dates from retrieval timestamps and require dated evidence when search reports conflict with live structured data.
 
 ## 仓库 / Repositories
 

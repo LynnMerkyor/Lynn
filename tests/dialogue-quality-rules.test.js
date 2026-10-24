@@ -199,6 +199,15 @@ describe("dialogue quality rules", () => {
       ] }],
     };
     expect(hasVerifiedEmptySportsResult(result)).toBe(true);
+    for (const assistantText of [
+      "昨晚赛果：\n| Alpha vs Beta | **3–1** |\n结构化数据源返回 0 场，结论以新闻为准。",
+      "当晚 4 场比赛共打入 19 球。ESPN 返回 0 场比赛。",
+      "比分为 2-1。数据源返回 0 场，存在取数缺口。",
+    ]) {
+      expect(hasVerifiedEmptySportsResult({ ...result, assistantText })).toBe(false);
+      expect(overridesVerifiedEmptySportsWindow({ ...result, assistantText })).toBe(true);
+    }
+    expect(hasVerifiedEmptySportsResult({ ...result, assistantText: '该日期 0 场。历史赛果 2-1 不属于昨晚，不能确认昨晚有比赛。' })).toBe(true);
     for (const assistantText of ["昨晚没有世界杯足球赛。", "昨晚未查询到任何世界杯足球比赛。", "昨晚未查到该联赛赛事。", "昨晚未检索到该联赛比赛。"]) {
       expect(hasVerifiedEmptySportsResult({ ...result, assistantText })).toBe(true);
       expect(overridesVerifiedEmptySportsWindow({ ...result, assistantText })).toBe(false);

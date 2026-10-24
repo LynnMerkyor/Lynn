@@ -56,6 +56,12 @@ describe('cloud DeepSeek primary search', () => {
     expect(answer.sources[0]).toMatchObject({ name: 'deepseek', ok: false, error: 'DeepSeek Search HTTP 429' });
     expect(mock).toHaveBeenCalledTimes(2);
   });
+  it('does not present retrieval time as publication or event evidence', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ results: [{ ...row, date: undefined }] }))));
+    const answer = await webSearch('recent event date');
+    expect(answer).toContain('Published: unknown');
+    expect(answer).toContain('retrieval time only; not publication or event time');
+  });
   it('rejects an overlong model query without any provider requests', async () => {
     const mock = vi.fn(); vi.stubGlobal('fetch', mock);
     expect((await webSearchStructured('德'.repeat(129))).ok).toBe(false);

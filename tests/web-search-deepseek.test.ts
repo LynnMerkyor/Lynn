@@ -160,4 +160,11 @@ describe('client search routing independent of model BYOK', () => {
     expect(await verifySearchKey('deepseek', 'test-verification')).toBe(true);
     expect(mock.mock.calls[0][0]).toBe('https://api.deepseek.com/v1/tools/search');
   });
+  it('labels missing publication dates rather than substituting retrieval time', async () => {
+    const response = new Response(JSON.stringify({ ok: true, provider: 'deepseek', items: [{ ...item, date: undefined, snippet: item.summary, retrievedAt: '2026-10-24T09:00:00Z' }] }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+    const answer = await createWebSearchTool().execute('search', { query: 'recent event date' });
+    expect(answer.content[0].text).toContain('Published: unknown');
+    expect(answer.content[0].text).toContain('retrieval time only; not publication or event time');
+  });
 });
