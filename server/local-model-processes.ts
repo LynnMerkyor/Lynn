@@ -134,7 +134,8 @@ export function localQwenProcessListInvocation(platform: NodeJS.Platform = proce
     return {
       file: windowsSystemBinary("WindowsPowerShell", "v1.0", "powershell.exe"),
       args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded],
-      options: hiddenExecOptions(2_000, 512 * 1024),
+      // CIM initialization on a cold Windows host can exceed two seconds.
+      options: hiddenExecOptions(5_000, 512 * 1024),
     };
   }
   return {

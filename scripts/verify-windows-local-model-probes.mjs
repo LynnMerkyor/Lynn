@@ -3,9 +3,10 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { once } from "node:events";
-import { localListenerPids, localLlamaProcesses } from "../server/local-model-processes.ts";
+import { localListenerPids, localLlamaProcesses, localQwenProcessListInvocation } from "../server/local-model-processes.ts";
 
 assert.equal(process.platform, "win32", "This gate requires native Windows");
 const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "lynn-probe-"));
@@ -26,7 +27,17 @@ try {
   const port = String(server.address().port);
   for (let index = 0; index < 13; index++) {
     assert.ok((await localListenerPids(port)).includes(process.pid), "native listener lookup missed current process");
-    assert.ok((await localLlamaProcesses()).some(row => row.pid === child.pid && row.command.includes(marker)), "native process lookup missed the marked process");
+    const started = Date.now();
+    const rows = await localLlamaProcesses();
+    const found = rows.some(row => row.pid === child.pid && row.command.includes(marker));
+    if (!found) {
+      const query = localQwenProcessListInvocation();
+      const diagnostic = await promisify(execFile)(query.file, query.args, { ...query.options, timeout: 10000 })
+        .then(({ stdout }) => ({ outputBytes: Buffer.byteLength(stdout), containsMarker: stdout.includes(marker) }))
+        .catch(error => ({ code: error.code, killed: error.killed, stderr: String(error.stderr || "").slice(0,1000) }));
+      console.error(JSON.stringify({ iteration: index, elapsedMs: Date.now() - started, childPid: child.pid, childExit: child.exitCode, returnedPids: rows.map(row => row.pid), diagnostic }));
+    }
+    assert.ok(found, "native process lookup missed the marked process");
   }
   console.log("PASS: 13 native Windows listener/process polls with hostile PATH entries");
 } finally {

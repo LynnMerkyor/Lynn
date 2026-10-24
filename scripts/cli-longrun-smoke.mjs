@@ -24,12 +24,12 @@ function ssePayloads(payloads) {
   ].join("\n");
 }
 
-function runCli(args) {
+function runCli(args, home) {
   return new Promise((resolve, reject) => {
     const child = spawn(nodeBin, [cliBin, ...args], {
       cwd: root,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, LYNN_LANG: "en" },
+      env: { ...process.env, LYNN_LANG: "en", HOME: home, USERPROFILE: home, LYNN_HOME: path.join(home, ".lynn") },
     });
     let stdout = "";
     let stderr = "";
@@ -69,6 +69,7 @@ async function main() {
   }
 
   let requestCount = 0;
+  let summaryRequestCount = 0;
   const requestBodies = [];
   const server = http.createServer((req, res) => {
     if (req.url !== "/v1/chat/completions" || req.method !== "POST") {
@@ -79,8 +80,17 @@ async function main() {
     let raw = "";
     req.on("data", (chunk) => { raw += String(chunk); });
     req.on("end", () => {
-      requestCount += 1;
       const parsed = JSON.parse(raw);
+      const isSummary = parsed.messages?.length === 1
+        && parsed.messages[0]?.role === "user"
+        && String(parsed.messages[0]?.content || "").includes("<conversation>");
+      if (isSummary) {
+        summaryRequestCount += 1;
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        res.end(ssePayloads([{ choices: [{ delta: { content: `<summary>Continue the long-run file-reading task. Completed ${requestCount} reads; preserve all remaining reads through file-${toolTurns}.txt.</summary>` } }] }]));
+        return;
+      }
+      requestCount += 1;
       requestBodies.push(parsed);
       const content = requestCount <= toolTurns
         ? JSON.stringify({ tool: "read_file", args: { path: `file-${requestCount}.txt` } })
@@ -125,7 +135,7 @@ async function main() {
       "--data-dir",
       dataDir,
       "--json",
-    ]);
+    ], tmp);
     if (result.code !== 0) fail(`long-run CLI exited ${result.code}`, `${result.stdout}\n${result.stderr}`);
     const events = parseJsonLines(result.stdout);
     const toolRequests = events.filter((event) => event.type === "code.tool.requested");
@@ -136,6 +146,9 @@ async function main() {
       fail("usage events did not preserve cache-hit tokens and duration", JSON.stringify(usageEvents.at(-1), null, 2));
     }
     const compactionEvents = events.filter((event) => event.type === "code.runtime.compacted");
+    if (summaryRequestCount === 0 || !compactionEvents.some(event => event.engine === "model")) {
+      fail("expected model-backed summaries without consuming tool turns");
+    }
     if (!compactionEvents.some((event) => event.messages > 0)) {
       fail("expected runtime compaction during the long tool loop", result.stdout);
     }
@@ -153,12 +166,14 @@ async function main() {
     if (checkpointCount < toolTurns * 2) fail(`expected checkpoints for tool loop turns, got ${checkpointCount}`);
 
     if (requestBodies.length !== toolTurns + 1) fail(`expected ${toolTurns + 1} model requests, got ${requestBodies.length}`);
-    const stablePrefix = requestBodies[0]?.messages?.[0]?.content;
-    if (typeof stablePrefix !== "string" || !stablePrefix.includes("You are Lynn CLI code mode.") || !stablePrefix.includes("cacheable_context:Repository root")) {
-      fail("first message is not the cache-stable runtime prefix", JSON.stringify(requestBodies[0]?.messages?.[0], null, 2));
+    const systemFrames = body => body.messages.filter(message => message.role === "system");
+    const stableFrames = JSON.stringify(systemFrames(requestBodies[0]));
+    const stablePrefix = systemFrames(requestBodies[0]).map(message => message.content).join("\n");
+    if (!stablePrefix.includes("base_system:You are Lynn Code") || !stablePrefix.includes("cacheable_context:Repository root")) {
+      fail("missing cache-stable system and repository context frames");
     }
     for (const body of requestBodies) {
-      if (body.messages?.[0]?.content !== stablePrefix) {
+      if (JSON.stringify(systemFrames(body)) !== stableFrames) {
         fail("cache-stable runtime prefix drifted during the long run");
       }
     }
