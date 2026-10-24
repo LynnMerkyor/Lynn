@@ -488,7 +488,7 @@ describe("report research context intent", () => {
     expect(context).toBe("");
   });
 
-  it("builds a sports score prediction when schedule rows are available", () => {
+  it("defers sports predictions to the model rather than inventing scores from schedule rows", () => {
     const context = [
       "【体育比分工具资料】",
       "",
@@ -508,12 +508,7 @@ describe("report research context intent", () => {
     ].join("\n");
 
     const answer = buildDirectResearchAnswer("sports", context, "你能预测今晚的比分么？");
-    expect(answer).toContain("我的预测比分");
-    expect(answer).toContain("Spain 2-0 Saudi Arabia");
-    expect(answer).toContain("Belgium 2-1 Iran");
-    expect(answer).toContain("Uruguay 2-0 Cape Verde");
-    expect(answer).toContain("New Zealand 0-2 Egypt");
-    expect(answer).not.toContain("暂未形成可核验");
+    expect(answer).toBe("");
   });
 
   it("builds a direct market answer with multiple US tickers instead of only the first quote", () => {

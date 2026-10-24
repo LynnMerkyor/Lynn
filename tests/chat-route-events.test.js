@@ -2187,7 +2187,7 @@ describe("chat route event forwarding", () => {
     expect(visibleText).toContain("10-20 人/组");
   });
 
-  it("closes sports table prefetch turns with a direct local answer before model tool chains", async () => {
+  it("routes sports table requests to the model without sentence-based prefetch", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     hub.send = vi.fn(async () => {});
@@ -2213,7 +2213,7 @@ describe("chat route event forwarding", () => {
     expect(clients[0].sent.some((evt) => evt.type === "tool_start" && evt.name === "sports_score")).toBe(false);
   });
 
-  it("closes a bounded zero-match sports prefetch as no games without invoking the model", async () => {
+  it("leaves bounded zero-match sports interpretation to the model", async () => {
     engine.currentModel = { id: "lynn-brain-router", provider: "brain", name: "默认模型" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     hub.send = vi.fn(async () => {});
@@ -2246,12 +2246,13 @@ describe("chat route event forwarding", () => {
     expect(visibleText).not.toContain("今晚没有世界杯比赛");
   });
 
-  it("closes GUI sports tool-chain turns from ESPN evidence before generic search can override it", async () => {
+  it.each(["sportsscore", "sports_score"])("keeps %s results open for the model to summarize the user's question", async (toolName) => {
     engine.currentModel = { id: "glm-5-turbo", provider: "glm", name: "GLM 5.0 Turbo" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.abortSessionByPath = vi.fn(async () => true);
     reportResearchMock.inferReportResearchKind.mockReturnValue("");
-    hub.send = vi.fn(() => new Promise(() => {}));
+    let finishSend;
+    hub.send = vi.fn(() => new Promise(resolve => { finishSend = resolve; }));
 
     const res = await app.request("/ws");
     expect(res.status).toBe(200);
@@ -2264,12 +2265,12 @@ describe("chat route event forwarding", () => {
 
     subscribed({
       type: "tool_execution_start",
-      toolName: "sportsscore",
+      toolName,
       args: { query: "今晚世界杯几场比赛帮我查一下" },
     }, path.join(testRoot, 'current.jsonl'));
     subscribed({
       type: "tool_execution_end",
-      toolName: "sportsscore",
+      toolName,
       args: { query: "今晚世界杯几场比赛帮我查一下" },
       result: {
         content: [{
@@ -2297,21 +2298,19 @@ describe("chat route event forwarding", () => {
       },
     }, path.join(testRoot, 'current.jsonl'));
 
+    expect(clients[0].sent.some((evt) => evt.type === "tool_end" && evt.success)).toBe(true);
+    expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(false);
+    expect(engine.abortSessionByPath).not.toHaveBeenCalled();
+    const modelAnswer = "根据已查询的赛程，共有六场比赛。";
+    subscribed({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: modelAnswer } }, path.join(testRoot, 'current.jsonl'));
+    engine.getSessionByPath.mockReturnValue({ messages: [{ role: "assistant", content: modelAnswer }] });
+    finishSend();
     await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
-
-    expect(engine.abortSessionByPath).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'));
-    const visibleText = clients[0].sent
-      .filter((evt) => evt.type === "text_delta")
-      .map((evt) => evt.delta)
-      .join("");
-    expect(visibleText).toContain("共 6 场");
-    expect(visibleText).toContain("Curaçao vs Ivory Coast");
-    expect(visibleText).toContain("Türkiye vs United States");
-    expect(visibleText).not.toContain("2026/06/21");
-    expect(visibleText).not.toContain("Netherlands 5-1 Sweden");
+    expect(clients[0].sent.filter((evt) => evt.type === "text_delta").map((evt) => evt.delta).join("")).toContain(modelAnswer);
+    expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true);
   });
 
-  it("closes GUI zero-match sports tool evidence as no games without a fallback chain", async () => {
+  it("leaves zero-match sports evidence for model analysis instead of aborting the turn", async () => {
     engine.currentModel = { id: "glm-5-turbo", provider: "glm", name: "GLM 5.0 Turbo" };
     engine.resolveModelOverrides = vi.fn((model) => model);
     engine.abortSessionByPath = vi.fn(async () => true);
@@ -2354,15 +2353,9 @@ describe("chat route event forwarding", () => {
       },
     }, path.join(testRoot, 'current.jsonl'));
 
-    await vi.waitFor(() => expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(true));
-    expect(engine.abortSessionByPath).toHaveBeenCalledWith(path.join(testRoot, 'current.jsonl'));
-    const visibleText = clients[0].sent
-      .filter((evt) => evt.type === "text_delta")
-      .map((evt) => evt.delta)
-      .join("");
-    expect(visibleText).toContain("今晚没有世界杯比赛");
-    expect(visibleText).toContain("按北京时间口径返回 0 场");
-    expect(visibleText).not.toContain("不等于赛事数量为 0");
+    expect(clients[0].sent.some((evt) => evt.type === "tool_end" && evt.success)).toBe(true);
+    expect(clients[0].sent.some((evt) => evt.type === "turn_end")).toBe(false);
+    expect(engine.abortSessionByPath).not.toHaveBeenCalled();
   });
 
   it("closes simple table template turns with a deterministic local answer", async () => {

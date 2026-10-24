@@ -849,33 +849,8 @@ function buildDirectSportsAnswer(context: unknown, userPrompt: string = ""): str
     .filter((line) => /^-\s*\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}\s+/.test(line));
   if (!rows.length) return "";
   if (wantsPrediction) {
-    const predictionRows = rows.slice(0, 8).map((line) => {
-      const parsed = line.match(/^-\s*(\d{4}\/\d{2}\/\d{2})\s+(\d{2}:\d{2})\s+(.+?)(?:\s+\(([^)]+)\))?$/);
-      const dateTime = parsed ? `${parsed[1]} ${parsed[2]}` : "";
-      const matchup = parsed ? parsed[3].trim() : line.replace(/^-\s*/, "");
-      const lower = matchup.toLowerCase();
-      const predicted = lower.includes("spain vs saudi arabia")
-        ? "Spain 2-0 Saudi Arabia"
-        : lower.includes("belgium vs iran")
-          ? "Belgium 2-1 Iran"
-          : lower.includes("uruguay vs cape verde")
-            ? "Uruguay 2-0 Cape Verde"
-            : lower.includes("new zealand vs egypt")
-              ? "New Zealand 0-2 Egypt"
-              : matchup.replace(/\s+vs\s+/i, " 1-1 ");
-      const confidence = lower.includes("new zealand vs egypt") ? "中" : "中高";
-      return `| ${dateTime || "今晚"} | ${matchup} | ${predicted} | ${confidence} |`;
-    });
-    return [
-      "可以预测，但先说清楚：下面是赛前判断，不是赛果，也不是博彩建议。",
-      "",
-      "| 时间（北京时间） | 对阵 | 我的预测比分 | 信心 |",
-      "|---|---|---|---|",
-      ...predictionRows,
-      "",
-      "判断口径：赛程资料只用于确认今晚对阵；比分是基于球队通常实力差、比赛保守程度和小组赛常见节奏做的主观预测。",
-      source ? `赛程来源：${source}` : sourceAny ? `赛程来源：${sourceAny}` : "",
-    ].filter(Boolean).join("\n");
+    // Schedule data is evidence, not a prediction. Let the model analyze it.
+    return "";
   }
   const title = /半决赛/.test(prompt)
     ? "世界杯半决赛时间（北京时间）"
