@@ -16,7 +16,7 @@ vi.mock("../lib/tools/web-fetch.js", () => ({
   fetchWebContent: webFetchMock.fetchWebContent,
 }));
 
-import { createStockMarketTool } from "../lib/tools/stock-market.js";
+let createStockMarketTool;
 import { detectKind } from "../lib/tools/stock-market-core.js";
 
 // [v0.76.7] stock-market.js 加了 gold-api.com / open.er-api.com 兜底网络请求,
@@ -45,7 +45,7 @@ function makeGlobalFetchStub() {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ rates: { CNY: 7.20, EUR: 0.92, JPY: 156.0 } }),
+        json: async () => ({ result: "success", base_code: "USD", time_last_update_utc: "Fri, 23 Oct 2026 15:00:00 GMT", rates: { CNY: 7.20, EUR: 0.92, JPY: 156.0 } }),
         text: async () => "",
       };
     }
@@ -68,7 +68,9 @@ function makeGlobalFetchStub() {
 }
 
 describe("stock market tool", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ createStockMarketTool } = await import("../lib/tools/stock-market.js"));
     vi.restoreAllMocks();
     webSearchMock.runSearchQuery.mockReset();
     webFetchMock.fetchWebContent.mockReset();
@@ -365,6 +367,8 @@ describe("stock market tool", () => {
     expect(res.details?.sources?.[0]?.source).toBe("allratestoday.com");
     expect(res.details?.sources?.[0]?.url).toBe("https://allratestoday.com/api/open/latest/USD");
     expect(text).toContain("1 USD = 7.11 CNY");
+    expect(text).toContain("[AllRatesToday](https://allratestoday.com)");
+    expect(text).toContain("非实时成交价");
     expect(text).toContain("Fri, 24 Oct 2026 00:00:00 +0000");
   });
 

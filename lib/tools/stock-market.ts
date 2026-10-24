@@ -9,6 +9,7 @@ import { Type } from "@sinclair/typebox";
 import { t } from "../../shared/i18n-runtime.js";
 import { runSearchQuery, type SearchResultItem } from "./web-search.js";
 import { fetchWebContent } from "./web-fetch.js";
+import { fetchFxRate, fxSourceNote } from "./fx-rates.js";
 import type {
   ConceptQuotes,
   ConceptResolution,
@@ -85,57 +86,6 @@ async function fetchJsonWithTimeout(url: string, ms: number, headers: Record<str
   }
 }
 
-async function fetchUsdCnyRate(): Promise<{ rate: number; updatedAt: string; source: string }> {
-  const fx = await fetchFxRate("USD", "CNY");
-  return {
-    rate: fx.rate,
-    updatedAt: fx.updatedAt,
-    source: fx.source,
-  };
-}
-
-const FX_PRIMARY_SOURCE = "open.er-api.com";
-const FX_FALLBACK_SOURCE = "allratestoday.com";
-
-function fxLatestUrl(source: string, base: string): string {
-  const encodedBase = encodeURIComponent(base);
-  if (source === FX_FALLBACK_SOURCE) {
-    return `https://allratestoday.com/api/open/latest/${encodedBase}`;
-  }
-  return `https://open.er-api.com/v6/latest/${encodedBase}`;
-}
-
-async function fetchFxRate(base = "USD", quote = "CNY"): Promise<{ base: string; quote: string; rate: number; updatedAt: string; source: string }> {
-  const normalizedBase = String(base || "USD").trim().toUpperCase();
-  const normalizedQuote = String(quote || "CNY").trim().toUpperCase();
-  // Primary stays open.er-api.com. AllRatesToday is only used when that request
-  // fails: no key, ECB reference rates updated daily, about 30 currencies, IP rate limit.
-  // Response shape matches open.er-api.com (rates, time_last_update_utc). Non-200 is a failure.
-  let json: LooseRecord;
-  let source = FX_PRIMARY_SOURCE;
-  try {
-    json = await fetchJsonWithTimeout(fxLatestUrl(source, normalizedBase), 4500);
-  } catch (primaryError) {
-    source = FX_FALLBACK_SOURCE;
-    try {
-      json = await fetchJsonWithTimeout(fxLatestUrl(source, normalizedBase), 4500);
-    } catch (fallbackError) {
-      throw new Error(
-        `FX rate unavailable from ${FX_PRIMARY_SOURCE} (${errorMessage(primaryError)}); ${FX_FALLBACK_SOURCE} (${errorMessage(fallbackError)})`,
-      );
-    }
-  }
-  const rate = Number(json?.rates?.[normalizedQuote]);
-  if (!Number.isFinite(rate)) throw new Error("USD/CNY unavailable");
-  return {
-    base: normalizedBase,
-    quote: normalizedQuote,
-    rate,
-    updatedAt: json.time_last_update_utc || "",
-    source,
-  };
-}
-
 function inferFxPair(query: unknown, explicit: { base?: unknown; quote?: unknown } = {}): { base: string; quote: string } {
   const base = String(explicit.base || "").trim().toUpperCase();
   const quote = String(explicit.quote || "").trim().toUpperCase();
@@ -156,10 +106,11 @@ async function fetchFxMarketSource(query: unknown, explicit: { base?: unknown; q
       ? `${fx.quote}/${fx.base}：1 ${fx.quote} = ${formatPrice(inverse, 6)} ${fx.base}`
       : "",
     fx.updatedAt ? `更新时间：${fx.updatedAt}` : "",
+    fxSourceNote(fx),
   ].filter(Boolean);
   return {
     title: `${fx.base}/${fx.quote} 汇率`,
-    url: fxLatestUrl(fx.source, fx.base),
+    url: fx.url,
     snippet: lines.join("；"),
     lines,
     goldSignals: null,
@@ -201,7 +152,7 @@ async function fetchGoldApiMarketSource(): Promise<MarketSource | null> {
   const [gold, silver, fx] = await Promise.all([
     fetchJsonWithTimeout("https://api.gold-api.com/price/XAU", 4500),
     fetchJsonWithTimeout("https://api.gold-api.com/price/XAG", 4500).catch(() => null),
-    fetchUsdCnyRate(),
+    fetchFxRate("USD", "CNY"),
   ]);
   const goldUsdOz = Number(gold?.price);
   if (!Number.isFinite(goldUsdOz)) return null;
@@ -209,6 +160,7 @@ async function fetchGoldApiMarketSource(): Promise<MarketSource | null> {
   const lines = [
     `国际现货黄金（XAU/USD） ${formatPrice(goldCnyGram)} 元/克（约 ${formatPrice(goldUsdOz)} 美元/盎司，USD/CNY ${fx.rate.toFixed(4)}）`,
     gold?.updatedAt ? `更新时间：${gold.updatedAt}` : "",
+    fxSourceNote(fx),
   ].filter(Boolean);
   if (silver?.price) {
     const silverCnyGram = Number(silver.price) * fx.rate / 31.1034768;
